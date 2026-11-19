@@ -1,0 +1,5 @@
+{
+  "commands": [
+    { "method": "effect.normalize", "params": { "targetDb": -1 } }
+  ]
+}

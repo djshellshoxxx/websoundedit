@@ -1,0 +1,9 @@
+{
+  "commands": [
+    { "method": "effect.dcRemove", "params": {} },
+    { "method": "effect.eq", "params": { "bands": [ { "type": "highpass", "frequency": 70, "q": 0.707, "gainDb": 0, "enabled": true } ] } },
+    { "method": "effect.compressor", "params": { "thresholdDb": -18, "ratio": 3, "attackMs": 10, "releaseMs": 120, "kneeDb": 6, "makeupDb": 0 } },
+    { "method": "effect.normalize", "params": { "targetDb": -1 } },
+    { "method": "effect.limiter", "params": { "ceilingDb": -1, "lookaheadMs": 5, "releaseMs": 80 } }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "commands": [
+    { "method": "project.update", "params": { "bpm": 120 } },
+    { "method": "selection.set", "params": { "start": 1, "end": 3, "channels": "all" } },
+    { "method": "effect.reverse", "params": {} },
+    { "method": "effect.pitch", "params": { "semitones": 7, "preserveDuration": true } },
+    { "method": "effect.stretch", "params": { "ratio": 1.25, "preservePitch": true } },
+    { "method": "effect.duck", "params": { "source": "tempo", "mode": "volume", "depth": 1, "rate": 0.5, "points": [ { "x": 0, "y": 0 }, { "x": 0.1, "y": 0 }, { "x": 0.13, "y": 1 }, { "x": 0.45, "y": 1 }, { "x": 0.5, "y": 0 }, { "x": 1, "y": 0 } ] } },
+    { "method": "loop.create", "params": { "repeats": 4, "crossfadeMs": 4, "newTrack": true, "name": "Processed loop" } }
+  ]
+}

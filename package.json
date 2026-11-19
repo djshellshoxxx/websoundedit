@@ -1,0 +1,36 @@
+{
+  "name": "@circuitdriftlabs/websoundedit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A local-first visual multitrack audio editor and scriptable audio engine by Circuit Drift Labs",
+  "exports": {
+    ".": "./src/engine.js",
+    "./dsp": "./src/dsp.js",
+    "./wav": "./src/wav.js"
+  },
+  "bin": {
+    "websoundedit": "./scripts/cli.mjs"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5182",
+    "build": "node scripts/prepare-codecs.mjs && vite build && node scripts/verify-bundle.mjs",
+    "preview": "vite preview --host 127.0.0.1 --port 4182",
+    "test": "node --test tests/*.test.js",
+    "test:e2e": "playwright test",
+    "api": "node scripts/server.mjs",
+    "edit": "node scripts/cli.mjs"
+  },
+  "dependencies": {
+    "@ffmpeg/ffmpeg": "0.12.15",
+    "@ffmpeg/core": "0.12.10",
+    "@soundtouchjs/core": "2.1.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "vite": "8.3.8"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}
