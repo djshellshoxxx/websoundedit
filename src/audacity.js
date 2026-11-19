@@ -9,6 +9,7 @@ import { resampleAudio } from './dsp.js';
 import { normalizeMetadata } from './metadata.js';
 import { xmlNode as node, readXML, writeXML, encodeBinaryXML, decodeBinaryXML } from './audacity-xml.js';
 import { readProjectZip, safeArchivePath } from './project-archive.js';
+import { CHANNEL_LAYOUTS, audioLayout } from './channel-layout.js';
 
 const MAX_BYTES = 256 * 1024 * 1024, MAX_FILE_BYTES = 320 * 1024 * 1024, MAX_XML = 8 * 1024 * 1024;
 const FLOAT = 0x0004000f, INT16 = 0x00020001, INT24 = 0x00040001, BLOCK_FRAMES = 262144;
@@ -300,6 +301,33 @@ export async function importAudacity(input, { name = 'Audacity project', files =
   } });
 }
 
+function audacityChannelStems(project, multichannel) {
+  const surround = project.tracks.some(track => track.clips.some(clip => clip.audio.channels.length > 2));
+  const surroundOutput = ['5.1', '7.1'].includes(project.outputLayout);
+  if (!['reject', 'split-mono'].includes(multichannel)) throw new Error('Choose multichannel reject or explicit split-mono for Audacity export.');
+  if (!surround && !surroundOutput) return { project, split: false };
+  if (multichannel !== 'split-mono') throw new Error('Audacity has no supported 5.1/7.1 project mixer. Choose explicit split-mono channel stems, or export a surround WAV/REAPER project.');
+  const tracks = [];
+  for (const track of project.tracks) {
+    const simple = track.clips.filter(clip => clip.audio.channels.length <= 2);
+    if (simple.length || !track.clips.length) tracks.push({ ...track, clips: simple });
+    for (const layout of ['5.1', '7.1']) {
+      const clips = track.clips.filter(clip => audioLayout(clip.audio) === layout); if (!clips.length) continue;
+      for (const [channel, speaker] of CHANNEL_LAYOUTS[layout].channels.entries()) {
+        const suffix = ` [${layout} ${speaker}]`;
+        // Channel stems preserve source PCM and gain/mute/solo. They deliberately
+        // have neutral mono pan: Audacity cannot represent surround speaker routes.
+        tracks.push({ ...track, name: track.name.slice(0, 200 - suffix.length) + suffix, pan: 0, clips: clips.map(clip => ({
+          ...clip, name: clip.name.slice(0, 200 - suffix.length) + suffix,
+          audio: { sampleRate: clip.audio.sampleRate, channels: [clip.audio.channels[channel]] },
+        })) });
+      }
+    }
+  }
+  if (tracks.length > 64 || tracks.reduce((sum, track) => sum + track.clips.length, 0) > 512) throw new Error('Splitting surround channels would exceed 64 Audacity tracks or 512 clips. Export fewer tracks or channel stems as WAV files.');
+  return { project: { ...project, tracks }, split: true };
+}
+
 function audacityTrackLanes(project) {
   const tracks = []; let splitLayouts = false, splitOverlaps = false;
   for (const track of project.tracks) {
@@ -359,11 +387,13 @@ function buildProjectXML(project, { legacy, addBlock }) {
 }
 
 /** Export genuine AUP3, or a ZIP containing legacy AUP + its AU data blocks. */
-export async function exportAudacity(portableProject, { format = 'aup3' } = {}) {
+export async function exportAudacity(portableProject, { format = 'aup3', multichannel = 'reject' } = {}) {
   if (!['aup3', 'aup'].includes(format)) throw new Error('Choose Audacity AUP3 or legacy AUP ZIP.');
   const editor = new AudioEditor(); await editor.execute('project.load', { project: portableProject });
-  const sourceProject = editor.getProject(), lanes = audacityTrackLanes(sourceProject), project = { ...sourceProject, tracks: lanes.tracks }; let id = 0;
+  const sourceProject = editor.getProject(), stems = audacityChannelStems(sourceProject, multichannel), lanes = audacityTrackLanes(stems.project), project = { ...stems.project, tracks: lanes.tracks }; let id = 0;
   const warnings = ['Audacity saves committed audio, clip placement, track mix, labels and tags. WebSoundEdit rack drafts, key colors, themes and MIDI mappings remain in the native JSON project.'];
+  if (stems.split) warnings.push('Explicit split-mono export preserves each surround channel’s PCM, speaker label, position and track gain/mute/solo. Stem pan is neutral. Audacity cannot reproduce the original surround routing or front-pair pan; these are channel stems, not a surround project mixer.');
+  if (sourceProject.outputLayout !== 'stereo') warnings.push('The WebSoundEdit project output layout remains in the JSON session. Audacity uses its own mono/stereo mixing and export channel configuration.');
   if (lanes.splitLayouts) warnings.push('Tracks containing both mono and stereo clips are split by channel layout to preserve their PCM and audible mix.');
   if (lanes.splitOverlaps) warnings.push('Overlapping clips are placed on separate Audacity track lanes with the same gain, pan, mute and solo settings to preserve their audible sum.');
   warnings.push('Gain and pan controls are translated between Audacity’s linear pan law and this editor’s pan law to preserve the audible mix.');

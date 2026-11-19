@@ -1,0 +1,54 @@
+{
+  "status": "passed",
+  "results": [
+    {
+      "name": "audio",
+      "elapsedMs": 2486,
+      "status": "passed",
+      "report": "audio.json"
+    },
+    {
+      "name": "live-audio",
+      "elapsedMs": 3921,
+      "status": "passed",
+      "report": "live-audio.json"
+    },
+    {
+      "name": "macro",
+      "elapsedMs": 3399,
+      "status": "passed",
+      "report": "macro.json"
+    },
+    {
+      "name": "audacity",
+      "elapsedMs": 1136,
+      "status": "passed",
+      "report": "audacity.json"
+    },
+    {
+      "name": "reaper",
+      "elapsedMs": 479,
+      "status": "passed",
+      "report": "reaper.json"
+    },
+    {
+      "name": "api-baseline",
+      "elapsedMs": 1484,
+      "status": "passed",
+      "report": "api-baseline.json"
+    },
+    {
+      "name": "companion",
+      "elapsedMs": 640,
+      "status": "passed",
+      "report": "companion.json"
+    }
+  ],
+  "nodeTests": {
+    "total": 271,
+    "passed": 271,
+    "failed": 0,
+    "skipped": 0
+  },
+  "scope": "Local bounded deterministic checks; CI native/browser/dependency gates still pending at this checkpoint."
+}

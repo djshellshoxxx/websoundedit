@@ -1,0 +1,25 @@
+import { test, expect } from '@playwright/test';
+test.use({launchOptions:{args:['--disable-dev-shm-usage','--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream']},permissions:['microphone']});
+async function boot(page){const errors=[];page.on('pageerror',error=>errors.push(error.message));await page.goto('/');await page.waitForFunction(()=>!!window.websoundedit?.ready);await page.evaluate(()=>websoundedit.ready);return errors;}
+test('real production worklets run live effects without interrupting transport and persist recoverable audio to OPFS',async({page})=>{
+  const errors=await boot(page);
+  await page.evaluate(async()=>{await websoundedit.execute('project.new',{sampleRate:48000,outputLayout:'stereo',bpm:120});await websoundedit.execute('audio.generate',{duration:2,type:'tone',frequency:220,amplitude:.2,channels:2});await websoundedit.execute('live.rack.set',{chain:[{id:'delay-test',effect:'delay',wet:.5,params:{timeMs:30,feedback:.4}}]});});
+  await page.locator('#play-button').click();await expect.poll(()=>page.evaluate(()=>websoundedit.live.getState().transport.playing)).toBe(true);
+  await page.evaluate(async()=>{await websoundedit.execute('transport.set',{loop:true,loopStart:0,loopEnd:2});await websoundedit.execute('recorder.start',{source:'master',name:'Browser worklet fixture',maxBytes:4*1024*1024});});
+  await expect.poll(()=>page.evaluate(()=>websoundedit.live.getState().recorder.frames)).toBeGreaterThan(4096);
+  await page.evaluate(()=>websoundedit.execute('live.param.set',{slotId:'delay-test',param:'wet',value:.8,rampMs:20}));expect(await page.evaluate(()=>websoundedit.live.getState().transport.playing)).toBe(true);
+  await page.evaluate(()=>websoundedit.execute('recorder.pause'));const paused=await page.evaluate(()=>websoundedit.live.getState().recorder.frames);await page.waitForTimeout(120);expect(await page.evaluate(()=>websoundedit.live.getState().recorder.frames)).toBe(paused);
+  await page.evaluate(()=>websoundedit.execute('recorder.resume'));await expect.poll(()=>page.evaluate(()=>websoundedit.live.getState().recorder.frames)).toBeGreaterThan(paused+2048);
+  const result=await page.evaluate(async()=>{await websoundedit.execute('recorder.stop');const archive=await websoundedit.execute('recordings.list'),record=archive.recordings.find(record=>record.name==='Browser worklet fixture');const exported=await websoundedit.execute('recordings.export',{recordingId:record.id,start:0,end:Math.min(.1,record.seconds)});const{decodeWav}=await import('./api.js');const audio=decodeWav(exported.bytes);return{id:record.id,frames:record.frames,layout:audio.layout,channels:audio.channels.length,peak:Math.max(...audio.channels[0].map(Math.abs)),status:record.status};});
+  expect(result.status).toBe('complete');expect(result.frames).toBeGreaterThan(4096);expect(result.channels).toBe(2);expect(result.layout).toBe('stereo');expect(result.peak).toBeGreaterThan(.005);
+  await page.reload();await page.waitForFunction(()=>!!window.websoundedit?.ready);await page.evaluate(()=>websoundedit.ready);const recovered=await page.evaluate(async id=>{await websoundedit.execute('recordings.recover',{recordingId:id});const result=await websoundedit.execute('recordings.list');await websoundedit.execute('recordings.delete',{recordingId:id});return result.recordings.find(record=>record.id===id);},result.id);expect(recovered.frames).toBe(result.frames);expect(errors).toEqual([]);
+});
+test('sample-clock loop capture creates an editable layer and browser fake microphone closes cleanly',async({page})=>{
+  const errors=await boot(page);await page.locator('#play-button').click();
+  const before=await page.evaluate(()=>websoundedit.getState().tracks.length);await page.evaluate(()=>websoundedit.execute('loop.capture.start',{source:'master',beats:.25,quantize:'off',name:'Clock loop'}));
+  await expect.poll(()=>page.evaluate(()=>websoundedit.live.getState().loops.length)).toBe(1);await expect.poll(()=>page.evaluate(()=>websoundedit.getState().tracks.length)).toBe(before+1);
+  const layer=await page.evaluate(()=>websoundedit.live.getState().loops[0]);expect(layer.duration).toBeCloseTo(.125,5);expect(layer.playing).toBe(true);
+  await page.evaluate(async trackId=>{await websoundedit.execute('loop.track.mute',{trackId,muted:true});await websoundedit.execute('loop.track.stop',{trackId});await websoundedit.execute('loop.track.play',{trackId,quantize:'off'});await websoundedit.execute('loop.track.remove',{trackId});await websoundedit.execute('audio.input.start',{source:'microphone',channels:[0],monitor:false});},layer.trackId);
+  await expect.poll(()=>page.evaluate(()=>websoundedit.live.getState().input.active)).toBe(true);expect(await page.evaluate(()=>websoundedit.live.getState().input.monitor)).toBe(false);
+  await page.evaluate(()=>websoundedit.execute('audio.input.stop'));expect(await page.evaluate(()=>websoundedit.live.getState().input.active)).toBe(false);expect(await page.evaluate(()=>websoundedit.live.getState().loops.length)).toBe(0);expect(errors).toEqual([]);
+});

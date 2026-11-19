@@ -12,8 +12,8 @@ await copyFile('node_modules/libopus-wasm/THIRD_PARTY_NOTICES.md', 'public/licen
 await copyFile('docs/licenses/opus.txt', 'public/licenses/opus.txt');
 await copyFile('docs/THIRD_PARTY.md', 'public/licenses/THIRD_PARTY.md');
 await mkdir('public/docs/specs', { recursive: true });
-await copyFile('docs/specs/CREATIVE_WORKBENCH_V2.md', 'public/docs/specs/CREATIVE_WORKBENCH_V2.md');
-for (const name of ['PRODUCT_SPEC','RESEARCH','API','PROJECT_FORMAT','ACCEPTANCE','ENGINE_CONTRACT','THIRD_PARTY','VERIFICATION','AUDACITY']) {
+for(const name of ['CREATIVE_WORKBENCH_V2','BETA_1_0'])await copyFile(`docs/specs/${name}.md`, `public/docs/specs/${name}.md`);
+for (const name of ['PRODUCT_SPEC','RESEARCH','API','PROJECT_FORMAT','ACCEPTANCE','ENGINE_CONTRACT','THIRD_PARTY','VERIFICATION','AUDACITY','REAPER','MACROS','COMPANION','USER_GUIDE']) {
   try { await mkdir('public/docs',{recursive:true}); await copyFile(`docs/${name}.md`,`public/docs/${name}.md`); } catch { /* Not present during initial development builds. */ }
 }
 await writeFile('public/.nojekyll','');

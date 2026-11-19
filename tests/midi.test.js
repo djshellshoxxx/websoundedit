@@ -156,7 +156,7 @@ test('note-off during suspended audio resume prevents a stale or stuck sample vo
     resume() { return new Promise(resolve => resumes.push(resolve)); }
     createBuffer() { return { copyToChannel() {} }; }
     createBufferSource() { const source = { playbackRate: {}, connect() { return { connect() {} }; }, disconnect() {}, start() { this.started = true; }, stop() { this.stopped = true; } }; sources.push(source); return source; }
-    createGain() { return { gain: { value: 0, setTargetAtTime() {} }, disconnect() {} }; }
+    createGain() { return { gain: { value: 0, setTargetAtTime() {} }, connect() {}, disconnect() {} }; }
     async close() {}
   }
   globalThis.AudioContext = FakeContext;

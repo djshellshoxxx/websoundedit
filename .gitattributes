@@ -1,0 +1,2 @@
+# Preserve untouched native REAPER fixtures and their CRLF bytes.
+tests/fixtures/reaper-7.86/*.rpp -text whitespace=cr-at-eol

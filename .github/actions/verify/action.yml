@@ -1,0 +1,72 @@
+name: Verify release candidate
+description: Unit, security, fuzz, native DAW and browser gates on the exact checkout
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+        cache: npm
+    - shell: bash
+      run: npm ci --no-audit --no-fund
+    - name: Install audio verification dependencies
+      shell: bash
+      run: |
+        if [ -f /etc/apt/apt-mirrors.txt ]; then
+          printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
+        fi
+        sudo apt-get -o Acquire::Retries=3 update -qq
+        sudo apt-get install -y --no-install-recommends ffmpeg audacity xvfb xauth
+    - name: Install pinned native REAPER
+      shell: bash
+      run: |
+        curl --fail --location --retry 3 -o /tmp/reaper.tar.xz https://www.reaper.fm/files/7.x/reaper786_linux_x86_64.tar.xz
+        printf '%s\n' 'c2f9d8616bd1dc6175993b82451e1c6e352c6761e7ae6d72400a3f3dfb03bedb  /tmp/reaper.tar.xz' | sha256sum --check
+        mkdir -p /tmp/websoundedit-reaper
+        tar -xf /tmp/reaper.tar.xz -C /tmp/websoundedit-reaper --strip-components=1
+        echo 'REAPER_BIN=/tmp/websoundedit-reaper/REAPER/reaper' >> "$GITHUB_ENV"
+    - name: Unit and integration tests
+      shell: bash
+      run: npm test
+    - name: Dependency security audit
+      shell: bash
+      run: |
+        mkdir -p test-results/audits
+        npm audit --audit-level=moderate --json > test-results/audits/dependencies.json
+    - name: Deterministic API, macro, parser and audio fuzz gates
+      shell: bash
+      run: npm run test:fuzz
+    - name: Record bounded DSP performance
+      shell: bash
+      run: node scripts/benchmark-live-dsp.mjs --out=test-results/audits/performance.json
+    - name: Build and verify the DOM-free SDK
+      id: build
+      shell: bash
+      run: npm run build
+    - name: Install Chromium
+      id: chromium
+      shell: bash
+      run: npx playwright install --with-deps chromium
+    - name: Native Audacity open, render, save and reimport
+      shell: bash
+      run: xvfb-run -a node scripts/verify-audacity.mjs
+    - name: Native REAPER open, render, save and reimport
+      if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+      shell: bash
+      run: xvfb-run -a node scripts/verify-reaper.mjs test-results/reaper-native
+    - name: Browser editing, worklets, capture, codecs, accessibility and help screenshots
+      if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.chromium.outcome == 'success' }}
+      shell: bash
+      run: npm run test:e2e
+    - name: Save all verification evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: beta-verification-evidence
+        path: |
+          test-results/
+          playwright-report/
+        retention-days: 14
+    - uses: actions/upload-pages-artifact@v3
+      with:
+        path: dist

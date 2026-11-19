@@ -7,6 +7,8 @@ import { pathToFileURL } from 'node:url';
 import { AudioEditor, COMMANDS } from '../src/engine.js';
 import { decodeAudioBytes, encodeAudioBytes, nativeCapabilities, AUDIO_FORMATS } from './node-codecs.mjs';
 import { ApiAdmission, boundedJson } from './api-admission.mjs';
+import { NodeWorkbench } from './node-runtime.mjs';
+import { readFile } from 'node:fs/promises';
 
 const MAX_JSON = 384 * 1024 * 1024;
 const MAX_AUDIO = 256 * 1024 * 1024;
@@ -40,22 +42,26 @@ function equalToken(received, expected) {
 function cleanOrigin(origin) { const url = new URL(origin); if (!['https:', 'http:'].includes(url.protocol) || url.origin !== origin) throw new Error('Allowed origin must be an exact http(s) origin without a path.'); return url.origin; }
 function safeFileName(name, extension) { return `${String(name || 'websoundedit').replace(/[^\p{L}\p{N}_ .-]/gu, '_').slice(0, 100)}.${extension}`; }
 
-export function createApiServer({ editor = new AudioEditor(), token = randomBytes(32).toString('hex'), allowedOrigin = null, maxJsonBytes = MAX_JSON, maxAudioBytes = MAX_AUDIO, maxPendingJobs = 8, maxQueuedBytes = 512 * 1024 * 1024, maxResponseBytes = MAX_JSON } = {}) {
+export function createApiServer({ editor = new AudioEditor(), workbench: suppliedWorkbench = null, destinations = [], token = randomBytes(32).toString('hex'), allowedOrigin = null, maxJsonBytes = MAX_JSON, maxAudioBytes = MAX_AUDIO, maxPendingJobs = 8, maxQueuedBytes = 512 * 1024 * 1024, maxResponseBytes = MAX_JSON } = {}) {
   if (typeof token !== 'string' || token.length < 24 || !/^[A-Za-z0-9_-]+$/.test(token)) throw new Error('API token must contain at least 24 safe characters.');
   const origin = allowedOrigin ? cleanOrigin(allowedOrigin) : null;
   for (const limit of [maxJsonBytes, maxAudioBytes, maxResponseBytes]) if (!Number.isSafeInteger(limit) || limit < 1024 || limit > MAX_JSON) throw new RangeError('API byte limits must be integers from 1 KiB to 384 MiB.');
   const admission = new ApiAdmission({ maxJobs: maxPendingJobs, maxBytes: maxQueuedBytes });
   let capabilitiesPromise;
-  const capabilities = () => capabilitiesPromise ??= nativeCapabilities().catch(error => { capabilitiesPromise = null; throw error; });
+  const native = () => capabilitiesPromise ??= nativeCapabilities().catch(error => { capabilitiesPromise = null; throw error; });
+  const workbench = suppliedWorkbench || new NodeWorkbench({ editor, destinations, getCapabilities: native });
+  editor = workbench.editor;
+  const capabilities = async () => ({ ...await native(), apiVersion: 1, applicationVersion: '1.0.0-beta.1', streaming: await workbench.streams.capabilities(), macros: { language:'WebSoundEdit Macro 1', supported:true }, files: { suppliedInputs:128,inputBytes:256*1024*1024,retainedArtifacts:128,artifactBytes:128*1024*1024 } });
   let jobs = Promise.resolve();
   const serialize = task => { const next = jobs.then(task); jobs = next.catch(() => {}); return next; };
   const server = createServer(async (request, response) => {
     let lease, workDone = false, responseDone = false, abandoned = false, operationCompleted = false;
+    const controller = new AbortController();
     const release = () => { if (workDone && responseDone) lease?.release(); };
     response.once('finish', () => { responseDone = true; release(); });
-    response.once('close', () => { responseDone = true; if (!response.writableEnded) abandoned = true; release(); });
-    request.once('aborted', () => { abandoned = true; });
-    request.on('error', () => { abandoned = true; });
+    response.once('close', () => { responseDone = true; if (!response.writableEnded) { abandoned = true; controller.abort(); } release(); });
+    request.once('aborted', () => { abandoned = true; controller.abort(); });
+    request.on('error', () => { abandoned = true; controller.abort(); });
     const json = (response, status, value) => {
       if (response.destroyed) return;
       const body = boundedJson(value, status >= 400 ? 65536 : maxResponseBytes);
@@ -69,15 +75,38 @@ export function createApiServer({ editor = new AudioEditor(), token = randomByte
     if (request.headers.origin && request.headers.origin === origin) {
       response.setHeader('Access-Control-Allow-Origin', origin); response.setHeader('Vary', 'Origin');
       response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type'); response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      if (request.headers['access-control-request-private-network'] === 'true') response.setHeader('Access-Control-Allow-Private-Network', 'true');
     }
     if (request.method === 'OPTIONS') { if (!request.headers.origin || request.headers.origin !== origin) json(response, 403, { error: { code: 'ORIGIN_DENIED', message: 'Origin not allowed.' } }); else { response.writeHead(204); response.end(); } return; }
     if (!equalToken(request.headers.authorization, token)) { response.setHeader('WWW-Authenticate', 'Bearer'); json(response, 401, { error: { code: 'UNAUTHORIZED', message: 'A valid API Bearer token is required.' } }); return; }
     try {
+      // An authenticated, body-free cancel remains responsive with a full queue.
+      if (request.method === 'POST' && request.url === '/v1/cancel') { json(response,200,{result:await workbench.macro('macro.cancel',{})});return; }
       lease = admission.acquire();
       const serial = task => serialize(() => { if (abandoned) throw Object.assign(new Error('Request was aborted before execution.'), { code: 'ABORTED', status: 499 }); return task(); });
       const url = new URL(request.url, `http://127.0.0.1:${port}`);
-      if (request.method === 'GET' && url.pathname === '/v1/commands') { json(response, 200, { apiVersion: 1, commands: COMMANDS }); return; }
+      if (request.method === 'GET' && url.pathname === '/v1/commands') { json(response, 200, { apiVersion: 1, commands: workbench.commands() }); return; }
       if (request.method === 'GET' && url.pathname === '/v1/capabilities') { json(response, 200, await serial(capabilities)); return; }
+      if (request.method === 'GET' && url.pathname === '/v1/macro/status') { json(response,200,await workbench.macro('macro.status',{}));return; }
+      if (request.method === 'GET' && url.pathname.startsWith('/v1/artifacts/')) {
+        const artifact=workbench.artifacts.get(url.pathname.slice('/v1/artifacts/'.length));
+        if(!artifact){json(response,404,{error:{code:'NOT_FOUND',message:'Artifact not found.'}});return;}
+        lease.reserve(artifact.bytes.length);
+        response.writeHead(200,{'Content-Type':artifact.mime,'Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(artifact.name),'Cache-Control':'no-store','Content-Length':artifact.bytes.length});response.end(artifact.bytes);return;
+      }
+      const pcmPath=/^\/v1\/stream\/([A-Za-z0-9_-]{1,80})\/pcm$/.exec(url.pathname);
+      if(request.method==='POST'&&pcmPath){
+        if(!/^application\/octet-stream(?:\s*;|$)/i.test(request.headers['content-type']||'')){json(response,415,{error:{code:'CONTENT_TYPE',message:'PCM packets require application/octet-stream.'}});return;}
+        const bytes=new Uint8Array(await readBody(request,256*1024,lease)),packet={};
+        for(const key of ['sequence','startFrame','frames'])packet[key]=url.searchParams.has(key)?Number(url.searchParams.get(key)):NaN;
+        packet.droppedFrames=url.searchParams.has('droppedFrames')?Number(url.searchParams.get('droppedFrames')):0;
+        const result=workbench.streams.feed(pcmPath[1],bytes,packet);operationCompleted=true;json(response,200,result);return;
+      }
+      if(request.method==='POST'&&url.pathname==='/v1/inputs'){
+        if(!/^audio\/|^application\/octet-stream(?:\s*;|$)/i.test(request.headers['content-type']||'')){json(response,415,{error:{code:'CONTENT_TYPE',message:'Supply file bytes as audio/* or application/octet-stream.'}});return;}
+        const bytes=new Uint8Array(await readBody(request,maxAudioBytes,lease));
+        const result=workbench.supply(bytes,{name:url.searchParams.get('name')||'input.wav',copy:false});operationCompleted=true;json(response,200,{result});return;
+      }
       if (request.method === 'GET' && url.pathname === '/v1/state') { json(response, 200, await serial(() => editor.getState())); return; }
       if (request.method === 'GET' && url.pathname === '/v1/project') { json(response, 200, await serial(() => editor.execute('project.save'))); return; }
       if (request.method === 'POST' && url.pathname === '/v1/import') {
@@ -95,7 +124,9 @@ export function createApiServer({ editor = new AudioEditor(), token = randomByte
           if (typeof body.method !== 'string') throw new Error('Provide a method string and optional params object.');
           const params = body.params === undefined ? {} : body.params;
           if (!params || typeof params !== 'object' || Array.isArray(params)) throw new TypeError('Command parameters must be an object.');
-          const result = await serial(() => editor.execute(body.method, params)); operationCompleted = true; json(response, 200, { result, state: editor.getState() }); return;
+          const execute=()=>workbench.execute(body.method,params,{origin:'api',signal:controller.signal});
+          const result = await (['macro.cancel','macro.status','stream.start','stream.stop','stream.status'].includes(body.method)?execute():serial(execute));
+          operationCompleted = true; json(response, 200, { result, ...(!body.method.startsWith('stream.')?{state:editor.getState()}:{}) }); return;
         }
         if (url.pathname === '/v1/project') { const result = await serial(() => editor.execute('project.load', { project: body.project || body })); operationCompleted = true; json(response, 200, { result, state: editor.getState() }); return; }
         const format = String(body.format || 'wav').toLowerCase(), info = AUDIO_FORMATS[format]; if (!info) throw new Error('Unsupported export format.');
@@ -104,12 +135,13 @@ export function createApiServer({ editor = new AudioEditor(), token = randomByte
         response.writeHead(200, { 'Content-Type': info.mime, 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(safeFileName(body.name, info.extension))}`, 'Cache-Control': 'no-store', 'Content-Length': bytes.length }); response.end(bytes); return;
       }
       json(response, 404, { error: { code: 'NOT_FOUND', message: 'Unknown endpoint. Use GET /v1/commands to discover editing methods.' } });
-    } catch (error) { if (!response.headersSent) json(response, error.status || (error instanceof SyntaxError ? 400 : error.code === 'RESOURCE_LIMIT' ? 413 : 400), { error: { code: error.code || 'INVALID_REQUEST', message: String(error.message).slice(0, 1000), operationCompleted } }); else response.end(); }
+    } catch (error) { if (!response.headersSent) json(response, error.status || (error instanceof SyntaxError ? 400 : error.code === 'RESOURCE_LIMIT' ? 413 : 400), { error: { code: error.code || 'INVALID_REQUEST', message: String(error.message).slice(0, 1000), operationCompleted, ...(error.completedSteps!==undefined?{completedSteps:error.completedSteps,partial:error.completedSteps>0}:{}), ...(error.command?{command:error.command}:{}), ...(error.line?{line:error.line,column:error.column}:{}) } }); else response.end(); }
     finally { workDone = true; responseDone ||= response.writableFinished || response.destroyed; release(); request.resume(); }
   });
   server.requestTimeout = 180000; server.headersTimeout = 10000; server.keepAliveTimeout = 5000;
   server.maxConnections = 32; server.maxRequestsPerSocket = 1000;
-  return { server, editor, token, diagnostics: () => admission.state() };
+  server.once('close',()=>{void workbench.dispose().catch(()=>{});});
+  return { server, editor, token, workbench, runtime:workbench.runtime, diagnostics: () => admission.state() };
 }
 export async function startApiServer(options = {}) {
   const api = createApiServer(options); const port = options.port ?? 8787;
@@ -122,11 +154,13 @@ async function main() {
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--port') options.port = Number(args[++i]);
     else if (args[i] === '--allow-origin') options.allowedOrigin = args[++i];
-    else if (args[i] === '--help') { console.log('Usage: node scripts/server.mjs [--port 8787] [--allow-origin https://djshellshoxxx.github.io]\nThe server binds 127.0.0.1 only. A new Bearer token is generated per run.'); return; }
+    else if (args[i] === '--destinations') { const bytes=await readFile(args[++i]);if(bytes.length>16384)throw new Error('Destination configuration exceeds 16 KiB.');options.destinations=JSON.parse(bytes.toString('utf8')); }
+    else if (args[i] === '--help') { console.log('Usage: node scripts/server.mjs [--port 8787] [--allow-origin https://djshellshoxxx.github.io] [--destinations udp-destinations.json]\nThe server binds 127.0.0.1 only. A new Bearer token is generated per run.\nDestination JSON: [{"id":"studio","address":"127.0.0.1","port":5004,"label":"Studio receiver"}]\nOnly pinned literal IP destinations are available to scripts. UDP stays disabled without configuration.'); return; }
     else throw new Error(`Unknown option: ${args[i]}`);
   }
   const api = await startApiServer(options);
   console.log(`WebSoundEdit local API: ${api.url}\nBearer token: ${api.token}\nDocs: docs/API.md\nPress Ctrl+C to stop.`);
-  process.once('SIGINT', () => api.server.close(() => process.exit(0))); process.once('SIGTERM', () => api.server.close(() => process.exit(0)));
+  const shutdown=async()=>{await api.workbench.macro('macro.cancel',{});await api.workbench.streams.dispose();api.server.closeAllConnections();api.server.close(()=>process.exit(0));};
+  process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main().catch(error => { console.error(`WebSoundEdit API: ${error.message}`); process.exitCode = 1; });

@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { encodeWav, decodeWav } from '../src/wav.js';
 import { normalizeMetadata, ffmpegMetadataArgs } from '../src/metadata.js';
+import { audioLayout, normalizeLayout, convertLayout } from '../src/channel-layout.js';
 
 export const AUDIO_FORMATS = Object.freeze({
   wav: { extension: 'wav', mime: 'audio/wav', codec: 'pcm_s16le' },
@@ -41,11 +42,11 @@ export async function nativeCapabilities() {
     child.on('close', code => { clearTimeout(timer); resolve({ nativeFFmpeg: code === 0, formats: Object.entries(AUDIO_FORMATS).filter(([format, value]) => format === 'wav' || new RegExp(`\\b${value.codec}\\b`).test(output)).map(([format]) => format) }); });
   });
 }
-export async function decodeAudioBytes(bytes, { sampleRate } = {}) {
+export async function decodeAudioBytes(bytes, { sampleRate, layout } = {}) {
   if (!(bytes instanceof Uint8Array)) bytes = new Uint8Array(bytes);
   if (!bytes.length || bytes.byteLength > maxBytes) throw new Error('Audio input must contain 1 byte to 256 MiB.');
   if (bytes.length >= 12 && String.fromCharCode(...bytes.subarray(0, 4)) === 'RIFF' && String.fromCharCode(...bytes.subarray(8, 12)) === 'WAVE') {
-    try { return decodeWav(bytes); } catch (error) { if (!/unsupported|format|encoding/i.test(error.message)) throw error; }
+    try { return decodeWav(bytes,{layout}); } catch (error) { if (!/Unsupported (?:extensible )?WAV encoding/i.test(error.message)) throw error; }
   }
   const folder = await mkdtemp(join(tmpdir(), 'websoundedit-'));
   try {
@@ -53,20 +54,23 @@ export async function decodeAudioBytes(bytes, { sampleRate } = {}) {
     // Force local-file input; disallow network protocols inside untrusted containers/playlists.
     await runFFmpeg(['-protocol_whitelist', 'file,pipe', '-format_whitelist', 'wav,mp3,flac,ogg,aac,mov,aiff,asf,matroska,webm', '-i', input, '-map', '0:a:0', '-vn', ...(sampleRate ? ['-ar', String(sampleRate)] : []), '-c:a', 'pcm_f32le', '-t', '600', '-fs', String(maxBytes), output]);
     const decodedBytes = new Uint8Array(await readFile(output));
-    const audio = decodeWav(decodedBytes);
+    const audio = decodeWav(decodedBytes,{layout});
     if (decodedBytes.length >= maxBytes - 65536 || audio.channels[0].length / audio.sampleRate >= 599.99) throw new Error('Input exceeds the audio duration or decoded memory limit; import a shorter file.');
     return audio;
   } finally { await rm(folder, { recursive: true, force: true }); }
 }
 export async function encodeAudioBytes(audio, options = {}) {
+  audioLayout(audio);
+  if(options.outputLayout!==undefined||options.channels!==undefined)audio=convertLayout(audio,normalizeLayout(options.outputLayout??options.channels));
   const metadata = normalizeMetadata(options.metadata || {});
   const format = String(options.format || 'wav').toLowerCase(); const info = AUDIO_FORMATS[format];
   if (!info) throw new Error(`Unsupported output format: ${format}`);
+  if(audio.channels.length>2&&!['wav','flac','ogg','opus','aac','m4a','alac'].includes(format))throw new Error(`${format} does not preserve the selected surround layout. Choose WAV/FLAC or convert the layout explicitly.`);
   const bitDepth = options.bitDepth ?? 16;
   if (![16, 24, 32].includes(bitDepth)) throw new Error('WAV bit depth must be 16, 24 or 32.');
   if (format === 'wav' && !options.sampleRate && !options.channels) return encodeWav(audio, { bitDepth, float: options.float === true, metadata });
   if (options.sampleRate !== undefined && ![8000, 11025, 16000, 22050, 24000, 32000, 44100, 48000, 88200, 96000, 192000].includes(options.sampleRate)) throw new Error('Unsupported output sample rate.');
-  if (options.channels !== undefined && ![1, 2].includes(options.channels)) throw new Error('Output channels must be 1 or 2.');
+  if (options.channels !== undefined && ![1, 2, 6, 8].includes(options.channels)) throw new Error('Output channels must be 1, 2, 6 or 8.');
   const bitrate = options.bitrate ?? 192;
   if (typeof bitrate !== 'number' || !Number.isFinite(bitrate) || bitrate < 16 || bitrate > 512) throw new Error('Bitrate must be between 16 and 512 kbps.');
   const folder = await mkdtemp(join(tmpdir(), 'websoundedit-'));
@@ -74,10 +78,9 @@ export async function encodeAudioBytes(audio, options = {}) {
     const input = join(folder, 'source.wav'), output = join(folder, `result.${info.extension}`);
     await writeFile(input, encodeWav(audio, { bitDepth: 32, float: true }));
     const codec = format === 'wav' ? options.float ? 'pcm_f32le' : `pcm_s${bitDepth}le` : format === 'aiff' && bitDepth === 24 ? 'pcm_s24be' : info.codec;
-    const args = ['-i', input, '-map', '0:a:0', '-c:a', codec, ...ffmpegMetadataArgs(metadata, format)];
+    const args = ['-i', input, '-map', '0:a:0', '-c:a', codec, '-ac',String(audio.channels.length),'-channel_layout',audioLayout(audio), ...ffmpegMetadataArgs(metadata, format)];
     if (['mp3', 'ogg', 'opus', 'aac', 'm4a', 'wma'].includes(format)) args.push('-b:a', `${bitrate}k`);
     if (options.sampleRate) args.push('-ar', String(options.sampleRate));
-    if (options.channels) args.push('-ac', String(options.channels));
     if (format === 'flac' && bitDepth === 24) args.push('-sample_fmt', 's32');
     args.push(output); await runFFmpeg(args); return new Uint8Array(await readFile(output));
   } finally { await rm(folder, { recursive: true, force: true }); }

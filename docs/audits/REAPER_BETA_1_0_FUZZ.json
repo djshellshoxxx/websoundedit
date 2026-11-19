@@ -1,0 +1,21 @@
+{
+  "seed": "0x52505031",
+  "node": "v24.22.3",
+  "fixtureSha256": "a3cf389e67f893ffa82dca7f278a5f16527c4b6afc42d0661feadda275e9ab4b",
+  "corpusSha256": "ed70e4de6972735f8837b588075d07e5977f7222fe68a3e02801a41eac15dae4",
+  "counts": {
+    "textMutations": 1536,
+    "importMutations": 512,
+    "zipMutations": 256,
+    "boundaryCases": 10,
+    "syntaxAccepted": 496,
+    "serializable": 365,
+    "imported": 39,
+    "rejected": 1769,
+    "invalidAccepted": 0,
+    "inputMutations": 0,
+    "ambientNetworkCalls": 0
+  },
+  "elapsedMs": 643,
+  "errors": []
+}

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "seeds": [
+    "0x10be7a26",
+    "0x51ec7100",
+    "0x0071a11e"
+  ],
+  "kind": "synthetic bounded PCM/state/control fuzz; no hardware claim",
+  "limits": {
+    "casesPerSeed": 120,
+    "maxFrames": 767,
+    "maxStages": 4,
+    "sampleRate": 8000
+  },
+  "counts": {
+    "statefulDsp": 360,
+    "blockComparisons": 360,
+    "wetZero": 360,
+    "atomicRejectedGraphs": 360,
+    "multichannelEdits": 360,
+    "undoRoundTrips": 360,
+    "saveTrackRoundTrips": 360,
+    "wavRoundTrips": 360,
+    "wavMutations": 720
+  },
+  "failures": []
+}

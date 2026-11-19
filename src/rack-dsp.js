@@ -4,11 +4,12 @@
  */
 import { validateAudio } from './dsp.js';
 import { RACK_EFFECTS, normalizeRackChain, MAX_RACK_EFFECTS } from './rack-config.js';
+import { layoutMetadata } from './channel-layout.js';
 
 export const RACK_EFFECT_NAMES = Object.freeze(Object.keys(RACK_EFFECTS));
 export const MAX_RACK_STAGES = MAX_RACK_EFFECTS;
 const TWO_PI = 2 * Math.PI;
-const copy = audio => ({ sampleRate: audio.sampleRate, channels: audio.channels.map(channel => channel.slice()) });
+const copy = audio => ({ sampleRate: audio.sampleRate, ...layoutMetadata(audio), channels: audio.channels.map(channel => channel.slice()) });
 
 function numeric(value, fallback, min, max, label) {
   const result = value === undefined ? fallback : Number(value);
@@ -211,7 +212,7 @@ function renderStage(audio, stage, context) {
     for (let i = 0; i < wetChannel.length; i++) wetChannel[i] = channel[i] * (1 - stage.wet) + wetChannel[i] * stage.wet;
     return wetChannel;
   });
-  return validateAudio({ sampleRate: audio.sampleRate, channels });
+  return validateAudio({ sampleRate: audio.sampleRate, ...layoutMetadata(audio), channels });
 }
 
 export function processRackEffect(audio, effect, params = {}, wet = 1, context = {}) {

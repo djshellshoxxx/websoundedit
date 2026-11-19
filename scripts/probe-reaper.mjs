@@ -34,6 +34,7 @@ for (const [layout, definition] of Object.entries(LAYOUTS)) {
 const nativeFile = path.join(directory, 'native-generated.rpp');
 await nativeReaper(path.join(directory, 'session'), `
 assert(reaper.GetAppVersion():match("^7%.86"), "Unexpected native REAPER version: " .. reaper.GetAppVersion())
+reaper.SetCurrentBPM(0,128,false)
 local report = assert(io.open(${luaString(path.join(directory, 'native-settings.txt'))}, "wb"))
 report:write("version=" .. reaper.GetAppVersion() .. "\\n")
 local master = reaper.GetMasterTrack(0)
@@ -53,8 +54,8 @@ for _, item in ipairs({${audio.map(item => `{layout=${luaString(item.layout)}, f
   reaper.SetMediaItemInfo_Value(media, "D_LENGTH", 0.04)
   reaper.SetMediaItemInfo_Value(media, "D_FADEINLEN", 0)
   reaper.SetMediaItemInfo_Value(media, "D_FADEOUTLEN", 0)
-  reaper.SetMediaItemInfo_Value(media, "D_FADEINLEN_AUTO", -1)
-  reaper.SetMediaItemInfo_Value(media, "D_FADEOUTLEN_AUTO", -1)
+  reaper.SetMediaItemInfo_Value(media, "D_FADEINLEN_AUTO", 0)
+  reaper.SetMediaItemInfo_Value(media, "D_FADEOUTLEN_AUTO", 0)
   reaper.SetMediaItemInfo_Value(media, "B_LOOPSRC", 0)
   reaper.SetMediaItemInfo_Value(media, "I_MIXFLAG", 1)
   local take = reaper.AddTakeToMediaItem(media)
@@ -66,7 +67,6 @@ end
 reaper.AddProjectMarker2(0,false,0.11,0,"Native marker",1,0)
 reaper.GetSetProjectInfo_String(0,"RENDER_METADATA","ID3:TIT2|Native title",true)
 reaper.SetProjExtState(0,"WebSoundEdit","outputLayout","7.1")
-reaper.SetCurrentBPM(0,128,false)
 ${configureRenderLua(directory, 'native-render', 8, .15)}
 reaper.Main_SaveProjectEx(0, ${luaString(nativeFile)}, 8)
 report:close()

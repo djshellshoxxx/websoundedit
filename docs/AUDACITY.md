@@ -32,6 +32,14 @@ The export uses Audacity's 3.0-compatible SQLite schema and the 1.3 XML format. 
 
 ## Unsupported Audacity features
 
+### Surround channel stems in 1.0 beta
+
+Audacity exchange retains its genuine mono/stereo track model. A project with 5.1/7.1 media or output layout is rejected by default. The explicit API option `exportAudacity(project, {format: 'aup3', multichannel: 'split-mono'})` (also available with `format: 'aup'`) creates named mono channel stems such as `Surround [5.1 FL]`, `Surround [5.1 FC]` and `Surround [5.1 LFE]`.
+
+Each stem keeps the individual source channel's PCM, clip placement, gain, mute and solo. Stem pan is neutral. Audacity cannot represent the original surround speaker routing or front-pair pan, so this option preserves channel identity for further editing rather than claiming an equivalent native surround mixer. Use a surround WAV, REAPER package or the complete WebSoundEdit JSON session when the output layout must remain explicit. The 64-track/512-clip limits apply after channel and overlap splitting.
+
+### Native processing
+
 The importer rejects sound-changing features that the editor cannot reproduce accurately: realtime effect plugins, volume envelopes with points, non-unit realtime stretch, realtime pitch shift, tempo-stretched clips, note tracks, time-warp tracks, external/aliased audio blocks and missing blocks. Compressed legacy AUP projects containing external audio import references must first be opened and saved as a self-contained AUP3 in Audacity. Render other unsupported tracks or export audio stems in Audacity first. It also rejects cut-line edit history and malformed native tracks containing overlapping clips rather than silently changing their playback.
 
 Unaligned left/right stereo clips or independently mixed stereo channels require a stereo audio export from Audacity. Projects with audio before time zero, beyond the ten-minute timeline, over 64 track groups, over 512 clips, or above the 256 MiB decoded PCM budget do not fit the current editor. Newer database/XML schemas, including Audacity 4.x formats, are not claimed to be supported. There is no universal round-trip guarantee for every Audacity version or plugin.

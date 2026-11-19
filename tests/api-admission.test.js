@@ -33,9 +33,9 @@ test('JSON bounds reject expansion and cycles before materializing large results
 test('an abandoned queued HTTP command is not executed and capacity is restored', async () => {
   let release, started; const gate = new Promise(resolve => { release = resolve; }), running = new Promise(resolve => { started = resolve; });
   const calls = [];
-  const editor = { getState: () => ({}), execute: async method => { calls.push(method); started(); if (method === 'first') await gate; return {}; } };
+  const editor = { getState: () => ({}), execute: async (method, params) => { calls.push(params.name); started(); if (params.name === 'first') await gate; return {}; } };
   const api = await startApiServer({ port: 0, editor });
-  const send = (method, signal) => fetch(api.url + '/v1/execute', { method: 'POST', signal, headers: { Authorization: `Bearer ${api.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ method }) });
+  const send = (method, signal) => fetch(api.url + '/v1/execute', { method: 'POST', signal, headers: { Authorization: `Bearer ${api.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'track.add', params: { name: method } }) });
   let first;
   try {
     first = send('first'); await running;
@@ -54,7 +54,7 @@ test('HTTP admission rejects excess jobs while an earlier command is blocked, th
   let count = 0;
   const editor = { getState: () => ({ tracks: [] }), execute: async () => { count++; started(); if (count === 1) await gate; return {}; } };
   const api = await startApiServer({ port: 0, editor, maxPendingJobs: 1, maxJsonBytes: 4096, maxQueuedBytes: 4096 });
-  const send = () => fetch(api.url + '/v1/execute', { method: 'POST', headers: { Authorization: `Bearer ${api.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'test.wait' }) });
+  const send = () => fetch(api.url + '/v1/execute', { method: 'POST', headers: { Authorization: `Bearer ${api.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'project.state' }) });
   let first, second;
   try {
     first = send(); await running;

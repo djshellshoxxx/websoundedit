@@ -1,0 +1,79 @@
+{
+  "runtime": "v24.22.3",
+  "platform": "linux",
+  "limits": {
+    "stateBytes": 67108864,
+    "graphs": 65,
+    "stages": 128,
+    "stagesPerRack": 12,
+    "voices": 128,
+    "voiceBytes": 268435456,
+    "automationPoints": 8192,
+    "blockFrames": 2048,
+    "captureBytes": 67108864,
+    "queuedRecordingBytes": 8388608
+  },
+  "kind": "synthetic CPU throughput; no device latency or multi-hour hardware claim",
+  "rows": [
+    {
+      "channels": 2,
+      "scenario": "three-effects",
+      "sampleRate": 48000,
+      "blockFrames": 128,
+      "audioSeconds": 1,
+      "wallMs": 53.243,
+      "wallToAudioRatio": 0.0532,
+      "estimatedStateBytes": 1197056
+    },
+    {
+      "channels": 2,
+      "scenario": "all-twelve",
+      "sampleRate": 48000,
+      "blockFrames": 128,
+      "audioSeconds": 1,
+      "wallMs": 241.505,
+      "wallToAudioRatio": 0.2415,
+      "estimatedStateBytes": 7038080
+    },
+    {
+      "channels": 6,
+      "scenario": "three-effects",
+      "sampleRate": 48000,
+      "blockFrames": 128,
+      "audioSeconds": 1,
+      "wallMs": 200.22,
+      "wallToAudioRatio": 0.2002,
+      "estimatedStateBytes": 3578880
+    },
+    {
+      "channels": 6,
+      "scenario": "all-twelve",
+      "sampleRate": 48000,
+      "blockFrames": 128,
+      "audioSeconds": 1,
+      "wallMs": 521.822,
+      "wallToAudioRatio": 0.5218,
+      "estimatedStateBytes": 21065088
+    },
+    {
+      "channels": 8,
+      "scenario": "three-effects",
+      "sampleRate": 48000,
+      "blockFrames": 128,
+      "audioSeconds": 1,
+      "wallMs": 176.65,
+      "wallToAudioRatio": 0.1767,
+      "estimatedStateBytes": 4769792
+    },
+    {
+      "channels": 8,
+      "scenario": "all-twelve",
+      "sampleRate": 48000,
+      "blockFrames": 128,
+      "audioSeconds": 1,
+      "wallMs": 812.76,
+      "wallToAudioRatio": 0.8128,
+      "estimatedStateBytes": 28078592
+    }
+  ]
+}

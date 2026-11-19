@@ -17,3 +17,9 @@ The foreground coordinator is actively implementing the accepted beta specificat
 - Interchange worker: Audacity, shared archive/XML/DEFLATE handling, REAPER importer/exporter/native verification and format docs.
 
 No completed 1.0 beta, final Pages update, release assets or physical hardware validation is claimed at this checkpoint. The full accepted work remains governed by `docs/specs/BETA_1_0.md`; continue implementation through integrated tests, independent review and verified publication.
+
+## Integrated beta checkpoint
+
+All primary feature implementations are present. The local integrated suite passed 271 Node tests without skips, and all seven deterministic fuzz corpora passed. The production API bundle passed a real PCM edit/WAV round trip and interpreted typed macro. The first native REAPER grammar probe passed on pinned 7.86, leading to corrections for VOLPAN pan-law and item auto-fade fields. Full native render/save/reimport and Chromium beta workflows are now queued for the exact feature checkpoint.
+
+Publication remains blocked on those gates, actual annotated help images, final review and verified live deployment. Root alone commits/pushes using an expected-head lease and exact local/remote tree comparison.

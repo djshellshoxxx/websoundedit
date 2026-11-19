@@ -55,7 +55,7 @@ let calls = 0;
 const editor = { execute: async () => { calls++; if (calls === 1) await gate; return {}; }, getState: () => ({ tracks: [] }) };
 const queuedApi = await startApiServer({ port: 0, editor, maxJsonBytes: 4096, maxAudioBytes: 4096 });
 try {
-  const requests = Array.from({ length: 25 }, () => fetch(queuedApi.url + '/v1/execute', { method: 'POST', headers: { Authorization: `Bearer ${queuedApi.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'test.wait', params: { padding: 'x'.repeat(1024) } }) }));
+  const requests = Array.from({ length: 25 }, () => fetch(queuedApi.url + '/v1/execute', { method: 'POST', headers: { Authorization: `Bearer ${queuedApi.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'metadata.update', params: { metadata: { comment: 'x'.repeat(1024) } } }) }));
   await new Promise(resolve => setTimeout(resolve, 100));
   release(); const statuses = await Promise.all(requests.map(async result => { const r = await result; await r.arrayBuffer(); return r.status; }));
   report.queueProbe = { concurrentRequests: requests.length, accepted: statuses.filter(x => x === 200).length, rejected: statuses.filter(x => x !== 200).length, maxProbeBodyBytes: 27000 };

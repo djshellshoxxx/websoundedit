@@ -1,4 +1,6 @@
 /** MIDI 1.0 messages and Standard MIDI Files. No network or device access on import. */
+import { audioLayout } from './channel-layout.js';
+import { connectMatrix } from './audio-routing.js';
 const MAX_NOTES = 10000;
 const MAX_SECONDS = 600;
 const check = (condition, message) => { if (!condition) throw new Error(message); };
@@ -202,7 +204,7 @@ export class MidiController {
   bindInputs() {
     for (const input of this.boundInputs) input.onmidimessage = null; this.boundInputs.clear();
     for (const input of this.access?.inputs.values() || []) if (input.state !== 'disconnected' && (!this.inputId || input.id === this.inputId)) {
-      input.onmidimessage = event => { const message = parseMidiMessage(event.data); if (message) this.onMessage(message); }; this.boundInputs.add(input);
+      input.onmidimessage = event => { const message = parseMidiMessage(event.data); if (message) this.onMessage({ ...message, inputId: input.id }); }; this.boundInputs.add(input);
     }
     this.onState(this.ports());
   }
@@ -231,26 +233,32 @@ export class MidiController {
 
 /** Polyphonic sample audition. MIDI note 60 is the sample's original pitch. */
 export class MidiSampler {
-  constructor(getAudio) { this.getAudio = getAudio; this.context = null; this.voices = new Map(); this.generation = 0; this.held = new Map(); }
+  constructor(getAudio, { audioRoute = null } = {}) { this.getAudio = getAudio; this.context = null; this.voices = new Map(); this.generation = 0; this.held = new Map(); this.audioRoute = audioRoute; this.ownsContext = !audioRoute; }
+  setAudioRoute(route) { this.stop(); const previous = this.ownsContext ? this.context : null; this.audioRoute = route; this.context = null; this.ownsContext = !route; if (previous?.state !== 'closed') previous?.close(); }
   async noteOn(note, velocity, channel = 0) {
     const id = `${channel}:${note}`, token = ++this.generation; this.held.set(id, token);
     this.noteOff(note, channel, false);
     const audio = this.getAudio(); if (!audio?.channels?.[0]?.length) { this.held.delete(id); return; }
-    this.context ||= new AudioContext(); await this.context.resume();
+    this.context ||= this.audioRoute?.contextProvider ? await this.audioRoute.contextProvider() : new AudioContext(); await this.context.resume();
     if (this.held.get(id) !== token) return;
     while (this.voices.size >= 8) { const first = this.voices.values().next().value; this.noteOff(first.note, first.channel); }
-    const buffer = this.context.createBuffer(audio.channels.length, audio.channels[0].length, audio.sampleRate);
-    audio.channels.forEach((samples, c) => buffer.copyToChannel(samples, c));
-    const source = this.context.createBufferSource(), gain = this.context.createGain();
-    source.buffer = buffer; source.playbackRate.value = 2 ** ((note - 60) / 12); gain.gain.value = velocity / 127;
-    source.connect(gain).connect(this.context.destination); this.voices.set(id, { source, gain, note, channel });
-    source.onended = () => { source.disconnect(); gain.disconnect(); if (this.voices.get(id)?.source === source) this.voices.delete(id); };
-    source.start();
+    const release = this.audioRoute?.reserveVoice?.(audio.channels.length * audio.channels[0].length * 4) || (() => {});
+    let source, gain, route, released = false;
+    const cleanup = () => { if (released) return; released = true; source?.disconnect(); gain?.disconnect(); route?.dispose(); release(); if (this.voices.get(id)?.source === source) this.voices.delete(id); };
+    try {
+      const buffer = this.context.createBuffer(audio.channels.length, audio.channels[0].length, audio.sampleRate);
+      audio.channels.forEach((samples, c) => buffer.copyToChannel(samples, c));
+      source = this.context.createBufferSource(); gain = this.context.createGain();
+      source.buffer = buffer; source.playbackRate.value = 2 ** ((note - 60) / 12); gain.gain.value = velocity / 127; source.connect(gain);
+      route = this.audioRoute?.layout ? connectMatrix(this.context,gain,audioLayout(audio),this.audioRoute.layout(),this.audioRoute.outputNode()) : null;
+      if (!route) gain.connect(this.audioRoute?.outputNode?.() || this.context.destination);
+      this.voices.set(id, { source, gain, note, channel }); source.onended = cleanup; source.start();
+    } catch (error) { cleanup(); throw error; }
   }
   noteOff(note, channel = 0, releaseHeld = true) {
     const id = `${channel}:${note}`; if (releaseHeld) this.held.delete(id); const voice = this.voices.get(id); if (!voice) return;
     this.voices.delete(id); voice.gain.gain.setTargetAtTime(0, this.context.currentTime, .005); try { voice.source.stop(this.context.currentTime + .03); } catch {}
   }
   stop() { this.held.clear(); for (const voice of [...this.voices.values()]) this.noteOff(voice.note, voice.channel); }
-  async close() { this.stop(); const context = this.context; this.context = null; if (context) await context.close(); }
+  async close() { this.stop(); const context = this.context; this.context = null; if (context && this.ownsContext) await context.close(); }
 }
