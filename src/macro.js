@@ -314,6 +314,24 @@ export function formatMacro(ast) {
   };
   const output=emit(ast);if(output.length>MACRO_LIMITS.sourceBytes||new TextEncoder().encode(output).length>MACRO_LIMITS.sourceBytes)throw new MacroError('Formatted macro exceeds 128 KiB.',null,'RESOURCE_LIMIT');return output;
 }
+// A visual step must correspond to exactly one semantic operation. Text scripts
+// may still compose or nest commands; the visual step list must not conceal them.
+function hasNestedCommands(expression) {
+  const pending = [expression];
+  while (pending.length) {
+    const node = pending.pop();
+    if (node.type === 'CallExpression') return true;
+    for (const [key, value] of Object.entries(node)) {
+      if (key === 'loc') continue;
+      if (value?.type) pending.push(value);
+      else if (Array.isArray(value)) for (const entry of value) {
+        if (entry?.type) pending.push(entry);
+        else if (entry?.value?.type) pending.push(entry.value);
+      }
+    }
+  }
+  return false;
+}
 export function stepsToMacro(steps) {
   if (!Array.isArray(steps) || steps.length > MACRO_LIMITS.commands) throw new MacroError('Too many recorded steps.');
   let bytes=0;
@@ -323,13 +341,14 @@ export function stepsToMacro(steps) {
     if((bytes+=new TextEncoder().encode(text).length+1)>MACRO_LIMITS.sourceBytes)throw new MacroError('Recorded steps exceed 128 KiB.',null,'RESOURCE_LIMIT');
     const ast=parseMacro(text);
     if(ast.body.length!==1||ast.body[0].type!=='ExpressionStatement'||ast.body[0].expression.type!=='CallExpression'||ast.body[0].expression.method!==step.method) throw new MacroError('A visual step must contain exactly one command.');
+    if (hasNestedCommands(ast.body[0].expression.argument)) throw new MacroError('A visual step cannot hide a nested command; use the text editor for command composition.');
     return text;
   }).join('\n')));
 }
 export function macroToSteps(source) {
   const ast=typeof source==='string'?parseMacro(source):source;
   assertProgram(ast);
-  if(ast?.type!=='Program'||ast.body.some(n=>n.type!=='ExpressionStatement'||n.expression.type!=='CallExpression'))return null;
+  if(ast?.type!=='Program'||ast.body.some(n=>n.type!=='ExpressionStatement'||n.expression.type!=='CallExpression'||hasNestedCommands(n.expression.argument)))return null;
   return ast.body.map(n=>{let value;try{value=constant(n.expression.argument);}catch{value={known:false};}return {method:n.expression.method,...(value.known?{params:value.value}:{}),paramsSource:expressionText(n.expression.argument)};});
 }
 function safeValue(value, limits=MACRO_LIMITS, silentDecibels=false) {
