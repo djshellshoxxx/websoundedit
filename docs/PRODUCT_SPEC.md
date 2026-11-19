@@ -1,5 +1,7 @@
 # WebSoundEdit — product and engineering specification
 
+The creative workbench expansion is specified in [Creative workbench v2](specs/CREATIVE_WORKBENCH_V2.md), committed before its implementation. It adds the ordered creative rack, XY control, keys/colors, MIDI, metadata, themes, inspector collapse, and native/legacy Audacity exchange. The original editor contract below remains applicable.
+
 Version 1 · CircuitDriftLabs · 18 November 2026
 
 ## 1. Product purpose

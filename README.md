@@ -4,6 +4,8 @@
 
 [Open the editor](https://djshellshoxxx.github.io/websoundedit/) · [Product specification](docs/PRODUCT_SPEC.md) · [API reference](docs/API.md) · [Workflow research](docs/RESEARCH.md) · [Release verification](docs/VERIFICATION.md)
 
+**Creative workbench 0.2:** [implementation specification](docs/specs/CREATIVE_WORKBENCH_V2.md) · [Audacity compatibility](docs/AUDACITY.md)
+
 WebSoundEdit is a client-side audio editor and a shared JavaScript audio engine. The website runs on GitHub Pages. Its optional CLI and authenticated loopback HTTP companion let scripts edit local audio with the same implementation. Audio is processed on the user's device.
 
 ![WebSoundEdit desktop workspace with multitrack waveforms, selection controls, effect inspector and frequency analysis](docs/screenshots/workbench.png)
@@ -20,6 +22,32 @@ WebSoundEdit is a client-side audio editor and a shared JavaScript audio engine.
 - **See the change:** actual processed waveform preview with original overlay, sample detail, FFT spectrum, EQ response and ducking envelope. The display uses the DSP coefficients and real PCM, including mixer gain/panning.
 - **Save and automate:** portable project JSON with embedded float PCM, settings JSON, IndexedDB recovery, command palette, a keyboard shortcut for every UI feature, and named API methods for every effect.
 - **Record:** explicit microphone recording with processing requests disabled where the device/browser honors them. The microphone is released after recording.
+- **Build a creative chain:** Effects beside Tools offers echo, delay, reverb, chorus, flanger, phaser, distortion, tremolo, filter, tape, stutter and bitcrusher. Add up to 12 stages, drag to reorder, bypass, and set a wet/dry knob for every instance. Keyboard and move buttons provide equivalent controls.
+- **Control two parameters:** bind the XY pad to any two continuous rack parameters, including wet/dry. MIDI CC learning can control those parameters or the XY axes.
+- **Identify samples:** detect the key of a selected sample or every sample; key labels, confidence and consistent colors accompany the waveform. Set a manual override for uncertain material.
+- **Make room and choose a look:** collapse the whole Shape the sound inspector to widen the arrangement; choose Studio, Daylight, Midnight or Terminal themes.
+- **Connect MIDI:** select controller inputs/outputs, trigger the selected sample from notes, learn knob mappings, and receive/send transport. Import Standard MIDI Files as simple synthesized tracks and export their retained note timing.
+- **Exchange sessions:** open/save supported native Audacity `.aup3` projects and legacy `.aup` plus `_data` ZIP bundles. Edit export metadata and include supported tags in audio files.
+
+## Creative workflow
+
+1. Select a clip or drag a region of its waveform.
+2. Open **Shape the sound → Effects**, choose a processor, and click **Add effect**. Add additional instances as needed.
+3. Drag a stage by its handle, or use its up/down buttons. Processing runs from the top to the bottom. Turn the stage's wet/dry knob to blend its input and processed output.
+4. Bind X and Y to two parameters to explore a combination. Changes render a fresh PCM preview; use **Audition**, **A/B**, and **Apply**. The complete rack applies as one undoable edit.
+5. For stuttering, select the passage to change, add **Stutter**, and choose slices per beat, gate length and edge fade. The first short slice repeats inside the selected interval.
+6. Use **Detect key** or **Sample keys** for sample labels and colors. Detection uses bounded chroma analysis and returns uncertainty for insufficient tonal evidence; it is an estimate, not a guaranteed transcription.
+7. Choose **Metadata** before exporting listening files. Choose **Audacity / projects** for session exchange. Apply a draft rack before exporting its sound.
+
+Creative effects preserve duration. Echo, delay and reverb tails stop at the end of the processed interval. Include trailing silence in the clip/selection when a tail needs additional space. The XY controller edits draft parameters; it does not record performance automation.
+
+### MIDI behavior
+
+MIDI hardware access is requested only by **MIDI → Connect MIDI**, without SysEx. It requires a browser that implements Web MIDI and explicit device permission; file import/export works independently. MIDI note 60 plays the selected sample at original pitch, with other notes transposing it, and note-off releases it. Playback is limited to eight sample voices. **Stop all notes** clears voices and sends all-notes-off to the selected output.
+
+For a hardware knob, add rack stages, choose a mapping target, click **Learn next CC**, then move the knob. Mappings include MIDI channel and controller number and survive native project/settings saves. Removed effect targets remain inactive until remapped. Note triggers, incoming transport, outgoing test notes and outgoing Start/Stop are supported; this is not a full instrument host or automation sequencer.
+
+MIDI file import accepts format 0/1 with PPQ timing and tempo maps. It renders notes through a simple sine instrument, retaining timing/velocity for later `.mid` export. Program changes, original instrument sounds and later audio edits are not represented in that MIDI export. SMPTE timing, format 2 and unclosed notes are rejected. Files are bounded to 4 MiB, 10,000 notes and the normal 10-minute timeline.
 
 ## Formats
 

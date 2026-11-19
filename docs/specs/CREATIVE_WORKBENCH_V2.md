@@ -90,7 +90,7 @@ Add a metadata editor for title, artist, album, album artist, track number, date
 
 ### Native modern project format
 
-Implement actual `.aup3` SQLite project loading and saving, using a bundled, self-hosted SQLite WASM dependency and an original binary-XML encoder/decoder informed by Audacity's source. Preserve supported mono/stereo PCM clips, clip offsets/names, track gain/pan/mute/solo, timeline labels, sample rate, and project tags. Use bounded input/resource validation and transactional replacement of the current project.
+Implement actual `.aup3` SQLite project loading and saving, using a bundled, self-hosted SQLite WASM dependency and an original binary-XML encoder/decoder informed by Audacity's source. Preserve supported mono/stereo PCM clips, clip offsets/names, audible track gain/pan/mute/solo, timeline labels, sample rate, and project tags. Translate the two applications’ gain/pan laws to preserve audio; displayed knob values may differ. Split mixed mono/stereo clip tracks on export where Audacity requires separate channel layouts. Use bounded input/resource validation and transactional replacement of the current project.
 
 Audacity project features beyond the editor's data model need explicit handling. Detect realtime plugins, unsupported stretch/time mappings, envelopes, external/aliased/missing blocks, unsupported schemas, and other material transformations. Preserve them only if accurately supported; otherwise reject the affected import with an actionable explanation or require a user-visible supported interchange path. Do not silently discard a feature that changes the sound. Do not present native `.aup3` as universally lossless for all Audacity versions.
 

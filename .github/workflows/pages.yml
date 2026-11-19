@@ -40,9 +40,30 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+  native-interop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Install Audacity and virtual display
+        run: sudo apt-get update -qq && sudo apt-get install -y audacity xvfb xauth ffmpeg
+      - name: Verify native Audacity project exchange
+        run: xvfb-run -a node scripts/verify-audacity.mjs
+      - name: Save native interchange evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-audacity-evidence
+          path: test-results/native-audacity/
+          retention-days: 14
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: verify
+    needs: [verify, native-interop]
     runs-on: ubuntu-latest
     permissions:
       pages: write

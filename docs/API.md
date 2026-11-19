@@ -329,3 +329,55 @@ Browser project settings include the current UI values, while standalone engine 
 ## Resource and quality boundaries
 
 This release supports up to 64 tracks, 512 clips, 1,000 markers and a 10-minute timeline, subject to a 256 MiB decoded PCM budget. Browser decoder/encoder overhead and undo memory can make smaller jobs preferable. These are application guardrails, not a promise that every phone can process a maximum-sized project. DSP runs on float PCM; the built-in time/pitch algorithm is suitable for a lightweight editor and can sound different from an offline mastering tool at extreme ratios. Peak normalization and the limiter do not claim integrated LUFS or oversampled true-peak compliance.
+
+## Creative workbench API (0.2)
+
+All new audio processors are core commands, usable from the browser, DOM-free engine, recipes, CLI and companion: `effect.echo`, `effect.delay`, `effect.reverb`, `effect.chorus`, `effect.flanger`, `effect.phaser`, `effect.distortion`, `effect.tremolo`, `effect.filter`, `effect.tape`, `effect.stutter`, `effect.bitcrusher` and `effect.rack`. `commands.list` returns defaults; the exported `RACK_EFFECTS` schema describes ranges and choices.
+
+A serial rack processes the current selection (or whole selected clip). Each stage has its own dry/wet blend. One rack application creates one undo entry:
+
+```js
+await editor.execute('effect.rack', {
+  chain: [
+    {id: 'filter-1', effect: 'filter', enabled: true, wet: 1,
+      params: {type: 'lowpass', frequency: 2400, q: 0.707}},
+    {id: 'echo-1', effect: 'echo', enabled: true, wet: 0.3,
+      params: {timeMs: 250, repeats: 3, decay: 0.45}}
+  ]
+});
+```
+
+Order is significant. A bypassed or 0%-wet stage is an exact identity. Chains are limited to 12 stages; effect dimensions remain unchanged and tails stop at the selection boundary. `effect.preview` and `audio.renderPreview` accept `{effect: 'rack', params: {chain}, ...}` without committing audio. Stutter divides one beat according to `division` and repeats the first slice across the interval using project BPM.
+
+Key detection analyzes the entire sample and stores its estimate, independent of a narrower current selection:
+
+```js
+const key = await editor.execute('analysis.key', {clipId});
+const all = await editor.execute('analysis.keyAll');
+await editor.execute('clip.key', {clipId, tonic: 9, mode: 'minor'}); // A minor
+await editor.execute('clip.key', {clipId, tonic: null}); // clear label
+await editor.execute('metadata.update', {
+  metadata: {title: 'Afterhours', artist: 'Example', genre: 'Electronic'}
+});
+```
+
+`keyAnalysis` is included in clip state and native projects. Unknown/ambiguous audio has a null key. PCM edits invalidate the estimate; undo restores it. `metadata.update` replaces the normalized tag set. Browser `exportAudio` defaults to the project's tags and accepts an explicit `metadata` override; container-specific omissions are returned in `result.warnings`.
+
+Browser-specific editing helpers:
+
+```js
+const rack = websoundedit.rack.get();
+websoundedit.rack.add('tape');
+websoundedit.rack.load(rack); // versioned {version,chain,xy} config
+websoundedit.rack.setParameter(stageId, 'wet', 0.4);
+websoundedit.rack.move(stageId, 0);
+await websoundedit.midi.connect(); // explicit permission-bearing action
+websoundedit.midi.disconnect();
+await websoundedit.midi.importFile(midiFile);
+const midiBytes = websoundedit.midi.export({download: false});
+const audacity = await websoundedit.exportAudacity('aup3', {download: false});
+```
+
+The pure `api.js` bundle additionally exports `processRack`, `processRackEffect`, `createRackEffect`, `normalizeRackChain`, `detectKey`, `manualKey`, `keyColor`, `normalizeMetadata`, `metadataSupport`, `parseMidiFile`, `encodeMidiFile`, and `renderMidiSequence`. MIDI note-file functions work without hardware permissions. The browser sampler and controller have no automatic device access.
+
+For native project conversion from source modules, `exportAudacity(portableProject,{format:'aup3'|'aup'})` returns `{bytes,mime,ext,warnings}`. `importAudacity(bytes,{name,files})` returns `{project,warnings}`, where `files` optionally maps relative filenames to legacy AU block bytes. The legacy export is a ZIP with a real `.aup` and its `_data` folder. See [interoperability boundaries](AUDACITY.md) before claiming arbitrary Audacity project compatibility.

@@ -2,6 +2,7 @@
  * Layout: https://www.mmsp.ece.mcgill.ca/Documents/AudioFormats/WAVE/WAVE.html
  * RIFF chunks may be reordered or padded; malformed/truncated input is rejected.
  */
+import { normalizeMetadata, RIFF_TAGS } from './metadata.js';
 const MAX_BYTES = 256 * 1024 * 1024;
 function assertAudio(audio) {
   if (!audio || !Number.isInteger(audio.sampleRate) || audio.sampleRate < 8000 || audio.sampleRate > 192000) throw new RangeError('WAV sample rate must be an integer between 8000 and 192000.');
@@ -16,13 +17,15 @@ function assertAudio(audio) {
 const ascii = (view, offset, value) => { for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i)); };
 const text = (view, offset, length) => { let value = ''; for (let i = 0; i < length; i++) value += String.fromCharCode(view.getUint8(offset + i)); return value; };
 
-export function encodeWav(audio, { bitDepth = 16, float = false } = {}) {
+export function encodeWav(audio, { bitDepth = 16, float = false, metadata = {} } = {}) {
   assertAudio(audio);
   if (![16, 24, 32].includes(bitDepth) || (float && bitDepth !== 32)) throw new RangeError('Use PCM 16/24/32-bit, or float with bitDepth: 32.');
   const channels = audio.channels.length, frames = audio.channels[0].length, width = bitDepth / 8;
   const dataSize = frames * channels * width, headerSize = float ? 56 : 44;
   const pad = dataSize % 2;
-  const bytes = new Uint8Array(headerSize + dataSize + pad), view = new DataView(bytes.buffer);
+  const tags = Object.entries(normalizeMetadata(metadata)).filter(([key]) => RIFF_TAGS[key]).map(([key, value]) => [RIFF_TAGS[key], new TextEncoder().encode(value)]);
+  const infoSize = tags.length ? 12 + tags.reduce((n, [, value]) => n + 8 + value.length + 1 + ((value.length + 1) % 2), 0) : 0;
+  const bytes = new Uint8Array(headerSize + dataSize + pad + infoSize), view = new DataView(bytes.buffer);
   ascii(view, 0, 'RIFF'); view.setUint32(4, bytes.length - 8, true); ascii(view, 8, 'WAVE'); ascii(view, 12, 'fmt ');
   view.setUint32(16, 16, true); view.setUint16(20, float ? 3 : 1, true); view.setUint16(22, channels, true);
   view.setUint32(24, audio.sampleRate, true); view.setUint32(28, audio.sampleRate * channels * width, true);
@@ -40,6 +43,10 @@ export function encodeWav(audio, { bitDepth = 16, float = false } = {}) {
     } else view.setInt32(offset, Math.round(sample * (sample < 0 ? 2147483648 : 2147483647)), true);
     offset += width;
   }
+  if (tags.length) {
+    offset = headerSize + dataSize + pad; ascii(view, offset, 'LIST'); view.setUint32(offset + 4, infoSize - 8, true); ascii(view, offset + 8, 'INFO'); offset += 12;
+    for (const [key, value] of tags) { ascii(view, offset, key); view.setUint32(offset + 4, value.length + 1, true); bytes.set(value, offset + 8); offset += 8 + value.length + 1 + ((value.length + 1) % 2); }
+  }
   return bytes;
 }
 
@@ -54,6 +61,7 @@ export function decodeWav(input) {
   const end = view.getUint32(4, true) + 8;
   if (end > bytes.length || end < 12) throw new RangeError('The WAV file is truncated or its RIFF length is invalid.');
   let format = null, data = null;
+  const metadata = {}, reverseTags = Object.fromEntries(Object.entries(RIFF_TAGS).map(([key, id]) => [id, key]));
   for (let offset = 12; offset + 8 <= end;) {
     const id = text(view, offset, 4), size = view.getUint32(offset + 4, true), start = offset + 8;
     if (start + size > end) throw new RangeError(`Truncated WAV ${id} chunk.`);
@@ -69,6 +77,15 @@ export function decodeWav(input) {
       }
       format = { code, channels, sampleRate, blockAlign, bits };
     } else if (id === 'data' && data === null) data = { start, size };
+    else if (id === 'LIST' && size >= 4 && text(view, start, 4) === 'INFO') {
+      if (size > 16384) throw new RangeError('WAV metadata exceeds the supported size.');
+      for (let cursor = start + 4; cursor + 8 <= start + size;) {
+        const field = text(view, cursor, 4), length = view.getUint32(cursor + 4, true);
+        if (cursor + 8 + length > start + size) throw new RangeError('Truncated WAV INFO metadata.');
+        if (reverseTags[field]) metadata[reverseTags[field]] = new TextDecoder().decode(bytes.subarray(cursor + 8, cursor + 8 + length)).replace(/\0+$/, '');
+        cursor += 8 + length + (length & 1);
+      }
+    }
     offset = start + size + (size & 1);
   }
   if (!format || !data) throw new RangeError('WAV requires both fmt and data chunks.');
@@ -96,5 +113,6 @@ export function decodeWav(input) {
     output[c][i] = value;
     offset += width;
   }
-  return { sampleRate, channels: output };
+  const tags = normalizeMetadata(metadata);
+  return { sampleRate, channels: output, ...(Object.keys(tags).length ? { metadata: tags } : {}) };
 }

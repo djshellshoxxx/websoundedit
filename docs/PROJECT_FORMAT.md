@@ -17,6 +17,7 @@ A project file is a self-contained snapshot of the current edit. It contains met
   "markers": [],
   "selection": null,
   "settings": {},
+  "metadata": {},
   "selectedTrackId": null,
   "selectedClipId": null
 }
@@ -88,6 +89,18 @@ Metadata does not store references to executable code, remote URLs or arbitrary 
 ```
 
 The engine stores JSON settings and validates their size and basic safety. The browser adapter owns meanings such as shortcuts, zoom and effect drafts. `settings.save` returns the wrapper; `settings.load` accepts `{settings: wrapper}` or `{settings: plainSettingsObject}`. The settings limit is 1 MiB. Settings do not embed audio; use a project for portable audio and edit state.
+
+## Creative workbench additions (backward-compatible v1 fields)
+
+`metadata` contains bounded, known audio tags: title, artist, album, albumArtist, composer, genre, date, track, disc, comment, copyright, bpm and key. Empty tags are omitted. Fields are text and are limited to 8 KiB in total. Audio-container support varies; WAV uses RIFF INFO and raw AAC cannot carry the general tag set.
+
+Clips may include `keyAnalysis`. Its canonical key label, tonic, mode, color and confidence are validated on load. A manual override is marked `source: "manual"`; detected estimates are heuristic. PCM edits clear analysis, and undo restores the previous result. Old projects without these fields continue to load.
+
+`settings.ui.rack` holds `{version: 1, chain, xy}`. Each stage is `{id, effect, enabled, wet, params}`. `wet` is 0–1. Stages have stable IDs, permitting duplicate effects and reorder without losing XY/MIDI bindings. `xy.x` and `xy.y` refer to `{id, key}` targets or null. Chain size is limited to 12. This is an editable draft; it is not applied a second time when the project opens.
+
+The UI also stores `theme`, `inspectorCollapsed`, `activePanel`, and `midi: {mappings}`. Mappings contain `{channel, controller, target}`; channels are 0–15 and controller values are 0–127. Device permission is never stored or requested automatically.
+
+Imported MIDI note sequences are stored by clip ID in `settings.midiSequences`. They describe the original note timing and velocity, independently of later PCM edits. Native Audacity formats carry the interoperable audio and arrangement subset, not these WebSoundEdit-specific settings. See [Audacity compatibility](AUDACITY.md).
 
 ## Size and recovery
 

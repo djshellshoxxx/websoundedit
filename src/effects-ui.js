@@ -32,7 +32,7 @@ export class EffectPanel {
   params(){return clone(this.values[this.effect]);}
   choose(effect,{notify=true}={}){if(!Object.hasOwn(EFFECT_UI,effect))throw new Error('Unknown effect.');this.effect=effect;this.render();if(notify)this.onChange(this.effect,this.params());return EFFECT_UI[effect].category;}
   selectCategory(category){this.choose(Object.keys(EFFECT_UI).find(id=>EFFECT_UI[id].category===category));}
-  load(values){
+  load(values,{validateOnly=false}={}){
     if(values!==undefined&&(!values||typeof values!=='object'||Array.isArray(values)))throw new Error('Effect settings must be an object.');
     const next=clone(this.values);
     for(const [id,value] of Object.entries(values||{})){
@@ -67,6 +67,7 @@ export class EffectPanel {
       }
       next[id]=base;
     }
+    if(validateOnly)return next;
     this.values=next;this.render();
   }
   changed(){this.redraw();this.onChange(this.effect,this.params());}

@@ -1,6 +1,6 @@
 {
   "name": "@circuitdriftlabs/websoundedit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "A local-first visual multitrack audio editor and scriptable audio engine by Circuit Drift Labs",
@@ -25,7 +25,10 @@
     "@ffmpeg/core": "0.12.10",
     "@ffmpeg/ffmpeg": "0.12.15",
     "@soundtouchjs/core": "2.1.1",
-    "libopus-wasm": "0.3.0"
+    "@xmldom/xmldom": "0.9.12",
+    "fflate": "0.8.3",
+    "libopus-wasm": "0.3.0",
+    "sql.js": "1.16.0"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1",
