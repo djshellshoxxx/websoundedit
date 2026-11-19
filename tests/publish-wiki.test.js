@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { publishWiki, readWikiSources, validateWikiContext, verifyWikiPublic, WIKI_REMOTE, WIKI_REPOSITORY, WIKI_LIMITS } from '../scripts/publish-wiki.mjs';
+import { publishWiki, readWikiSources, validateWikiContext, verifyWikiPublic, verifyWikiHTML, WIKI_REMOTE, WIKI_REPOSITORY, WIKI_LIMITS } from '../scripts/publish-wiki.mjs';
 
 const execute = promisify(execFile), TOKEN = 'fake_wiki_test_token_not_a_credential';
 const context = () => ({...process.env,GITHUB_REPOSITORY:WIKI_REPOSITORY,GITHUB_REF:'refs/heads/main',GITHUB_SHA:'a'.repeat(40),GITHUB_TOKEN:TOKEN});
@@ -61,7 +61,8 @@ async function fixture(t, {targetSymlink=false, attributes=false}={}) {
     }
     assert.equal(target.origin,'https://github.com');
     assert.ok(['/wiki','/wiki/User-Guide','/wiki/Developer-Guide'].some(path=>target.pathname==='/'+WIKI_REPOSITORY+path));
-    return new Response('<!doctype html><html><body>Published wiki page</body></html>',{headers:{'content-type':'text/html; charset=utf-8'}});
+    const stem=target.pathname.endsWith('/wiki')?'Home':target.pathname.split('/').at(-1),content=await localGit(['show','HEAD:'+stem+'.md'],remote),heading=content.match(/^# (.+)$/m)[1];
+    return new Response('<!doctype html><html><head><title>'+stem.replace(/-/g,' ')+' · '+WIKI_REPOSITORY+' Wiki · GitHub</title></head><body><h1>'+heading+'</h1></body></html>',{headers:{'content-type':'text/html; charset=utf-8'}});
   };
   const options={env:{...context(),GIT_TRACE:'1'},sourceDir,temporaryDirectory:directory,git,fetcher,verificationAttempts:1,wait:async()=>{}};
   return {directory,sourceDir,seed,remote,original,calls,requests,git,fetcher,options};
@@ -136,6 +137,8 @@ test('source symlinks, directories, unsafe names, invalid text and size budgets 
   await run(source=>writeFile(join(source,'home.md'),'case collision'));
   await run(source=>writeFile(join(source,'Home.md'),Buffer.from([0xff])));
   await run(source=>writeFile(join(source,'Home.md'),'NUL\0text'));
+  await run(source=>writeFile(join(source,'Home.md'),'No heading here.\n'));
+  await run(source=>writeFile(join(source,'Home.md'),'# A **formatted** heading\n'));
   await run(source=>writeFile(join(source,'Home.md'),'x'.repeat(WIKI_LIMITS.pageBytes+1)));
   await run(async source=>{for(let i=0;i<9;i++)await writeFile(join(source,'Page-'+i+'.md'),'x'.repeat(WIKI_LIMITS.pageBytes));});
   await run(async source=>{for(let i=0;i<32;i++)await writeFile(join(source,'Page-'+i+'.md'),'# Page\n');});
@@ -191,4 +194,24 @@ test('public verification rejects wrong raw bytes, oversized bodies, redirects a
   let calls=0, waits=0;
   await assert.rejects(verifyWikiPublic(files,{commit,fetcher:async()=>{calls++;return new Response('missing',{status:404});},attempts:3,wait:async milliseconds=>{assert.equal(milliseconds,5000);waits++;}}),{code:'WIKI_VERIFY'});
   assert.equal(calls,3); assert.equal(waits,2);
+});
+
+test('public HTML must identify the expected wiki page and render its source heading',async()=>{
+  const file={name:'User-Guide.md',bytes:Buffer.from('# User guide & reference\n'),sha256:'test'},commit='c'.repeat(40);
+  const title='User Guide · '+WIKI_REPOSITORY+' Wiki · GitHub';
+  const document=(pageTitle,body)=>'<!doctype html><html><head><title>'+pageTitle+'</title></head><body>'+body+'</body></html>';
+  const cases=[
+    document('Sign in to GitHub','<h1>Sign in</h1>'),
+    document('User Guide · someone/else Wiki · GitHub','<h1>User guide &amp; reference</h1>'),
+    document('Home · '+WIKI_REPOSITORY+' Wiki · GitHub','<h1>User guide &amp; reference</h1>'),
+    document(title,'<h1>Sign in</h1>'),
+    document(title,'<!-- <h1>User guide &amp; reference</h1> -->'),
+    document(title,'<script>const hidden="<h1>User guide &amp; reference</h1>";</script>'),
+    document(title,'&lt;h1&gt;User guide &amp; reference&lt;/h1&gt;')
+  ];
+  for(const html of cases) {
+    assert.throws(()=>verifyWikiHTML(Buffer.from(html),file),{code:'WIKI_VERIFY'});
+    await assert.rejects(verifyWikiPublic([file],{commit,attempts:1,fetcher:async url=>new Response(url.includes('raw.githubusercontent.com')?file.bytes:html,{headers:{'content-type':url.includes('raw.githubusercontent.com')?'text/plain':'text/html'}})}),{code:'WIKI_VERIFY'});
+  }
+  verifyWikiHTML(Buffer.from(document(title.replaceAll('·','&#183;'),'<h1 class="heading"><a href="#user-guide"></a> User guide &amp; reference </h1>')),file);
 });

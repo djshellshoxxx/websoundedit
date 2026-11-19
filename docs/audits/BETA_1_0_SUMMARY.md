@@ -1,6 +1,6 @@
 # WebSoundEdit 1.0 beta — verification and audit record
 
-Status: release candidate. Native round trips, dependency auditing and the first full browser run have executed; concrete browser failures and screenshot annotation defects are being corrected before the final gate and publication. The specification was written before implementation in [BETA_1_0.md](../specs/BETA_1_0.md).
+Status: release candidate. The corrected full CI run passed, all 22 fresh Help screenshots were visually accepted, and the final illustrated-guide integration and publication checks remain required. The specification was written before implementation in [BETA_1_0.md](../specs/BETA_1_0.md).
 
 ## Sequence and scope
 
@@ -21,6 +21,16 @@ The production Vite build and DOM-free `api.js` validation executed a real PCM e
 The browser result was **39 passed, 16 failed, one intentionally skipped live-deployment check**. The failed job remains failed. Failures identified a browser codec size-probe issue, a recording-worker manifest/PCM distinction, late-armed loop boundaries, live rack integration and an ambiguous test selector. All 22 annotated UI images were captured, but visual review found overflowing callout text and a mobile Options checkbox layout defect. These findings require correction and a fresh browser/capture run before release. [The machine-readable checkpoint](BETA_1_0_CI_CHECKPOINT.json) preserves exact results and artifact identity, including the failures.
 
 The corrections were implemented and independently reviewed. Review reproduced two additional error paths: a read-only stale size report could authorize a premature file read, and the real master-capture wiring formed a circular graph omitted by the synthetic tap fixture. Strict report truncation and an acyclic capture/playback handoff address them. Master capture reports its observed initial handoff delay while retaining loop phase; input/track capture retains its direct audio-clock transition. The consolidated correction checkpoint passed **333 Node tests with zero skips**, all seven fuzz suites and the production build/SDK. Eleven publisher tests use local Git and fake public responses; 35 focused audio tests include the actual pinned WASM, recording worker, capture processor and routing topology. [Local correction evidence](BETA_1_0_CI_CORRECTIONS_LOCAL.json) records source and log hashes. These local results do not replace the required fresh browser/native run and screenshot review.
+
+### Corrected full CI and illustrated guide
+
+[Run 44545662340](https://github.com/djshellshoxxx/websoundedit/actions/runs/44545662340), job `135635402926`, passed against candidate `127664458a725b76db183e243806c4b7c27bdbdd`. Its actual merge checkout `19cc781cf492c6b9678e045c4f242bbf3091c4a4` shares tree `50bd6e45fe84b737bae843757e11bc36ec7191c8`. Results: **333 Node tests, seven fuzz families, production build/SDK, zero-advisory dependency audit, native Audacity and all eight native REAPER cases, and 55 browser tests passed**. The single skipped browser test deliberately requires the real deployed Pages URL; there were no browser failures or reported flaky tests. [The exact evidence record](BETA_1_0_CI_CORRECTED.json) preserves reports and artifact identity.
+
+All **22 original annotated PNGs**, covering all **14 Help chapters**, were visually accepted and copied unchanged into `public/help/`. The [acceptance review](HELP_CAPTURE_ACCEPTANCE_44545662340.md) records each view, the 61 callouts and 98 measured text rows, byte hashes, and truthful idle/device states. A new browser regression requires every image to load with the correct dimensions, URL, caption and accessible description. The post-deployment smoke also checks a real Help image. These two additions must execute on the final integrated build; the capture run is not represented as their execution.
+
+A separate publication review corrected a false-success risk in wiki verification: generic HTTP 200 HTML now fails unless its title identifies the exact repository/page and its rendered H1 matches the source. All **12 focused publisher tests passed**, including local Git round trips and negative public responses. [The review](WIKI_PUBLICATION_REVIEW.md) separates this local evidence from actual remote publication. [Publication ordering](PUBLICATION_ORDER_REVIEW.md) now requires wiki verification before creating the immutable beta release tag.
+
+After integrating the accepted assets and publisher correction, the local complete suite passed **334 tests, zero failures or skips**, and the production build/DOM-free SDK passed. [Final integration local evidence](BETA_1_0_ASSETS_LOCAL.json) records those log hashes and the image inventory. The newly added browser image check still requires the final CI run.
 
 ### Deterministic fuzz families
 
@@ -48,6 +58,7 @@ Detailed lane reports contain reproductions, severity reasoning, exact tests and
 - [UI and batch ownership review](UI_BETA_1_0.md): concurrent edits/exports, delayed file operations, private ownership, recovery persistence and interactive macro behavior.
 - [Worker message budget review](WORKER_MESSAGE_BUDGET_REVIEW.md): sparse arrays, descriptor-only inspection, intrinsic binary sizes, hidden Map/Set contents, pending traversal capacity, and rejected-message queue cleanup.
 - [REAPER audit](REAPER_BETA_1_0.md): genuine file grammar, bounded supplied-media aliases, inactive/native record handling and supported interchange boundaries.
+- [Wiki publication review](WIKI_PUBLICATION_REVIEW.md) and [release ordering review](PUBLICATION_ORDER_REVIEW.md): exact public page identity/content and prerequisite ordering before an immutable release tag.
 
 Additional integration checks cover preserved original project state during failed file replacement, recorded action portability, explicit clicked-track export, exact same-pitch MIDI timing, tooltip opt-out, batch cancellation/restore and disposal blocking new work. Conversion output uses preflight/frame/output limits and bounded temporary files so an extreme rate/layout request cannot grow without bounds.
 
@@ -67,7 +78,7 @@ The verified workflow runs native Audacity and pinned REAPER 7.86 with independe
 
 Independent checks continue when their required dependencies are ready even if another check has failed. The failed result remains a failed job, and the Pages artifact remains success-only. This collects the available evidence without weakening the publication gate.
 
-The main publication job repeats the same required gates, deploys Pages, checks `build.json` against the exact deployed commit and completes a real browser edit. Only then does it create the 1.0 beta prerelease and attach archives/checksums. A subsequent guarded step publishes the seven wiki guides and verifies their remote commit, exact anonymous raw bytes and public page URLs. Wiki publication remains separately unverified until that step succeeds. Final run IDs, counts, commit identity and screenshots are added here after verification.
+The main publication job repeats the same required gates, deploys Pages, checks `build.json` against the exact deployed commit and completes a real browser edit and Help-image check. The guarded wiki step publishes seven guides and verifies their remote commit, exact anonymous raw bytes, public page identities and rendered source headings. Only after these prerequisites succeed does the job create the 1.0 beta prerelease and attach archives/checksums. Actual Pages, wiki and release publication remain unverified until those steps execute. Publication artifacts preserve final run evidence without rewriting the immutable release commit.
 
 ## Practical limits
 

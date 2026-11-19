@@ -79,3 +79,13 @@ The same checkout passed **316 unit/integration tests**, zero failures/skips, in
 `npm audit --audit-level=moderate --json` completed successfully and reported **zero known npm vulnerabilities at every severity** for the checked lockfile. The dependency report SHA-256 is `8d848341f190357d152f375f28aa33f0a05be1963c07b515ed81aff28f9f0a92`; the tested lockfile SHA-256 is `7fcaf4987830b0e1890c05179ced60dbff1abef51cdf96004b2136837701c8e0`. This is an advisory-database result for npm dependencies at that run, not a proof of security or an audit of every native/system-library component.
 
 Audacity also passed its three native cases in this run; the [baseline audit's follow-up](INTERCHANGE_BASELINE_0_2.md#native-correction-verification--19-november-2026) records their measured results. Browser failures remain a separate release blocker and are not overridden by these native, unit, fuzz or dependency passes. Subsequent source corrections require the release workflow to verify the resulting checkout again.
+
+## Verified candidate follow-up — run 44545662340
+
+[Actions run 44545662340](https://github.com/djshellshoxxx/websoundedit/actions/runs/44545662340), job `135635402926`, **passed** after the browser corrections. Candidate `127664458a725b76db183e243806c4b7c27bdbdd` was tested as synthetic merge `19cc781cf492c6b9678e045c4f242bbf3091c4a4`; their confirmed tree is `50bd6e45fe84b737bae843757e11bc36ec7191c8`.
+
+All eight REAPER **7.86/linux-x86_64** native cases passed again. The new native report is byte-identical to the preceding report (SHA-256 `62518545010859f826d5dab92a99b2fa569b9292fc66e9d86443eaca89009028`), so every frame count, PCM difference, tolerance and conversion notice in the table above remains unchanged. All eight new process records independently show exit **0**, no signal, no timeout and outcome `OK`.
+
+The complete run passed **333 unit/integration tests** with zero skips, all **seven fuzz families**, the production/API build, both native DAW gates and **55 browser tests**. One publication-only browser check was intentionally skipped in this pull-request run. The npm audit again reported zero known advisories at every severity. [Artifact 14540739177](https://github.com/djshellshoxxx/websoundedit/actions/runs/44545662340/artifacts/14540739177) has archive SHA-256 `d02981ccb8d8a7cbe7b9bb92a455db9bd961c3ddd0bbe9fc296bd0cbff17f2c9`.
+
+This is the verified candidate before guide-image integration and `main` publication, not a deployment record. The fixture, version, routing and physical-hardware limits stated above still apply.

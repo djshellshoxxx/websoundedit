@@ -18,6 +18,30 @@ const execute = promisify(execFile);
 const pause = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 const fail = (code, message) => Object.assign(new Error(message), {code});
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+const plainHeading = file => {
+  const heading = file.bytes.toString('utf8').match(/^# ([^\r\n]+)\r?$/m)?.[1]?.trim();
+  if (!heading || /[<>`*_\[\]]/.test(heading)) throw fail('WIKI_SOURCE', 'Ordinary wiki pages require a plain first-level Markdown heading: ' + file.name);
+  return heading;
+};
+
+function htmlText(value) {
+  const entities = {amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",nbsp:' ',middot:'·',ndash:'–',mdash:'—'};
+  return value.replace(/<[^>]*>/g, '').replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, name) => {
+    if (name[0] !== '#') return entities[name.toLowerCase()] ?? entity;
+    const point = name[1]?.toLowerCase() === 'x' ? parseInt(name.slice(2),16) : Number(name.slice(1));
+    return point > 0 && point <= 0x10ffff && !(point >= 0xd800 && point <= 0xdfff) ? String.fromCodePoint(point) : entity;
+  }).replace(/\s+/g, ' ').trim();
+}
+
+export function verifyWikiHTML(bytes, file) {
+  const html = bytes.toString('utf8').replace(/<!--[\s\S]*?-->/g, '').replace(/<(script|style|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '');
+  const title = htmlText(html.match(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/i)?.[1] || '');
+  const expected = file.name.slice(0,-3).replace(/-/g, ' ') + ' · ' + WIKI_REPOSITORY + ' Wiki · GitHub';
+  if (title !== expected) throw fail('WIKI_VERIFY', 'Public wiki HTML has an unexpected page identity: ' + file.name);
+  const heading = plainHeading(file).replace(/\s+/g, ' ');
+  for (const match of html.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1\s*>/gi)) if (htmlText(match[1]) === heading) return;
+  throw fail('WIKI_VERIFY', 'Public wiki HTML does not render the source heading: ' + file.name);
+}
 
 export function validateWikiContext(env) {
   if (env.GITHUB_REPOSITORY !== WIKI_REPOSITORY || env.GITHUB_REF !== 'refs/heads/main' || !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA || '')) {
@@ -50,7 +74,9 @@ export async function readWikiSources(sourceDir) {
       const bytes = buffer.subarray(0, size);
       try {if (new TextDecoder('utf-8', {fatal:true}).decode(bytes).includes('\0')) throw new Error('NUL');}
       catch {throw fail('WIKI_SOURCE', 'Wiki Markdown must be valid UTF-8 without NUL bytes.');}
-      total += size; files.push({name:entry.name, bytes, sha256:hash(bytes)});
+      const file = {name:entry.name, bytes, sha256:hash(bytes)};
+      if (!entry.name.startsWith('_')) plainHeading(file);
+      total += size; files.push(file);
     } finally {await handle.close();}
   }
   const required = ['Home.md', 'User-Guide.md', 'Developer-Guide.md', '_Sidebar.md'];
@@ -112,7 +138,7 @@ export async function verifyWikiPublic(files, {commit, fetcher=globalThis.fetch,
         if (!bytes.equals(file.bytes)) throw fail('WIKI_VERIFY', 'Public raw wiki bytes differ from the verified source: ' + file.name);
         const stem = file.name.slice(0, -3);
         const pageUrl = stem.startsWith('_') ? null : PUBLIC_BASE + (stem === 'Home' ? '' : '/' + encodeURIComponent(stem));
-        if (pageUrl) await fetchPublic(fetcher, pageUrl + suffix, WIKI_LIMITS.htmlBytes, true);
+        if (pageUrl) verifyWikiHTML(await fetchPublic(fetcher, pageUrl + suffix, WIKI_LIMITS.htmlBytes, true), file);
         verified.push({name:file.name, pageUrl, rawUrl, sha256:file.sha256});
       }
       return verified;

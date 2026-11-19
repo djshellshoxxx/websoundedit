@@ -1,0 +1,30 @@
+{
+  "status": "local final illustrated-guide integration passed; new browser image test and actual publication pending",
+  "createdAt": "2026-11-19T15:03:14.536641+00:00",
+  "unit": {
+    "passed": 334,
+    "failed": 0,
+    "skipped": 0
+  },
+  "build": "production Vite build and DOM-free SDK passed",
+  "help": {
+    "images": 22,
+    "chapters": 14,
+    "bytes": 4141095,
+    "captureRun": 44545662340
+  },
+  "logs": [
+    {
+      "path": "test-results/audits/beta-final-assets-unit.log",
+      "sha256": "f3a3cba2b82331031a5573a7eb78f4fdfff06094803bbdec2fc0da90cdcdcf3c"
+    },
+    {
+      "path": "test-results/audits/beta-final-assets-build.log",
+      "sha256": "5feaea190089de1210534f9d0442400cfec56004d98060011fcb44fc45da3555"
+    },
+    {
+      "path": "test-results/audits/publish-wiki-visibility-unit.log",
+      "sha256": "e638054d5b410643ac88caea51eae27a967adaf05417a9a59cda254f0ee07636"
+    }
+  ]
+}

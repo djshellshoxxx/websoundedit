@@ -103,5 +103,182 @@ export const HELP_CHAPTERS = [
   ], commands: ['audio.capabilities', 'recordings.recover', 'history.undo'] }
 ];
 
-// Filled with reviewed screenshots captured from the actual running beta by CI.
-export const HELP_IMAGES = [];
+// Reviewed original CI captures; source commits and SHA-256 hashes are preserved in help/provenance.json.
+export const HELP_IMAGES = [
+  {
+    "path": "help/guide-editor-desktop.png",
+    "chapter": "navigation",
+    "alt": "WebSoundEdit beta editor with arrows to Selection zoom, track Save / Export and Hide sound tools.",
+    "caption": "The running workbench: selection zoom changes the view, track actions keep their explicit target, and sound tools collapse for more waveform space.",
+    "width": 1440,
+    "height": 1250
+  },
+  {
+    "path": "help/guide-effects-desktop.png",
+    "chapter": "effects",
+    "alt": "Effects rack with echo, tape, filter, wet/dry controls and XY pad.",
+    "caption": "An actual three-stage rack with stable effect order, individual wet/dry controls and independent XY assignments.",
+    "width": 1440,
+    "height": 1600
+  },
+  {
+    "path": "help/guide-channel-layout.png",
+    "chapter": "surround",
+    "alt": "Options Channel layout page with mono, stereo, 5.1 and 7.1 channel orders.",
+    "caption": "Project layout and canonical speaker order are explicit. Output hardware capability is a separate setting.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-midi-pedals.png",
+    "chapter": "midi",
+    "alt": "MIDI Options pedal mapping controls with local arm, command selection and debounce.",
+    "caption": "Pedal mappings select a command, press threshold and debounce. Arming is a separate local action; release never retriggers.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-macros-desktop.png",
+    "chapter": "macros",
+    "alt": "Macro editor showing a loop that imports, trims quiet ends, normalizes and exports files.",
+    "caption": "Canonical text retains loops and variables. Validate before running; Record actions and Batch files use the same command language.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-long-recorder.png",
+    "chapter": "recording",
+    "alt": "Long recorder source, start/pause controls, elapsed time and written/queued storage counters.",
+    "caption": "The long recorder before capture. Its disk archive is separate from the bounded waveform editor; counters distinguish committed and queued bytes.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-companion-streaming.png",
+    "chapter": "streaming",
+    "alt": "Streaming Options with empty token field, loopback endpoint and disabled destination/profile selectors.",
+    "caption": "The disconnected companion surface. Credentials stay in memory, and destinations/profiles come from an explicitly connected local companion.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-project-compatibility.png",
+    "chapter": "compatibility",
+    "alt": "Project dialog offering native JSON, Audacity AUP3, legacy Audacity ZIP and REAPER project ZIP.",
+    "caption": "Genuine editable formats are separate choices. Audacity surround requires explicit speaker-labeled mono splitting; REAPER export includes its referenced media.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-sample-keys.png",
+    "chapter": "keys",
+    "alt": "Sample keys dialog showing estimated sample keys and individual manual-key selectors.",
+    "caption": "Key estimates keep written labels and confidence alongside tonic colors. Manual overrides remain available for ambiguous material.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-export-metadata.png",
+    "chapter": "export",
+    "alt": "Export dialog with track scope, source choice, channel layout and metadata support.",
+    "caption": "Choose scope, exact track, format and explicit committed/live render behavior. Metadata support is reported for the selected format.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-live-layers.png",
+    "chapter": "looping",
+    "alt": "Live loop panel containing a real captured layer and independent play, stop, mute and delete buttons.",
+    "caption": "An actual short program capture created a new loop layer. Beat boundaries, source choice and independent layer controls are visible.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-editor-mobile.png",
+    "chapter": "tracks",
+    "alt": "Mobile waveform editor with direct track export and selection zoom controls.",
+    "caption": "The real mobile workbench with sound tools collapsed. Track actions and selection zoom remain available at a narrow width.",
+    "width": 390,
+    "height": 844
+  },
+  {
+    "path": "help/guide-options-mobile.png",
+    "chapter": "navigation",
+    "alt": "Mobile Options page with wrapped section navigation, theme selector and tooltip preference.",
+    "caption": "Addressable Options on mobile keeps the current session alive and provides a global guidance switch.",
+    "width": 390,
+    "height": 844
+  },
+  {
+    "path": "help/guide-input-options.png",
+    "chapter": "recording",
+    "alt": "Idle Audio input Options showing microphone or display source, device, channel indices, gain, processing preferences and unchecked monitoring.",
+    "caption": "Audio input settings before acquisition. Start input requests permission explicitly; source channels and gain are configurable, and monitoring remains off.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-output-options.png",
+    "chapter": "surround",
+    "alt": "Audio output Options with the real device-selection capability, monitoring layout, Apply routing button and reported maximum channel count.",
+    "caption": "Audio output shows the browser's reported destination capability separately from the selected monitoring layout.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-metadata-editor.png",
+    "chapter": "export",
+    "alt": "Audio metadata dialog with a saved title and artist, other available tag fields and Save metadata button.",
+    "caption": "The actual metadata editor after saving the title and artist. Project tags remain editable and are embedded only by formats that support them.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-macro-recording.png",
+    "chapter": "macros",
+    "alt": "Active action recorder with two genuine captured editing commands, an unchecked Record timing option and Finish recording button.",
+    "caption": "Two successful editing commands captured without thinking time. Enable Record timing to retain elapsed waits in the resulting script.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-macro-visual-steps.png",
+    "chapter": "macros",
+    "alt": "Visual macro editor with two real recorded effect steps, editable command arguments and accessible order controls.",
+    "caption": "The two recorded commands shown as editable visual steps. Edit arguments and use move controls to change order; structured programs remain available as script text.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-batch-preparation.png",
+    "chapter": "macros",
+    "alt": "Batch preparation page showing the chosen cleanup macro, two supplied local audio files, error policy and Run batch control.",
+    "caption": "A saved cleanup-and-export macro with two supplied local synthesized WAV files. This is preparation before Run batch; progress, errors and collected outputs appear during execution.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-effect-automation.png",
+    "chapter": "effects",
+    "alt": "Effect automation panel with the master filter frequency selected, two linear time/value points and successful saved-lane status.",
+    "caption": "A saved filter-frequency lane schedules 500 Hz at zero seconds and 5500 Hz at four seconds. These audio-clock points are separate from action recorder waits.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-selection-editing.png",
+    "chapter": "editing",
+    "alt": "Waveform editor with a selected region, precise selection bounds, All channels scope and a ready gain preview with Apply control.",
+    "caption": "A real two-second region is selected and gain has been previewed. IN/OUT and channel scope define the edit; Apply commits the preview to that scope.",
+    "width": 1440,
+    "height": 1400
+  },
+  {
+    "path": "help/guide-recovery-controls.png",
+    "chapter": "recovery",
+    "alt": "Options Help and recovery page with recovery guidance links and a Clear recovery copy button that has not been activated.",
+    "caption": "Help and local recovery controls keep the open project separate from the browser recovery copy. The Clear recovery control is shown without deleting data; save a portable session for a durable copy.",
+    "width": 1440,
+    "height": 1100
+  }
+];
