@@ -13,7 +13,7 @@ WebSoundEdit has a single editing engine used by the visual editor, JavaScript S
 
 **GitHub Pages hosts the static application and SDK. It does not host an HTTP processing server.** A script cannot POST a file to the Pages address and expect server-side processing. Run the companion or import the module when editing files from a script. A browser tab can only access files that the user supplies through browser file APIs. The companion accepts uploaded bytes and never accepts an arbitrary local path in an HTTP request.
 
-Official platform references: [GitHub Pages is static hosting](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages), [Web Audio AudioBuffer](https://developer.mozilla.org/en-US/docs/Web/API/AudioBuffer), [FFmpeg.wasm Node support](https://ffmpegwasm.netlify.app/docs/faq/). The browser uses single-thread FFmpeg.wasm for additional formats. The Node companion uses native FFmpeg from `PATH`; ffmpeg.wasm 0.12 is not a Node encoder.
+Official platform references: [GitHub Pages is static hosting](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages), [Web Audio AudioBuffer](https://developer.mozilla.org/en-US/docs/Web/API/AudioBuffer), [FFmpeg.wasm Node support](https://ffmpegwasm.netlify.app/docs/faq/). The browser uses a dedicated libopus WASM worker for Opus and single-thread FFmpeg.wasm for additional formats. The Node companion uses native FFmpeg from `PATH`; ffmpeg.wasm 0.12 is not a Node encoder.
 
 ## Quick start: a local file
 

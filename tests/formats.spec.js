@@ -121,6 +121,23 @@ for (const format of FORMAT_IDS) {
       await encodeFixture(page, diagnostic, format);
       diagnostic.evidence.decoded = await importEncoded(page, diagnostic, 'import ' + format);
       expectDecoded(diagnostic.evidence.decoded, 2);
+      if (format === 'opus') {
+        await diagnostic.step('force Opus fallback decoder', () => page.evaluate(() => {
+          window.__codecTest.originalDecoder = OfflineAudioContext.prototype.decodeAudioData;
+          window.__codecTest.forcedCalls = 0;
+          OfflineAudioContext.prototype.decodeAudioData = function () {
+            window.__codecTest.forcedCalls++;
+            return Promise.reject(new Error('Test fixture: native Opus decoder unavailable'));
+          };
+        }));
+        diagnostic.evidence.fallback = await importEncoded(page, diagnostic, 'WASM Opus import');
+        expectDecoded(diagnostic.evidence.fallback, 2);
+        const forcedCalls = await diagnostic.step('restore Opus native decoder', () => page.evaluate(() => {
+          OfflineAudioContext.prototype.decodeAudioData = window.__codecTest.originalDecoder;
+          return window.__codecTest.forcedCalls;
+        }));
+        expect(forcedCalls).toBe(1);
+      }
       expect(diagnostic.evidence.pageErrors).toEqual([]);
       expect(diagnostic.evidence.externalRequests).toEqual([]);
     } finally {

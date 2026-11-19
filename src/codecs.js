@@ -7,7 +7,7 @@ export const FORMATS = [
   {id:'mp3',name:'MP3 · compatible & compact',ext:'mp3',mime:'audio/mpeg',encoder:'libmp3lame',args:['-c:a','libmp3lame']},
   {id:'flac',name:'FLAC · compressed lossless',ext:'flac',mime:'audio/flac',encoder:'flac',args:['-c:a','flac']},
   {id:'ogg',name:'Ogg Vorbis · open lossy',ext:'ogg',mime:'audio/ogg',encoder:'libvorbis',args:['-c:a','libvorbis']},
-  {id:'opus',name:'Opus · efficient audio',ext:'opus',mime:'audio/ogg',encoder:'libopus',args:['-c:a','libopus']},
+  {id:'opus',name:'Opus · efficient audio',ext:'opus',mime:'audio/ogg',backend:'libopus-wasm'},
   {id:'m4a',name:'M4A / AAC · MPEG-4',ext:'m4a',mime:'audio/mp4',encoder:'aac',args:['-c:a','aac']},
   {id:'aac',name:'AAC · ADTS stream',ext:'aac',mime:'audio/aac',encoder:'aac',args:['-c:a','aac','-f','adts']},
   {id:'aiff',name:'AIFF · uncompressed PCM',ext:'aiff',mime:'audio/aiff',encoder:'pcm_s16be',args:['-c:a','pcm_s16be']},
@@ -41,8 +41,31 @@ export async function loadCodecs() {
   return loading;
 }
 function queued(fn){ const job=serial.then(fn);serial=job.catch(()=>{});return job; }
-export function codecCapabilities(){return FORMATS.map(f=>({...f,available:f.id==='wav'?true:codecSet?codecSet.has(f.id):null}));}
+export function codecCapabilities(){return FORMATS.map(f=>({...f,available:!f.encoder?true:codecSet?codecSet.has(f.id):null}));}
 function checkSize(size){if(size>192*1024*1024)throw new Error('Conversion input exceeds the 192 MB safety limit. Export a smaller selection or use the local CLI.');}
+function encodeOpusInWorker(audio,bitrate) {
+  return new Promise((resolve,reject)=>{
+    // This encoder has its own adequate WASM stack; core 0.12.10's libopus
+    // stereo path can overflow its small stack. Keep encoding off the UI thread.
+    const worker=new Worker(new URL('./opus-worker.js',import.meta.url),{type:'module'});
+    let finished=false;
+    const finish=(error,bytes)=>{
+      if(finished)return;finished=true;clearTimeout(timer);worker.terminate();
+      if(error)reject(error);else resolve(bytes);
+    };
+    const timer=setTimeout(()=>finish(new Error('Opus encoding exceeded two minutes. Export a smaller selection.')),CODEC_TIMEOUT_MS);
+    worker.onerror=event=>finish(new Error(event.message||'The Opus encoding worker failed.'));
+    worker.onmessage=({data})=>{
+      if(data.type==='progress')report(`Encoding Opus · ${Math.min(99,Math.max(0,Math.round(data.progress*100)))}%`);
+      else if(data.type==='result')finish(null,data.bytes);
+      else if(data.type==='error')finish(new Error(data.message||'Opus encoding failed.'));
+    };
+    try {
+      const channels=audio.channels.map(channel=>new Float32Array(channel));
+      worker.postMessage({audio:{sampleRate:audio.sampleRate,channels},bitrate},channels.map(channel=>channel.buffer));
+    }catch(error){finish(error);}
+  });
+}
 export async function decodeAudioFile(file,sampleRate=48000) {
   if(!Number.isInteger(sampleRate)||sampleRate<8000||sampleRate>192000)throw new Error('Working sample rate must be an integer between 8000 and 192000 Hz.');
   checkSize(file.size); const buffer=await file.arrayBuffer();
@@ -90,6 +113,10 @@ export async function encodeAudio(audio, {format='wav',sampleRate=audio.sampleRa
   if(format==='opus')sampleRate=48000;
   if(+sampleRate!==audio.sampleRate)audio=resampleAudio(audio,+sampleRate);
   if(format==='wav')return {bytes:encodeWav(audio,{bitDepth:+bitDepth,float:+bitDepth===32}),...descriptor};
+  if(format==='opus')return queued(async()=>{
+    report('Loading the local Opus encoder…');
+    return {bytes:await encodeOpusInWorker(audio,Math.max(32,Math.min(320,+bitrate))),...descriptor};
+  });
   return queued(async()=>{
     await loadCodecs(); if(!codecSet.has(format))throw new Error(`${descriptor.name} is not included in this encoder build.`);
     const bytes=encodeWav(audio,{bitDepth:32,float:true});checkSize(bytes.length);

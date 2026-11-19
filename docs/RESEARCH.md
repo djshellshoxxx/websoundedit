@@ -71,6 +71,12 @@ The selected `@soundtouchjs/core` 2.1.1 package belongs to SoundTouchJS’s newe
 
 The FFmpeg installation guide recommends downloading and hosting its package because the wrapper spawns a worker. WebSoundEdit’s same-origin deployment follows this pattern rather than importing the wrapper directly from a public CDN at runtime. [24]
 
+### Opus export implementation
+
+Release testing reproduced a memory-out-of-bounds error in the libopus encoder bundled with `@ffmpeg/core` 0.12.10 for 48 kHz stereo. Upstream identifies increased WASM stack size as the repair; changing the PCM input bit depth did not resolve this integration's reproduction. [25]
+
+The application therefore uses the separately bundled `libopus-wasm` 0.3.0 encoder for browser Opus export. It preserves 48 kHz mono/stereo and the encoder's full complexity setting, rather than silently reducing bandwidth or channel count. The project writes the Ogg container with the encoder's pre-skip, CRCs, packet lacing and final granule position so short and non-frame-aligned selections retain their intended duration. Real encoded output is decoded independently in tests. [26][27]
+
 ## Normalization, silence, and phase labels
 
 Peak normalization changes gain to target the largest sample peak. It is not a measurement of perceived loudness and should not be presented as LUFS normalization. Audacity explicitly distinguishes this difference. DC removal is a separate mean-removal operation that can accompany normalization. [18][19]
@@ -111,3 +117,7 @@ Touch and mouse targets must remain usable at compact viewport sizes. WCAG 2.2�
 22. W3C, [Understanding SC 2.5.5: Target Size (Enhanced)](https://www.w3.org/WAI/WCAG22/Understanding/target-size-enhanced).
 23. SoundTouchJS, [core package README](https://github.com/cutterbl/SoundTouchJS/blob/master/packages/core/README.md).
 24. ffmpeg.wasm, [Installation](https://ffmpegwasm.netlify.app/docs/getting-started/installation/).
+
+25. ffmpeg.wasm, [Increase stack size to support libopus — PR 824](https://github.com/ffmpegwasm/ffmpeg.wasm/pull/824).
+26. libopus-wasm, [Official source and package API](https://github.com/openclaw/libopus-wasm).
+27. IETF, [RFC 7845: Ogg Encapsulation for the Opus Audio Codec](https://www.rfc-editor.org/rfc/rfc7845).

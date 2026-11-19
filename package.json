@@ -22,9 +22,10 @@
     "edit": "node scripts/cli.mjs"
   },
   "dependencies": {
-    "@ffmpeg/ffmpeg": "0.12.15",
     "@ffmpeg/core": "0.12.10",
-    "@soundtouchjs/core": "2.1.1"
+    "@ffmpeg/ffmpeg": "0.12.15",
+    "@soundtouchjs/core": "2.1.1",
+    "libopus-wasm": "0.3.0"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1",
