@@ -2,12 +2,13 @@
  * Reference: https://ffmpegwasm.netlify.app/docs/faq/
  */
 import { spawn } from 'node:child_process';
-import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, stat, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { encodeWav, decodeWav } from '../src/wav.js';
 import { normalizeMetadata, ffmpegMetadataArgs } from '../src/metadata.js';
-import { audioLayout, normalizeLayout, convertLayout } from '../src/channel-layout.js';
+import { audioLayout, normalizeLayout, convertLayout, CHANNEL_LAYOUTS } from '../src/channel-layout.js';
+import { assertEncodingBudget, assertEncodedSize, ENCODING_LIMITS } from '../src/codec-budget.js';
 
 export const AUDIO_FORMATS = Object.freeze({
   wav: { extension: 'wav', mime: 'audio/wav', codec: 'pcm_s16le' },
@@ -36,10 +37,10 @@ export async function nativeCapabilities() {
   return new Promise(resolve => {
     const child = spawn('ffmpeg', ['-hide_banner', '-encoders'], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
     let output = '';
-    const timer = setTimeout(() => { child.kill(); resolve({ nativeFFmpeg: false, formats: ['wav'] }); }, 5000); timer.unref();
+    const timer = setTimeout(() => { child.kill(); resolve({ nativeFFmpeg: false, formats: ['wav'],exportLimits:{...ENCODING_LIMITS} }); }, 5000); timer.unref();
     child.stdout.on('data', chunk => { if (output.length < 1024 * 1024) output += chunk; });
-    child.on('error', () => { clearTimeout(timer); resolve({ nativeFFmpeg: false, formats: ['wav'] }); });
-    child.on('close', code => { clearTimeout(timer); resolve({ nativeFFmpeg: code === 0, formats: Object.entries(AUDIO_FORMATS).filter(([format, value]) => format === 'wav' || new RegExp(`\\b${value.codec}\\b`).test(output)).map(([format]) => format) }); });
+    child.on('error', () => { clearTimeout(timer); resolve({ nativeFFmpeg: false, formats: ['wav'],exportLimits:{...ENCODING_LIMITS} }); });
+    child.on('close', code => { clearTimeout(timer); resolve({ nativeFFmpeg: code === 0, formats: Object.entries(AUDIO_FORMATS).filter(([format, value]) => format === 'wav' || new RegExp(`\\b${value.codec}\\b`).test(output)).map(([format]) => format),exportLimits:{...ENCODING_LIMITS} }); });
   });
 }
 export async function decodeAudioBytes(bytes, { sampleRate, layout } = {}) {
@@ -53,24 +54,32 @@ export async function decodeAudioBytes(bytes, { sampleRate, layout } = {}) {
     const input = join(folder, 'input.bin'), output = join(folder, 'decoded.wav'); await writeFile(input, bytes);
     // Force local-file input; disallow network protocols inside untrusted containers/playlists.
     await runFFmpeg(['-protocol_whitelist', 'file,pipe', '-format_whitelist', 'wav,mp3,flac,ogg,aac,mov,aiff,asf,matroska,webm', '-i', input, '-map', '0:a:0', '-vn', ...(sampleRate ? ['-ar', String(sampleRate)] : []), '-c:a', 'pcm_f32le', '-t', '600', '-fs', String(maxBytes), output]);
+    if((await stat(output)).size>=maxBytes-65536)throw Object.assign(new RangeError('Decoded audio reached the bounded file-size limit. Import a shorter file.'),{code:'RESOURCE_LIMIT'});
     const decodedBytes = new Uint8Array(await readFile(output));
     const audio = decodeWav(decodedBytes,{layout});
     if (decodedBytes.length >= maxBytes - 65536 || audio.channels[0].length / audio.sampleRate >= 599.99) throw new Error('Input exceeds the audio duration or decoded memory limit; import a shorter file.');
     return audio;
   } finally { await rm(folder, { recursive: true, force: true }); }
 }
-export async function encodeAudioBytes(audio, options = {}) {
+export async function readBoundedNativeOutput(path,policy,{statFile=stat,read=readFile}={}){
+  const file=await statFile(path);if(!file.isFile())throw new Error('Encoder output must be a regular file.');const size=assertEncodedSize(file.size,policy);
+  const bytes=await read(path);if(bytes.byteLength!==size)throw new Error('Encoded output changed after its size check.');return new Uint8Array(bytes);
+}
+export async function encodeAudioBytes(audio, options = {}, policy = {}) {
   audioLayout(audio);
-  if(options.outputLayout!==undefined||options.channels!==undefined)audio=convertLayout(audio,normalizeLayout(options.outputLayout??options.channels));
+  const targetLayout=normalizeLayout(options.outputLayout??options.channels??audioLayout(audio));
   const metadata = normalizeMetadata(options.metadata || {});
   const format = String(options.format || 'wav').toLowerCase(); const info = AUDIO_FORMATS[format];
   if (!info) throw new Error(`Unsupported output format: ${format}`);
-  if(audio.channels.length>2&&!['wav','flac','ogg','opus','aac','m4a','alac'].includes(format))throw new Error(`${format} does not preserve the selected surround layout. Choose WAV/FLAC or convert the layout explicitly.`);
+  if(CHANNEL_LAYOUTS[targetLayout].count>2&&!['wav','flac','ogg','opus','aac','m4a','alac'].includes(format))throw new Error(`${format} does not preserve the selected surround layout. Choose WAV/FLAC or convert the layout explicitly.`);
   const bitDepth = options.bitDepth ?? 16;
   if (![16, 24, 32].includes(bitDepth)) throw new Error('WAV bit depth must be 16, 24 or 32.');
-  if (format === 'wav' && !options.sampleRate && !options.channels) return encodeWav(audio, { bitDepth, float: options.float === true, metadata });
+  if(options.float===true&&bitDepth!==32)throw new RangeError('Float WAV requires 32-bit output.');
   if (options.sampleRate !== undefined && ![8000, 11025, 16000, 22050, 24000, 32000, 44100, 48000, 88200, 96000, 192000].includes(options.sampleRate)) throw new Error('Unsupported output sample rate.');
   if (options.channels !== undefined && ![1, 2, 6, 8].includes(options.channels)) throw new Error('Output channels must be 1, 2, 6 or 8.');
+  const budget=assertEncodingBudget({frames:audio.channels[0].length,sampleRate:audio.sampleRate,outputSampleRate:options.sampleRate??audio.sampleRate,channels:CHANNEL_LAYOUTS[targetLayout].count,format,bitDepth,metadataBytes:Object.values(metadata).reduce((sum,value)=>sum+new TextEncoder().encode(value).length,0)},policy);
+  if(targetLayout!==audioLayout(audio))audio=convertLayout(audio,targetLayout);
+  if (format === 'wav' && !options.sampleRate && !options.channels) {const bytes=encodeWav(audio, { bitDepth, float: options.float === true, metadata });assertEncodedSize(bytes.byteLength,budget);return bytes;}
   const bitrate = options.bitrate ?? 192;
   if (typeof bitrate !== 'number' || !Number.isFinite(bitrate) || bitrate < 16 || bitrate > 512) throw new Error('Bitrate must be between 16 and 512 kbps.');
   const folder = await mkdtemp(join(tmpdir(), 'websoundedit-'));
@@ -82,6 +91,6 @@ export async function encodeAudioBytes(audio, options = {}) {
     if (['mp3', 'ogg', 'opus', 'aac', 'm4a', 'wma'].includes(format)) args.push('-b:a', `${bitrate}k`);
     if (options.sampleRate) args.push('-ar', String(options.sampleRate));
     if (format === 'flac' && bitDepth === 24) args.push('-sample_fmt', 's32');
-    args.push(output); await runFFmpeg(args); return new Uint8Array(await readFile(output));
+    args.push('-fs',String(budget.fileLimit),output);await runFFmpeg(args);return await readBoundedNativeOutput(output,budget);
   } finally { await rm(folder, { recursive: true, force: true }); }
 }

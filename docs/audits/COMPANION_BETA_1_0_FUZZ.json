@@ -3,11 +3,11 @@
   "node": "v24.22.3",
   "corpusSha256": "835c8cb7036b136335dad15d095ca44fa9c17bfabec60b10879cb32d2e638d73",
   "sourceFilesSha256": {
-    "scripts/server.mjs": "fd0930597c7cf1047518f26d25fe0c3a14c8bfac00a60b9bc6718c32618d1d4d",
-    "scripts/node-runtime.mjs": "d65bf34b8ad177cd13110b8932edf72305c6c0c708b2993f4b16682509339dc7",
-    "scripts/udp-streams.mjs": "5cd2f29cbdd4c7a5ee38a530425f17e01db19770e1aa26b2a0e0884812e60906",
-    "src/companion.js": "adb4eb8890681c2a81f18ade15ce51f1bfba5cecaf54725d24710c8c24c425f5",
-    "src/command-schema.js": "e44e2826d9462a1e38f6121f05fb1f915379c4adae51acd747bafe15804cb025",
+    "scripts/server.mjs": "ea3d352cb74b8871223e21ff65a6b4f58007771fad5b640b039a24c71c2d02eb",
+    "scripts/node-runtime.mjs": "dae545f30d3f21665a4d3e80f0f17ada5a1a1319998897e63b9a97667a52164b",
+    "scripts/udp-streams.mjs": "cf3c51614bae2181d27bd2a1f92181c2525bcbee973ec18af39c95e239aad126",
+    "src/companion.js": "91f98d79fae236e79ae054746055162a5a6cda30a76175b1feb20f17bb3ea6bd",
+    "src/command-schema.js": "a4542adc483f861ba30d95fe4630d34e7cb25d6d7f1ded90c700739a523e9f62",
     "tests/fuzz/companion.mjs": "d22abccea9f79fa617e0c555885d40210bf449c22584e1a5064b4f32af538174"
   },
   "counts": {
@@ -25,12 +25,12 @@
     "http": 128,
     "invariantFailures": 0
   },
-  "elapsedMs": 1008,
+  "elapsedMs": 611,
   "phaseTimes": {
-    "schemaMs": 50,
-    "pcmMs": 128,
-    "lifecycleMs": 290,
-    "httpMs": 531
+    "schemaMs": 45,
+    "pcmMs": 114,
+    "lifecycleMs": 301,
+    "httpMs": 142
   },
   "networkScope": "Synthetic UDP sockets/encoders and authenticated 127.0.0.1 HTTP only; no external datagrams or native encoder spawned.",
   "failures": []

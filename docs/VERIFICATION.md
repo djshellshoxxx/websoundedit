@@ -1,4 +1,8 @@
-# WebSoundEdit 0.2 — release verification
+# WebSoundEdit release verification
+
+The 1.0 beta verification and audit record is maintained in [BETA_1_0_SUMMARY.md](audits/BETA_1_0_SUMMARY.md). The evidence below is the preserved historical 0.2 record; it does not describe the expanded beta channel/runtime limits.
+
+## Historical 0.2 release
 
 Verification record for release 0.2.0.
 

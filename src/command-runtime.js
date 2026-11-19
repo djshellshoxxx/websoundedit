@@ -6,7 +6,7 @@ const methodPattern=/^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*$/;
 const fail=(message,code='INVALID_ARGUMENT')=>Object.assign(new Error(message),{code});
 export class CommandRuntime {
   constructor({coreExecute,coreCommands=[],getState=()=>null,adapters=[]}={}){
-    this.registry=new Map();this.listeners=new Set();this.getState=getState;this.recorder=new ActionRecorder();this.inFlight=0;this.disposed=false;
+    this.registry=new Map();this.listeners=new Set();this.executionGuards=new Set();this.getState=getState;this.recorder=new ActionRecorder();this.inFlight=0;this.disposed=false;
     if(coreCommands.length&&typeof coreExecute!=='function')throw new TypeError('Core commands require a coreExecute function.');
     for(const descriptor of coreCommandDescriptors(coreCommands))this.register(descriptor,(params,context)=>coreExecute(descriptor.method,params,context));
     this.register({method:'commands.list',description:'Discover commands and schemas available in this runtime.',schema:{type:'object',additionalProperties:false},recordable:false},()=>this.commands(),{replace:this.registry.has('commands.list')});
@@ -34,6 +34,11 @@ export class CommandRuntime {
   }
   commands(){return [...this.registry.values()].map(({descriptor})=>structuredClone(descriptor));}
   subscribe(listener){if(typeof listener!=='function')throw new TypeError('A command listener must be a function.');this.listeners.add(listener);return()=>this.listeners.delete(listener);}
+  addExecutionGuard(guard){
+    if(this.disposed)throw fail('The command runtime is disposed.','DISPOSED');
+    if(typeof guard!=='function')throw new TypeError('An execution guard must be a synchronous function.');
+    this.executionGuards.add(guard);return()=>this.executionGuards.delete(guard);
+  }
   async execute(method,params={},options={}){
     if(this.disposed)throw fail('The command runtime is disposed.','DISPOSED');
     if(typeof method!=='string')throw fail('Command method must be a string.');
@@ -45,6 +50,7 @@ export class CommandRuntime {
     validateCommandParams(params,entry.descriptor);
     const origin=options.origin??'api';
     if(typeof origin!=='string'||origin.length>64)throw fail('Invalid command origin.');
+    for(const guard of this.executionGuards)guard({method,params,descriptor:entry.descriptor,options:{...options,origin}});
     const state=this.getState?.();
     const context=state?{selectedTrackId:state.selectedTrackId,selectedClipId:state.selectedClipId,selection:state.selection?structuredClone(state.selection):null,bpm:state.bpm,sampleRate:state.sampleRate}:null;
     const startedAt=clock();this.inFlight++;
@@ -62,5 +68,5 @@ export class CommandRuntime {
       throw fail(String(error),'COMMAND_FAILED');
     }finally{this.inFlight--;}
   }
-  dispose(){if(this.disposed)return;this.disposed=true;this.recorder.stop();this.listeners.clear();this.registry.clear();}
+  dispose(){if(this.disposed)return;this.disposed=true;this.recorder.stop();this.listeners.clear();this.executionGuards.clear();this.registry.clear();}
 }

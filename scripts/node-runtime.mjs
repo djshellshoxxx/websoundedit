@@ -68,7 +68,7 @@ export class NodeWorkbench {
     }
     context.signal?.throwIfAborted();
     if(project){await this.editor.execute('project.load',{project});return{input:id,name,project:true,warnings};}
-    const audio=await decodeAudioBytes(bytes,{sampleRate:this.editor.getState().sampleRate});
+    const audio=await decodeAudioBytes(bytes,{sampleRate:this.editor.getState().sampleRate,...(params.layout?{layout:params.layout}:{})});
     context.signal?.throwIfAborted();
     const clip={audio,name:params.name||name,trackId:params.trackId,start:params.start};let result;
     if(params.replace){
@@ -126,7 +126,7 @@ export class NodeWorkbench {
     if(method==='macro.status')return{...this.macroState,batch:!!this.batchController,results:this.batchResults,recorder:this.runtime.recorder.getState()};
     if(method==='macro.record.start')return this.runtime.recorder.start(params);
     if(method==='macro.record.stop')return this.runtime.recorder.stop();
-    if(method==='macro.validate')return validateMacro(parseMacro(params.text),this.commands());
+    if(method==='macro.validate')return validateMacro(parseMacro(params.text),this.commands(),params.variables?{variables:['project','inputs',...Object.keys(params.variables)]}:{});
     if(method==='macro.batch')return this.batch(params,context);
     if(this.batchController||this.runner.controller)throw fail('A macro or batch is already running.','MACRO_BUSY');
     this.macroState={running:true,completedSteps:0};

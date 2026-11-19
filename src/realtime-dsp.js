@@ -106,16 +106,16 @@ export class RealtimeRackDSP {
     if(this.pendingEventCount()+this.lanes.reduce((count,lane)=>count+lane.points.length,0)>=LIVE_LIMITS.automationPoints)throw resource('Live parameter queue is full.');
     this.events=this.events.slice(this.eventIndex);this.eventIndex=0;this.events.push({slotId,param,value,at,rampSeconds});this.events.sort((a,b)=>a.at-b.at);
   }
-  _automate(time){
+  _automate(time,audioTime){
     time=Math.round(time*this.sampleRate)/this.sampleRate;
     for(const lane of this.lanes){const stage=this.stages.find(s=>s.id===lane.slotId);if(!stage)continue;let value=automationValue(lane,time,lane.param==='wet'?stage.baseWet:stage.baseParams[lane.param]);if(parameterDefinition(stage,lane.param).integer)value=Math.round(value);setValue(stage,lane.param,value);}
-    while(this.eventIndex<this.events.length&&this.events[this.eventIndex].at<=time){const event=this.events[this.eventIndex++],stage=this.stages.find(s=>s.id===event.slotId);if(!stage)continue;for(let index=this.ramps.length-1;index>=0;index--)if(this.ramps[index].slotId===event.slotId&&this.ramps[index].param===event.param)this.ramps.splice(index,1);if(event.rampSeconds){event.from=event.param==='wet'?stage.wet:stage.params[event.param];this.ramps.push(event);}else setValue(stage,event.param,event.value);}
-    for(let i=this.ramps.length-1;i>=0;i--){const ramp=this.ramps[i],stage=this.stages.find(s=>s.id===ramp.slotId);if(!stage){this.ramps.splice(i,1);continue;}const f=Math.max(0,Math.min(1,(time-ramp.at)/ramp.rampSeconds));let value=ramp.from+(ramp.value-ramp.from)*f;if(parameterDefinition(stage,ramp.param).integer)value=Math.round(value);setValue(stage,ramp.param,value);if(f===1)this.ramps.splice(i,1);}
+    while(this.eventIndex<this.events.length&&this.events[this.eventIndex].at<=audioTime){const event=this.events[this.eventIndex++],stage=this.stages.find(s=>s.id===event.slotId);if(!stage)continue;for(let index=this.ramps.length-1;index>=0;index--)if(this.ramps[index].slotId===event.slotId&&this.ramps[index].param===event.param)this.ramps.splice(index,1);if(event.rampSeconds){event.from=event.param==='wet'?stage.wet:stage.params[event.param];this.ramps.push(event);}else setValue(stage,event.param,event.value);}
+    for(let i=this.ramps.length-1;i>=0;i--){const ramp=this.ramps[i],stage=this.stages.find(s=>s.id===ramp.slotId);if(!stage){this.ramps.splice(i,1);continue;}const f=Math.max(0,Math.min(1,(audioTime-ramp.at)/ramp.rampSeconds));let value=ramp.from+(ramp.value-ramp.from)*f;if(parameterDefinition(stage,ramp.param).integer)value=Math.round(value);setValue(stage,ramp.param,value);if(f===1)this.ramps.splice(i,1);}
   }
   process(input,output,{timelineStart=this.frames/this.sampleRate,timelineRate=1,loopStart=0,loopEnd=0}={}){
     const length=output[0]?.length||0;if(length>LIVE_LIMITS.blockFrames||output.length!==this.channels)throw new RangeError('Invalid DSP block dimensions.');
     for(let i=0;i<length;i++){
-      let time=timelineStart+i*timelineRate/this.sampleRate;if(loopEnd>loopStart&&time>=loopEnd)time=loopStart+(time-loopStart)%(loopEnd-loopStart);this._automate(time);
+      let time=timelineStart+i*timelineRate/this.sampleRate;if(loopEnd>loopStart&&time>=loopEnd)time=loopStart+(time-loopStart)%(loopEnd-loopStart);this._automate(time,(this.frames+i)/this.sampleRate);
       for(let c=0;c<this.channels;c++)output[c][i]=input[c]?.[i]||0;
       for(const stage of this.stages){if(stage.effect==='filter')updateFilter(stage,this.sampleRate);for(let c=0;c<this.channels;c++){const dry=output[c][i],wet=wetSample(stage,dry,c,this.sampleRate,this.bpm);output[c][i]=stage.enabled?finite(dry*(1-stage.wet)+wet*stage.wet):dry;}stage.frame++;stage.phase=(stage.phase+TAU*(stage.params.rate||0)/this.sampleRate)%TAU;}
     }

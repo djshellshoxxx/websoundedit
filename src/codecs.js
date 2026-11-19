@@ -2,7 +2,8 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { encodeWav, decodeWav } from './wav.js';
 import { resampleAudio } from './dsp.js';
 import { normalizeMetadata, ffmpegMetadataArgs, metadataWarnings } from './metadata.js';
-import { audioLayout, normalizeLayout, convertLayout } from './channel-layout.js';
+import { audioLayout, normalizeLayout, convertLayout, CHANNEL_LAYOUTS } from './channel-layout.js';
+import { assertEncodingBudget, assertEncodedSize, readBoundedFFmpegOutput, ENCODING_LIMITS } from './codec-budget.js';
 
 export const FORMATS = [
   {id:'wav',name:'WAV · uncompressed PCM',ext:'wav',mime:'audio/wav'},
@@ -38,14 +39,14 @@ export async function loadCodecs() {
     codecSet=new Set();
     for(const f of FORMATS) if(!f.encoder || lines.some(line=>new RegExp(`\\b${f.encoder}\\b`).test(line))) codecSet.add(f.id);
     report('Conversion engine ready · audio stays on this device');
-    return {formats:FORMATS.map(f=>({...f,available:codecSet.has(f.id)}))};
+    return {formats:FORMATS.map(f=>({...f,available:codecSet.has(f.id)})),exportLimits:{...ENCODING_LIMITS}};
   })().catch(error=>{loading=null; codecSet=null; ffmpeg?.terminate(); ffmpeg=null;throw new Error(`Conversion engine could not load: ${error?.message || String(error)}`);});
   return loading;
 }
 function queued(fn){ const job=serial.then(fn);serial=job.catch(()=>{});return job; }
-export function codecCapabilities(){return FORMATS.map(f=>({...f,available:!f.encoder?true:codecSet?codecSet.has(f.id):null}));}
+export function codecCapabilities(){return FORMATS.map(f=>({...f,available:!f.encoder?true:codecSet?codecSet.has(f.id):null,exportLimits:{...ENCODING_LIMITS}}));}
 function checkSize(size){if(size>192*1024*1024)throw new Error('Conversion input exceeds the 192 MB safety limit. Export a smaller selection or use the local CLI.');}
-function encodeOpusInWorker(audio,bitrate,metadata) {
+function encodeOpusInWorker(audio,bitrate,metadata,maxOutputBytes) {
   return new Promise((resolve,reject)=>{
     // This encoder has its own adequate WASM stack; core 0.12.10's libopus
     // stereo path can overflow its small stack. Keep encoding off the UI thread.
@@ -60,11 +61,11 @@ function encodeOpusInWorker(audio,bitrate,metadata) {
     worker.onmessage=({data})=>{
       if(data.type==='progress')report(`Encoding Opus · ${Math.min(99,Math.max(0,Math.round(data.progress*100)))}%`);
       else if(data.type==='result')finish(null,data.bytes);
-      else if(data.type==='error')finish(new Error(data.message||'Opus encoding failed.'));
+      else if(data.type==='error')finish(Object.assign(new Error(data.message||'Opus encoding failed.'),{code:data.code}));
     };
     try {
       const channels=audio.channels.map(channel=>new Float32Array(channel));
-      worker.postMessage({audio:{sampleRate:audio.sampleRate,channels},bitrate,metadata},channels.map(channel=>channel.buffer));
+      worker.postMessage({audio:{sampleRate:audio.sampleRate,channels},bitrate,metadata,maxOutputBytes},channels.map(channel=>channel.buffer));
     }catch(error){finish(error);}
   });
 }
@@ -106,28 +107,30 @@ export async function decodeAudioFile(file,sampleRate=48000,{layout}={}) {
       // and resource bounds; the tiny overrun ensures oversized audio is rejected.
       const result=await ffmpeg.exec(['-i',input,'-map','0:a:0','-vn','-ar',String(sampleRate),'-c:a','pcm_f32le','-t',String(MAX_AUDIO_SECONDS+.001),'-fs',String(MAX_DECODED_BYTES+1048576),'decoded.wav'],CODEC_TIMEOUT_MS);
       if(result!==0)throw new Error('This file could not be decoded by the available codecs, or decoding exceeded two minutes.');
-      return decodeWav(await ffmpeg.readFile('decoded.wav'),{layout});
+      return decodeWav(await readBoundedFFmpegOutput(ffmpeg,'decoded.wav',{rejectAt:MAX_DECODED_BYTES+65536},{timeout:CODEC_TIMEOUT_MS}),{layout});
     } finally { for(const file of [input,'decoded.wav'])try{await ffmpeg.deleteFile(file);}catch{} }
   });
 }
-export async function encodeAudio(audio, {format='wav',sampleRate=audio.sampleRate,bitDepth=24,bitrate=192,channels='original',metadata={}}={}) {
+export async function encodeAudio(audio, {format='wav',sampleRate=audio.sampleRate,bitDepth=24,bitrate=192,channels='original',metadata={}}={},policy={}) {
   metadata=normalizeMetadata(metadata);
   const descriptor=FORMATS.find(f=>f.id===format);if(!descriptor)throw new Error('Unknown output format.');
   if(![8000,16000,22050,24000,32000,44100,48000,88200,96000].includes(+sampleRate))throw new Error('Unsupported export sample rate.');
   audioLayout(audio);
-  if(channels!=='original')audio=convertLayout(audio,normalizeLayout(channels));
-  if(audio.channels.length>2&&!['wav','flac','ogg','m4a','aac','alac'].includes(format))throw new Error(`${descriptor.name} does not support surround in this browser encoder. Choose WAV/FLAC or explicitly convert the output layout.`);
+  const targetLayout=channels==='original'?audioLayout(audio):normalizeLayout(channels);
+  if(CHANNEL_LAYOUTS[targetLayout].count>2&&!['wav','flac','ogg','m4a','aac','alac'].includes(format))throw new Error(`${descriptor.name} does not support surround in this browser encoder. Choose WAV/FLAC or explicitly convert the output layout.`);
   if(format==='opus')sampleRate=48000;
+  const budget=assertEncodingBudget({frames:audio.channels[0].length,sampleRate:audio.sampleRate,outputSampleRate:+sampleRate,channels:CHANNEL_LAYOUTS[targetLayout].count,format,bitDepth:+bitDepth,metadataBytes:Object.values(metadata).reduce((sum,value)=>sum+new TextEncoder().encode(value).length,0)},policy);
+  if(targetLayout!==audioLayout(audio))audio=convertLayout(audio,targetLayout);
   if(+sampleRate!==audio.sampleRate)audio=resampleAudio(audio,+sampleRate);
   const warnings=metadataWarnings(metadata,format);
-  if(format==='wav')return {bytes:encodeWav(audio,{bitDepth:+bitDepth,float:+bitDepth===32,metadata}),...descriptor,warnings};
+  if(format==='wav'){const bytes=encodeWav(audio,{bitDepth:+bitDepth,float:+bitDepth===32,metadata});assertEncodedSize(bytes.byteLength,budget);return {bytes,...descriptor,warnings};}
   if(format==='opus')return queued(async()=>{
     report('Loading the local Opus encoder…');
-    return {bytes:await encodeOpusInWorker(audio,Math.max(32,Math.min(320,+bitrate)),metadata),...descriptor,warnings};
+    return {bytes:await encodeOpusInWorker(audio,Math.max(32,Math.min(320,+bitrate)),metadata,budget.maxOutputBytes),...descriptor,warnings};
   });
   return queued(async()=>{
     await loadCodecs(); if(!codecSet.has(format))throw new Error(`${descriptor.name} is not included in this encoder build.`);
-    const bytes=encodeWav(audio,{bitDepth:32,float:true});checkSize(bytes.length);
+    checkSize(audio.channels[0].length*audio.channels.length*4+1024);const bytes=encodeWav(audio,{bitDepth:32,float:true});checkSize(bytes.length);
     const output=`result.${descriptor.ext}`;
     try{
       await ffmpeg.writeFile('input.wav',bytes);
@@ -136,10 +139,10 @@ export async function encodeAudio(audio, {format='wav',sampleRate=audio.sampleRa
       if(format==='flac')args.push('-sample_fmt',+bitDepth===16?'s16':'s32');
       if(format==='aiff'&&+bitDepth===24){args.splice(args.indexOf('pcm_s16be'),1,'pcm_s24be');}
       if(format==='m4a'||format==='alac')args.push('-movflags','+faststart');
-      args.push(output);
+      args.push('-fs',String(budget.fileLimit),output);
       const code=await ffmpeg.exec(args,CODEC_TIMEOUT_MS);
       if(code!==0)throw new Error(`The ${descriptor.name} encoder rejected these settings. Try 44.1 or 48 kHz.`);
-      return {bytes:await ffmpeg.readFile(output),...descriptor,warnings};
+      return {bytes:await readBoundedFFmpegOutput(ffmpeg,output,budget,{timeout:CODEC_TIMEOUT_MS}),...descriptor,warnings};
     } finally {for(const file of ['input.wav',output])try{await ffmpeg.deleteFile(file);}catch{} }
   });
 }

@@ -23,3 +23,7 @@ No completed 1.0 beta, final Pages update, release assets or physical hardware v
 All primary feature implementations are present. The local integrated suite passed 271 Node tests without skips, and all seven deterministic fuzz corpora passed. The production API bundle passed a real PCM edit/WAV round trip and interpreted typed macro. The first native REAPER grammar probe passed on pinned 7.86, leading to corrections for VOLPAN pan-law and item auto-fade fields. Full native render/save/reimport and Chromium beta workflows are now queued for the exact feature checkpoint.
 
 Publication remains blocked on those gates, actual annotated help images, final review and verified live deployment. Root alone commits/pushes using an expected-head lease and exact local/remote tree comparison.
+
+## Post-review local checkpoint
+
+Full local rerun:299 Node tests passed,0 failures/skips;7 fuzz suites passed; production build and DOM-free SDK passed. Additional fixed findings: extreme encode output allocation; paused-transport manual ramps; source-layout recovery; browser batch snapshot and outside-command ownership races; SDK JSON/recipe/disposal; exact deployed build identity. Browser/native/dependency CI run44522395976 (job135554069579) is still queued for remote8d843590c3d8fb9701a01befb9b1a7821ed5418f. Wait for its evidence before superseding that run. The next source checkpoint contains the post-review changes and complete guides; help PNGs still await actual CI capture/review.

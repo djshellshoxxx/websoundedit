@@ -4,6 +4,10 @@ import { escapeHTML, clone, option, bytesLabel } from './ui-utils.js';
 import { safeFilename, MAX_EXPORT_COLLECTION_BYTES } from './file-ui.js';
 
 const DEFAULT_SCRIPT = '// WebSoundEdit Macro 1\neffect.trimSilence({thresholdDb: -48, minDuration: 0.05, padding: 0.01});\neffect.normalize({targetDb: -1});';
+const BATCH_READ_COMMANDS = new Set(['commands.list','project.state','project.save','project.saveTrack','settings.save','clip.getAudio','analysis.stats','analysis.bpm','analysis.silence','audio.render','audio.playbackPlan','audio.renderPreview','effect.preview','audio.capabilities','audio.devices.list','loop.track.list','recordings.list','stream.status','macro.status']);
+const BATCH_NAVIGATION_COMMANDS = new Set(['ui.options','ui.help','ui.macros','ui.performance','ui.file.export','ui.commands','ui.api','ui.panel.midi','ui.panel.projects','ui.panel.keys','ui.panel.metadata','ui.track.settings','ui.panel.edit','ui.shortcuts','ui.settings','view.zoom','view.fit','view.zoomSelection','ui.view.zoomIn','ui.view.zoomOut','ui.view.fit','ui.view.zoomSelection','ui.view.selection','ui.view.spectrum','ui.view.scope']);
+const batchBusy = () => Object.assign(new Error('A batch is using this project and its exports. Wait for restoration or stop the batch before making changes.'), { code: 'BUSY' });
+function batchUICommands(ast) { const pending=[ast],methods=new Set();while(pending.length){const node=pending.pop();if(!node||typeof node!=='object')continue;if(node.type==='CallExpression'&&node.method.startsWith('ui.')&&!BATCH_NAVIGATION_COMMANDS.has(node.method))methods.add(node.method);for(const value of Object.values(node))if(value&&typeof value==='object')pending.push(...(Array.isArray(value)?value:[value]));}return [...methods]; }
 const projectContext = state => state ? { name:state.name,sampleRate:state.sampleRate,bpm:state.bpm,beatsPerBar:state.beatsPerBar,beatOffset:state.beatOffset,duration:state.duration,outputLayout:state.outputLayout,selectedTrackId:state.selectedTrackId,selectedClipId:state.selectedClipId,selection:state.selection,metadata:state.metadata,tracks:state.tracks.map(track=>({id:track.id,name:track.name,clips:track.clips.map(clip=>({id:clip.id,name:clip.name,start:clip.start,duration:clip.duration,channels:clip.channels}))})) } : null;
 export function normalizeMacroSettings(value = {}) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Macro settings must be an object.');
@@ -26,6 +30,7 @@ function containsCommand(ast, method) {
 }
 const schema = properties => ({ type: 'object', properties, additionalProperties: false });
 export const MACRO_UI_COMMANDS = [
+  { method: 'macro.status', label: 'Read macro and batch status', description: 'Read execution, action-recorder, batch result and collected-output status without changing the project.', schema: schema({}) },
   { method: 'macro.run', label: 'Run a macro', description: 'Run a saved or supplied text macro with bounded interpretation and cancellation.', schema: schema({ id: { type: 'string' }, text: { type: 'string', maxLength: 131072 }, variables: { type: 'object' } }) },
   { method: 'macro.cancel', label: 'Stop macro execution', description: 'Cancel a macro or batch after its current atomic command.', schema: schema({}) },
   { method: 'macro.record.start', label: 'Record actions', description: 'Start recording successful semantic actions, optionally preserving elapsed timing.', schema: schema({ timing: { type: 'boolean' } }) },
@@ -34,14 +39,19 @@ export const MACRO_UI_COMMANDS = [
 ].map(item => ({ id: item.method, category: 'Macros', recordable: false, undoable: false, capabilities: ['browser.macros'], ...item }));
 
 export class MacroPanel {
+  #batchOwner = null;
   constructor(dependencies) {
     Object.assign(this, dependencies); this.settings = normalizeMacroSettings(); this.onImportArmed = false; this.shortcutsArmed = true; this.running = false; this.batchInputs = []; this.lastOutputs = []; this.progress = 'Ready to record or run actions.';
-    this.runner = new MacroRunner({ execute: (method, params, context = {}) => this.runtime.execute(method, params, { ...context, origin: 'macro', record: false }), getCommands: () => this.runtime.commands(), getContext: () => ({ project: projectContext(this.getState()), selection: this.getState()?.selection, inputs: this.fileIO.aliases() }) });
+    this.runner = this.createRunner();
     this.routes.register('macros', 'Macros & batch', (container, page) => this.render(container, page));
     this.unsubscribe = this.runtime.subscribe(() => this.updateStatus());
   }
+  createRunner(owner) { return new MacroRunner({ execute: (method, params, context = {}) => this.runtime.execute(method, params, { ...context, ...(owner ? { owner } : {}), origin: 'macro', record: false }), getCommands: () => this.runtime.commands(), getContext: () => ({ project: projectContext(this.getState()), selection: this.getState()?.selection, inputs: this.fileIO.aliases() }) }); }
+  isBatchRunning() { return this.#batchOwner !== null; }
+  assertInteractive(context = {}) { if (this.#batchOwner && context.owner !== this.#batchOwner) throw batchBusy(); }
   register() {
     const handlers = {
+      'macro.status': () => ({running:this.running,batch:this.isBatchRunning(),progress:this.progress,recorder:this.runtime.recorder.getState(),results:clone(this.batchResults||[]),outputs:{count:this.lastOutputs.length,bytes:this.lastOutputs.reduce((total,file)=>total+file.bytes.byteLength,0)}}),
       'macro.run': (params, context) => { if (params.id && !this.find(params.id)) throw new Error('This saved macro no longer exists.'); return this.run(params.text ?? this.find(params.id)?.text ?? this.settings.draft, params.variables || {}, context); },
       'macro.cancel': () => this.cancel(),
       'macro.record.start': params => this.startRecording(params),
@@ -66,7 +76,7 @@ export class MacroPanel {
     finally { context.signal?.removeEventListener('abort', onAbort); this.running = false; this.abort = null; this.updateStatus(); }
   }
   onProgress(event) { this.progress = event.type === 'step' ? `${event.completedSteps} completed · ${event.method}` : event.type === 'complete' ? `Complete · ${event.completedSteps} commands` : event.type === 'error' ? `Stopped after ${event.completedSteps || 0} commands · ${event.error?.message || event.message || 'Execution error'}` : 'Running macro…'; this.updateStatus(); }
-  cancel() { this.abort?.abort(new Error('Stopped by the user.')); this.runner.cancel(); this.progress = 'Stop requested. Completed atomic commands and downloads remain.'; this.updateStatus(); return { cancelled: true }; }
+  cancel() { this.abort?.abort(new Error('Stopped by the user.')); this.runner.cancel(); this.batchRunner?.cancel(); this.progress = 'Stop requested. Completed atomic commands and downloads remain.'; this.updateStatus(); return { cancelled: true }; }
   startRecording({ timing = false } = {}) { this.runtime.recorder.start({ timing, portable: true }); this.progress = timing ? 'Recording actions with timing. Use the editor, then finish here.' : 'Recording ordered actions. Thinking time is omitted.'; this.updateStatus(); return this.runtime.recorder.getState(); }
   stopRecording() { const result = this.runtime.recorder.stop(); this.settings.draft = result.text; this.settings.selectedId = ''; this.persist(); this.progress = `Captured ${result.steps.length} actions. Review and validate before running.`; this.updateStatus(); if (this.routes.active.startsWith('macros/')) void this.routes.refresh(); return result; }
   async runSaved(id, context = {}) { const macro = this.find(id); if (!macro) throw new Error('This saved macro no longer exists.'); return this.run(macro.text, {}, context); }
@@ -78,18 +88,25 @@ export class MacroPanel {
     const text = (macroId ? this.find(macroId)?.text : this.settings.draft); if (typeof text !== 'string') throw new Error('Choose an available macro.');
     const ast = this.validate(text), aliases = this.fileIO.aliases(), inputs = (inputIds || this.batchInputs.map(input => input.id)).map(id => aliases.find(input => input.id === id));
     if (!inputs.length || inputs.length > 128 || inputs.some(input => !input) || new Set(inputs.map(input => input.id)).size !== inputs.length) throw new Error('Supply one to 128 unique input files before running a batch.');
+    const wrappers=batchUICommands(ast);if(wrappers.length)throw new Error(`Batch scripts use semantic commands instead of UI action wrappers: ${wrappers.join(', ')}. For example, use effect.gain or file.export.`);
+    if(this.runtime.inFlight > (context.runtime === this.runtime ? 1 : 0))throw Object.assign(new Error('Finish the current command before starting a batch.'),{code:'BUSY'});
     // Validate the entire known program before replacing the current project.
-    const saved = await this.getProject(); this.disarm(); this.running = true; this.abort = new AbortController(); this.batchResults = []; this.lastOutputs = [];
+    const owner=Object.freeze({});this.#batchOwner=owner;this.batchRunner=this.createRunner(owner);
+    const releaseCommands=this.runtime.addExecutionGuard(({method,options})=>{if(options.owner!==owner&&method!=='macro.cancel'&&!BATCH_READ_COMMANDS.has(method)&&!BATCH_NAVIGATION_COMMANDS.has(method))throw batchBusy();});
+    const releaseFiles=this.fileIO.addAccessGuard(({context:operation})=>{if(operation.owner!==owner)throw batchBusy();});
+    this.running = true; this.abort = new AbortController(); this.batchResults = []; this.lastOutputs = []; this.progress = 'Preparing batch session snapshot…'; this.updateStatus();
     const onAbort = () => this.abort?.abort(context.signal?.reason); context.signal?.addEventListener('abort', onAbort, { once: true }); if (context.signal?.aborted) onAbort();
-    let collecting = false;
+    let saved = null, collecting = false;
     try {
-      this.fileIO.beginCollection({ download }); collecting = true;
+      this.onBatchState?.(true);
+      saved = await this.getProject(); this.abort.signal.throwIfAborted(); this.disarm();
+      this.fileIO.beginCollection({ download, owner }); collecting = true;
       for (const input of inputs) {
         this.abort.signal.throwIfAborted();
         try {
-          await this.executeCore('project.new', { name: input.stem, sampleRate: saved.sampleRate });
-          if (!containsCommand(ast, 'file.import')) await this.runtime.execute('file.import', { input: input.id }, { origin: 'batch', record: false, signal: this.abort.signal });
-          await this.runner.run(text, { variables: { input, file: input, inputs: [input] }, signal: this.abort.signal, onEvent: event => this.onProgress(event) });
+          await this.runtime.execute('project.new', { name: input.stem, sampleRate: saved.sampleRate }, { owner, origin:'batch', record:false, signal:this.abort.signal });
+          if (!containsCommand(ast, 'file.import')) await this.runtime.execute('file.import', { input: input.id }, { owner, origin: 'batch', record: false, signal: this.abort.signal });
+          await this.batchRunner.run(text, { variables: { input, file: input, inputs: [input] }, signal: this.abort.signal, onEvent: event => this.onProgress(event) });
           this.batchResults.push({ name: input.name, success: true });
         } catch (error) { this.batchResults.push({ name: input.name, success: false, error: error.message }); if (!continueOnError || this.abort.signal.aborted) throw error; }
         this.updateBatchResults();
@@ -97,8 +114,8 @@ export class MacroPanel {
       this.progress = `Batch complete: ${this.batchResults.filter(result => result.success).length}/${inputs.length} succeeded.`;
       return { results: clone(this.batchResults), outputCount: this.fileIO.collection.files.length, outputBytes: this.fileIO.collection.total };
     } finally {
-      if (collecting) this.lastOutputs = this.fileIO.finishCollection().files;
-      try { try { await this.teardown?.(); } finally { await this.restoreProject(saved); } } finally { context.signal?.removeEventListener('abort', onAbort); this.running = false; this.abort = null; this.updateStatus(); this.updateBatchResults(); }
+      if (collecting) this.lastOutputs = this.fileIO.finishCollection({owner}).files;
+      try { if (saved) { try { await this.teardown?.({owner}); } finally { await this.restoreProject(saved,{owner}); } } } finally { context.signal?.removeEventListener('abort', onAbort);releaseFiles();releaseCommands();this.#batchOwner=null;this.batchRunner=null;this.running = false; this.abort = null;this.onBatchState?.(false); this.updateStatus(); this.updateBatchResults(); }
     }
   }
   updateStatus() {
@@ -137,7 +154,7 @@ export class MacroPanel {
     $('#macro-new').onclick = () => { this.settings.selectedId = ''; this.settings.draft = '// WebSoundEdit Macro 1\n'; this.persist(); this.renderEditor(body); };
     $('#macro-save').onclick = () => this.safe(() => { sync(); const name = $('#macro-name').value.trim(); if (!name) throw new Error('Give this macro a name.'); let item = this.find(this.settings.selectedId); if (!item) { if (this.settings.macros.length >= 32) throw new Error('The macro library is full. Remove a saved macro first.'); item = { id: `macro-${crypto.randomUUID()}`, name, text: this.settings.draft, shortcut: '' }; this.settings.macros.push(item); this.settings.selectedId = item.id; } else { item.name = name; item.text = this.settings.draft; } this.settings = normalizeMacroSettings(this.settings); this.persist(); this.renderEditor(body); this.progress = 'Macro saved. Triggers remain locally controlled.'; this.updateStatus(); });
     $('#macro-delete').onclick = () => { const id = this.settings.selectedId; this.settings.macros = this.settings.macros.filter(item => item.id !== id); if (this.settings.onImportId === id) { this.settings.onImportId = ''; this.onImportArmed = false; } this.settings.selectedId = ''; this.persist(); this.renderEditor(body); };
-    $('#macro-load').onclick = () => $('#macro-file').click(); $('#macro-file').onchange = () => this.safe(async () => { const file = $('#macro-file').files[0]; if (!file) return; if (file.size > 131072) throw new Error('Macro file exceeds 128 KiB.'); this.settings.draft = await file.text(); this.settings.selectedId = ''; this.disarm(); this.persist(); this.renderEditor(body); });
+    $('#macro-load').onclick = () => $('#macro-file').click(); $('#macro-file').onchange = () => this.safe(async () => { const file = $('#macro-file').files[0]; if (!file) return; this.assertInteractive(); if (file.size > 131072) throw new Error('Macro file exceeds 128 KiB.'); const text = await file.text(); this.assertInteractive(); this.settings.draft = text; this.settings.selectedId = ''; this.disarm(); this.persist(); this.renderEditor(body); });
     $('#macro-download').onclick = () => { sync(); this.download(source.value, `${safeFilename($('#macro-name').value)}.wsemacro`, 'text/plain;charset=utf-8'); };
     $('#macro-validate').onclick = () => this.safe(() => { sync(); this.validate(); $('#macro-validation').textContent = 'Valid syntax, commands and known arguments. Dynamic values are validated when each command runs.'; });
     $('#macro-format').onclick = () => this.safe(() => { source.value = formatMacro(parseMacro(source.value)); sync(); });
@@ -164,7 +181,7 @@ export class MacroPanel {
     body.querySelector('#macro-import-armed').onchange = event => this.safe(() => { if (event.target.checked && !this.find(this.settings.onImportId)) { event.target.checked = false; throw new Error('Choose an on-import macro first.'); } if (event.target.checked) this.validate(this.find(this.settings.onImportId).text); this.onImportArmed = event.target.checked; });
   }
   renderBatch(body) {
-    body.innerHTML = `<h3>Process files in order</h3><p>Each input starts in a cleared project. If your macro has no file.import command, the file is imported first. The current session is restored when the batch ends; completed downloads remain.</p><div class="form-grid"><label>Macro<select id="batch-macro">${option('', 'Current draft', '')}${this.settings.macros.map(item => option(item.id, item.name, this.settings.selectedId)).join('')}</select></label><label>Input files<input id="batch-files" type="file" accept="audio/*,.mid,.midi,.json,.aup3,.zip,.rpp" multiple></label></div><p id="batch-input-count">${this.batchInputs.length} files supplied</p><label class="checkbox-field"><input id="batch-continue" type="checkbox"> Continue to the next file after an error</label><label class="checkbox-field"><input id="batch-auto-download" type="checkbox"> Download each output as it completes</label><p class="field-hint">Collected outputs are bounded at ${bytesLabel(MAX_EXPORT_COLLECTION_BYTES)}. Use smaller batches for large audio. No arbitrary paths are read by a script.</p><div class="inline-buttons"><button id="batch-run" data-macro-run class="primary">Run batch</button><button id="macro-batch-download" disabled>Download collected outputs ZIP</button></div><ol id="macro-batch-results" class="batch-results"></ol>`;
+    body.innerHTML = `<h3>Process files in order</h3><p>Each input starts in a cleared project. If your macro has no file.import command, the file is imported first. The current session is restored when the batch ends; completed downloads remain. While the batch owns this session, use progress, help and Stop; editing, MIDI controls and outside file operations resume after restoration. Ordinary Run macros remain interactive.</p><div class="form-grid"><label>Macro<select id="batch-macro">${option('', 'Current draft', '')}${this.settings.macros.map(item => option(item.id, item.name, this.settings.selectedId)).join('')}</select></label><label>Input files<input id="batch-files" type="file" accept="audio/*,.mid,.midi,.json,.aup3,.zip,.rpp" multiple></label></div><p id="batch-input-count">${this.batchInputs.length} files supplied</p><label class="checkbox-field"><input id="batch-continue" type="checkbox"> Continue to the next file after an error</label><label class="checkbox-field"><input id="batch-auto-download" type="checkbox"> Download each output as it completes</label><p class="field-hint">Collected outputs are bounded at ${bytesLabel(MAX_EXPORT_COLLECTION_BYTES)}. Use smaller batches for large audio. No arbitrary paths are read by a script.</p><div class="inline-buttons"><button id="batch-run" data-macro-run class="primary">Run batch</button><button id="macro-batch-download" disabled>Download collected outputs ZIP</button></div><ol id="macro-batch-results" class="batch-results"></ol>`;
     body.querySelector('#batch-files').onchange = event => this.safe(() => { this.batchInputs = this.fileIO.supply([...event.target.files]); body.querySelector('#batch-input-count').textContent = `${this.batchInputs.length} files supplied`; });
     body.querySelector('#batch-run').onclick = () => this.safe(() => this.runtime.execute('macro.batch', { ...(body.querySelector('#batch-macro').value ? { macroId: body.querySelector('#batch-macro').value } : {}), inputIds: this.batchInputs.map(input => input.id), continueOnError: body.querySelector('#batch-continue').checked, download: body.querySelector('#batch-auto-download').checked }));
     body.querySelector('#macro-batch-download').onclick = () => this.safe(() => { const files = Object.fromEntries(this.lastOutputs.map(output => [output.name, output.bytes])); const bytes = zipSync(files, { level: 0 }); if (bytes.length > MAX_EXPORT_COLLECTION_BYTES + 1024 * 1024) throw new Error('Batch ZIP exceeds its output bound.'); this.download(bytes, 'websoundedit-batch.zip', 'application/zip'); });

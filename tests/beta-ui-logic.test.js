@@ -12,6 +12,7 @@ import { MacroPanel, normalizeMacroSettings } from '../src/macro-ui.js';
 import { normalizeWorkbenchPreferences } from '../src/options-ui.js';
 import { LiveAudioRuntime } from '../src/live-audio.js';
 import { createRackEffect } from '../src/rack-config.js';
+import { decodeAudioFile } from '../src/codecs.js';
 import { MidiActionEdges, normalizeMidiActions } from '../src/midi-actions.js';
 
 const SR = 8000;
@@ -44,6 +45,9 @@ test('portable preferences and macros preserve definitions without importing per
   assert.equal(preferences.tooltips,false); assert.deepEqual(preferences.input.channels,[0,1]);
   assert.equal(Object.hasOwn(preferences.input,'monitor'),false); assert.equal(Object.hasOwn(preferences,'token'),false);
   assert.throws(() => normalizeWorkbenchPreferences({input:{channels:[0,0]}}));
+  assert.equal(normalizeWorkbenchPreferences().import.layout,'auto');
+  assert.equal(normalizeWorkbenchPreferences({import:{layout:'5.1'}}).import.layout,'5.1');
+  assert.throws(() => normalizeWorkbenchPreferences({import:{layout:'unknown'}}),/Auto/);
   const macros = normalizeMacroSettings({macros:[{id:'m',name:'Trim',text:'effect.gain({db:-2});',shortcut:'ctrl+shift+1'}],onImportId:'m',onImportArmed:true,shortcutsArmed:true});
   assert.equal(macros.onImportId,'m'); assert.equal(Object.hasOwn(macros,'onImportArmed'),false);
   assert.throws(() => normalizeMacroSettings({macros:[...macros.macros,{...macros.macros[0],id:'m2'}]}),/unique/);
@@ -102,9 +106,11 @@ test('macro batch isolates files, preserves the original selection and tears dow
     const originalImport=io.importOne;io.importOne=async(...args)=>{importTrackCounts.push(editor.getState().tracks.length);return originalImport(...args);};
     const panel=new MacroPanel({runtime,routes:{register:()=>{},active:''},fileIO:io,getState:()=>editor.getState(),getProject:()=>editor.execute('project.save'),executeCore:(m,p)=>editor.execute(m,p),restoreProject:async project=>{assert.equal(teardowns,restores+1);restores++;await editor.execute('project.load',{project});},teardown:async()=>{teardowns++;if(failTeardown)throw new Error('Capture teardown failed');},persist:()=>{},download:()=>{}});panel.register();
     panel.settings.draft='effect.gain({db:-6}); file.export({format:"wav",scope:"track"});';
-    const result=await panel.batch({inputIds:inputs.map(input=>input.id)});assert.equal(result.results.length,2);assert.deepEqual(importTrackCounts,[0,0]);assert.equal(panel.lastOutputs.length,2);assert.deepEqual(await editor.execute('project.save'),saved);assert.equal(restores,1);
+    const getProject=panel.getProject;let releaseSnapshot;panel.getProject=async()=>{await new Promise(resolve=>{releaseSnapshot=resolve;});return getProject();};
+    const firstRun=panel.batch({inputIds:inputs.map(input=>input.id)});await assert.rejects(panel.batch({inputIds:[inputs[0].id]}),/already running/);releaseSnapshot();const result=await firstRun;panel.getProject=getProject;assert.equal(result.results.length,2);assert.deepEqual(importTrackCounts,[0,0]);assert.equal(panel.lastOutputs.length,2);assert.deepEqual(await editor.execute('project.save'),saved);assert.equal(restores,1);
     panel.settings.draft='wait({seconds:5}); effect.gain({db:-6});';const running=panel.batch({inputIds:inputs.map(input=>input.id)});setTimeout(()=>panel.cancel(),10);await assert.rejects(running,/cancel/i);assert.equal(restores,2);assert.equal(panel.running,false);assert.deepEqual(await editor.execute('project.save'),saved);
-    failTeardown=true;panel.settings.draft='effect.gain({db:-1});';await assert.rejects(panel.batch({inputIds:[inputs[0].id]}),/teardown failed/);assert.equal(restores,3);assert.equal(panel.running,false);assert.deepEqual(await editor.execute('project.save'),saved);
+    panel.getProject=async()=>{await new Promise(resolve=>{releaseSnapshot=resolve;});return getProject();};const pendingSnapshot=panel.batch({inputIds:[inputs[0].id]});panel.cancel();releaseSnapshot();await assert.rejects(pendingSnapshot,/Stopped|cancel/i);panel.getProject=getProject;assert.equal(restores,3);assert.equal(panel.running,false);assert.deepEqual(await editor.execute('project.save'),saved);
+    failTeardown=true;panel.settings.draft='effect.gain({db:-1});';await assert.rejects(panel.batch({inputIds:[inputs[0].id]}),/teardown failed/);assert.equal(restores,4);assert.equal(panel.running,false);assert.deepEqual(await editor.execute('project.save'),saved);
     panel.dispose();runtime.dispose();
   }finally{if(previousDocument===undefined)delete globalThis.document;else globalThis.document=previousDocument;}
 });
@@ -118,4 +124,58 @@ test('project-replacing recipes prevalidate final live racks before any teardown
   const invalid=structuredClone(project);invalid.settings.live.racks.master.chain[0].wet=9;assert.throws(()=>prepare({steps:[{method:'project.new'},{method:'project.load',params:{project:invalid}}]}),/wet/);
   assert.throws(()=>prepare({commands:[{method:'project.load',params:{project}},{method:'settings.load',params:{settings:invalid.settings}}]}),/wet/);
   const empty=prepare({commands:[{method:'project.load',params:{project}},{method:'project.new'}]});assert.equal(empty.liveSettings.racks.master.chain.length,0);
+});
+
+test('explicit source layout reaches the real decoder through canonical file import without inferred surround or partial replacement', async () => {
+  const source=await readFile(new URL('../src/app.js',import.meta.url),'utf8'),start=source.indexOf('async function importOne('),end=source.indexOf('\nfunction download(',start);
+  const editor=new AudioEditor({sampleRate:SR});await editor.execute('clip.add',{name:'Original',audio:pcm()});const before=await editor.execute('project.save');
+  const audio={sampleRate:SR,layout:'5.1',channels:Array.from({length:6},(_,channel)=>new Float32Array(80).fill((channel+1)/16))},bytes=encodeWav(audio,{bitDepth:32,float:true});new DataView(bytes.buffer).setUint32(40,0,true);
+  const context={state:editor.getState(),decodeAudioFile,duration:audio=>audio.channels[0].length/audio.sampleRate,setBusy:()=>{},status:()=>{},demo:false};
+  context.coreRaw=async(method,params)=>{const result=await editor.execute(method,params);context.state=editor.getState();return result;};
+  const importOne=vm.runInNewContext('('+source.slice(start,end)+')',context),io=filesFor(editor);io.importOne=importOne;
+  const runtime=new CommandRuntime({coreExecute:(m,p)=>editor.execute(m,p),coreCommands:COMMANDS,getState:()=>editor.getState()});io.register(runtime);
+  const [alias]=io.supply([new File([bytes],'maskless.wav')]);
+  await assert.rejects(runtime.execute('file.import',{input:alias.id,replace:true}),/explicit channel layout/);assert.deepEqual(await editor.execute('project.save'),before);
+  await assert.rejects(runtime.execute('file.import',{input:alias.id,replace:true,layout:'7.1'}),/channel|layout/i);assert.deepEqual(await editor.execute('project.save'),before);
+  await assert.rejects(runtime.execute('file.import',{input:alias.id,layout:'auto'}),/allowed|one of|enum/i);
+  const result=await runtime.execute('file.import',{input:alias.id,replace:true,layout:'5.1'});assert.ok(result.clipId);assert.deepEqual(await editor.execute('clip.getAudio'),audio);assert.equal(editor.getState().outputLayout,'stereo');
+  runtime.dispose();
+});
+
+test('batch ownership blocks outside edits and exports through snapshot, execution and restore while ordinary macros remain interactive', async () => {
+  const previousDocument=globalThis.document;globalThis.document={querySelectorAll:()=>[],querySelector:()=>null};
+  const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};};
+  try{
+    const editor=new AudioEditor({sampleRate:SR});await editor.execute('clip.add',{name:'Original',audio:pcm(.3)});await editor.execute('selection.set',{start:.02,end:.07,channels:'all'});const original=await editor.execute('project.save');
+    const runtime=new CommandRuntime({coreExecute:(method,params)=>editor.execute(method,params),coreCommands:COMMANDS,getState:()=>editor.getState()}),io=filesFor(editor);io.register(runtime);
+    const file=new File([encodeWav(pcm(.1),{bitDepth:32,float:true})],'batch.wav'),[input]=io.supply([file]);
+    let stepEntered=deferred(),stepRelease=deferred();const snapshotEntered=deferred(),snapshotRelease=deferred(),restoreEntered=deferred(),restoreRelease=deferred();let restores=0;
+    runtime.register({method:'test.hold',schema:{type:'object',additionalProperties:false}},async(params,context)=>{await context.execute('effect.gain',{db:-6});stepEntered.resolve();await stepRelease.promise;return {done:true};});
+    runtime.register({method:'ui.help',schema:{type:'object',additionalProperties:false}},()=>({opened:true}));
+    runtime.register({method:'ui.options',schema:{type:'object',additionalProperties:false}},(params,context)=>context.execute('effect.gain',{db:-12}));
+    runtime.register({method:'ui.project.save',schema:{type:'object',additionalProperties:false}},()=>({saved:true}));
+    const panel=new MacroPanel({runtime,routes:{register:()=>{},active:''},fileIO:io,getState:()=>editor.getState(),getProject:async()=>{snapshotEntered.resolve();await snapshotRelease.promise;return editor.execute('project.save');},restoreProject:async project=>{restores++;restoreEntered.resolve();await restoreRelease.promise;await editor.execute('project.load',{project});},teardown:async()=>{},persist:()=>{},download:()=>{}});panel.register();panel.settings.draft='test.hold({});file.export({format:"wav",scope:"clip",raw:true,bitDepth:32});';
+    const appSource=await readFile(new URL('../src/app.js',import.meta.url),'utf8'),picker=deferred();let exportDestinationCalls=0,archiveExportCalls=0;
+    const exportRecording=vm.runInNewContext('('+appSource.slice(appSource.indexOf('async function exportRecording('),appSource.indexOf('\nfunction interactive('))+')',{macroPanel:panel,window:{showSaveFilePicker:()=>picker.promise},filename:value=>value,liveAudio:{setExportDestination:()=>{exportDestinationCalls++;}},core:()=>{archiveExportCalls++;},download:()=>{}});
+    const pendingPicker=exportRecording({recordingId:'previous-recording'});
+    const running=runtime.execute('macro.batch',{inputIds:[input.id]});await snapshotEntered.promise;
+    const pickerBlocked=assert.rejects(pendingPicker,error=>error.code==='BUSY');picker.resolve({name:'late.wav'});await pickerBlocked;assert.equal(exportDestinationCalls,0);assert.equal(archiveExportCalls,0);
+    const busy=async(method,params={},origin='ui')=>assert.rejects(runtime.execute(method,params,{origin}),error=>error.code==='BUSY');
+    await busy('effect.gain',{db:-3});await busy('track.add',{name:'Outside'});await busy('selection.clear');await busy('history.undo');
+    assert.equal((await runtime.execute('macro.status')).batch,true);assert.deepEqual(await runtime.execute('ui.help'),{opened:true});await busy('ui.options');assert.equal((await runtime.execute('project.state')).name,original.name);
+    assert.throws(()=>io.supply([file]),error=>error.code==='BUSY');assert.deepEqual(io.aliases().map(alias=>alias.id),[input.id]);
+    snapshotRelease.resolve();await stepEntered.promise;
+    const ownedAudio=await editor.execute('clip.getAudio');assert.ok(Math.abs(ownedAudio.channels[0][0]-.1*10**(-6/20))<1e-6,'nested owner commands must execute');
+    for(const origin of ['ui','api','midi','macro','internal','batch'])await busy('effect.gain',{db:-6},origin);
+    await busy('file.import',{input:input.id});await busy('file.export',{format:'wav',scope:'clip',download:false});await busy('file.exportStems',{format:'wav',download:false});
+    await assert.rejects(io.export({format:'wav',scope:'clip'}),error=>error.code==='BUSY');assert.throws(()=>io.emit({bytes:new Uint8Array(4),ext:'wav'},'outside'),error=>error.code==='BUSY');assert.throws(()=>io.finishCollection(),error=>error.code==='BUSY');
+    assert.deepEqual(await editor.execute('clip.getAudio'),ownedAudio);assert.equal(io.collection.files.length,0);
+    stepRelease.resolve();await restoreEntered.promise;await busy('track.update',{name:'Late outside edit'});await busy('file.export',{format:'wav',scope:'clip'});assert.equal(panel.isBatchRunning(),true);
+    restoreRelease.resolve();const result=await running;assert.equal(result.outputCount,1);assert.equal(panel.lastOutputs.length,1);assert.equal(restores,1);assert.deepEqual(await editor.execute('project.save'),original);assert.equal(panel.isBatchRunning(),false);
+    stepEntered=deferred();stepRelease=deferred();const ordinary=panel.run('test.hold({});');await stepEntered.promise;await runtime.execute('effect.gain',{db:-1},{origin:'midi'});stepRelease.resolve();await ordinary;assert.equal(panel.isBatchRunning(),false);
+    const importEntered=deferred(),importRelease=deferred(),importOne=io.importOne;io.importOne=async(...args)=>{importEntered.resolve();await importRelease.promise;return importOne(...args);};
+    const outsideImport=runtime.execute('file.import',{input:input.id});await importEntered.promise;await assert.rejects(runtime.execute('macro.batch',{inputIds:[input.id]}),error=>error.code==='BUSY');assert.equal(panel.isBatchRunning(),false);importRelease.resolve();await outsideImport;
+    panel.settings.draft='ui.project.save({});';await assert.rejects(runtime.execute('macro.batch',{inputIds:[input.id]}),/semantic commands/);assert.equal(panel.isBatchRunning(),false);
+    panel.dispose();runtime.dispose();
+  }finally{if(previousDocument===undefined)delete globalThis.document;else globalThis.document=previousDocument;}
 });

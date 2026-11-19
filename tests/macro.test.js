@@ -6,6 +6,21 @@ import { CommandRuntime } from '../src/command-runtime.js';
 import { ActionRecorder } from '../src/macro-recorder.js';
 import { AudioEditor, COMMANDS } from '../src/engine.js';
 const catalog=coreCommandDescriptors(COMMANDS);
+test('scoped command ownership rejects outside mutations and propagates through nested commands',async()=>{
+  const {runtime,editor}=fixture(),owner={};
+  runtime.register({method:'test.nested',schema:{type:'object'}},(_params,context)=>context.execute('track.add',{name:'owned'}));
+  const release=runtime.addExecutionGuard(({method,options})=>{if(method!=='project.state'&&options.owner!==owner)throw Object.assign(new Error('Batch owns the editor.'),{code:'BUSY'});});
+  await assert.rejects(runtime.execute('track.add',{}),{code:'BUSY'});assert.equal(editor.getState().tracks.length,0);
+  await runtime.execute('test.nested',{}, {owner});assert.equal((await runtime.execute('project.state')).tracks[0].name,'owned');
+  release();await runtime.execute('track.add',{});assert.equal(editor.getState().tracks.length,2);
+});
+test('typed effect aliases require explicit target ranges instead of silently ignoring them',async()=>{
+  const {runtime,editor}=fixture();
+  const clip=await runtime.execute('clip.add',{audio:{sampleRate:8000,channels:[new Float32Array(80).fill(.5)]}});
+  await assert.rejects(runtime.execute('effect.gain',{clipId:clip.clipId,start:0,end:.005,channels:'all',db:-6}),{code:'INVALID_ARGUMENT'});
+  await runtime.execute('effect.gain',{target:{clipId:clip.clipId,start:0,end:.005,channels:'all'},db:-6});
+  const pcm=await editor.execute('clip.getAudio');assert.ok(pcm.channels[0][0]<.26);assert.equal(pcm.channels[0][40],.5);
+});
 test('silent analysis is usable as JSON-compatible null dB data in macros',async()=>{
   const {runner,editor}=fixture();
   const result=await runner.run('audio.generate({duration:.01,amplitude:0}); let stats=analysis.stats({}); if(stats.peakDb===null){track.update({name:"silent"});}');

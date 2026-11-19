@@ -44,6 +44,11 @@ test('live stutter recaptures a complete new slice when division or tempo change
   const dsp=new RealtimeRackDSP({sampleRate:8000,channels:1,chain:[{id:'s',effect:'stutter',wet:1,params:{division:32,gate:1,fadeMs:0}}]}),out=[new Float32Array(128)];dsp.process([new Float32Array(128).fill(.25)],out);
   dsp.schedule({slotId:'s',param:'division',value:2,at:128/8000});dsp.process([new Float32Array(128).fill(.75)],out);assert.ok(out[0].every(value=>value===.75));dsp.setTempo(100);assert.equal(dsp.stages[0].frame,0);dsp.process([new Float32Array(128).fill(.5)],out);assert.ok(out[0].every(value=>value===.5));
 });
+test('manual effect ramps advance while the transport is frozen, and timeline automation stays on transport time',()=>{
+  const dsp=new RealtimeRackDSP({sampleRate:8000,channels:1,chain:[{id:'t',effect:'tremolo',wet:0,params:{rate:.05,depth:1}}]}),out=[new Float32Array(128)];
+  dsp.schedule({slotId:'t',param:'wet',value:1,at:0,rampSeconds:.01});for(let i=0;i<16;i++)dsp.process([new Float32Array(128).fill(.5)],out,{timelineStart:0,timelineRate:0});assert.equal(dsp.stages[0].wet,1);assert.equal(dsp.pendingEventCount(),0);assert.ok(out[0].every(value=>value<.3));
+  dsp.setAutomation([{slotId:'t',param:'wet',points:[{time:0,value:0,curve:'step'},{time:1,value:1,curve:'step'}]}]);for(let i=0;i<16;i++)dsp.process([new Float32Array(128).fill(.5)],out,{timelineStart:0,timelineRate:0});assert.ok(out[0].every(value=>value===.5));dsp.process([new Float32Array(128).fill(.5)],out,{timelineStart:1,timelineRate:0});assert.ok(out[0].every(value=>value<.3));
+});
 test('shared scheduled-event, lane and voice PCM budgets reject before sending a graph mutation',async()=>{
   let sent=0;const manager=new RealtimeRackManager({sampleRate:8000},{channels:1,loadModule:async()=>{},nodeFactory:()=>{let queued=0;const node={port:{postMessage(message){sent++;if(message.method==='parameter')queued++;queueMicrotask(()=>node.port.onmessage?.({data:{id:message.id,ok:true,queuedEvents:queued}}));},close(){}},disconnect(){}};return node;}});
   for(const id of ['one','two']){await manager.setChain(id,[{id:'t',effect:'tremolo'}]);await manager.setAutomation(id,[{slotId:'t',param:'wet',points:Array.from({length:4095},(_,i)=>({time:i/10,value:0,curve:'step'}))}]);}

@@ -107,6 +107,7 @@ export class CreativeTools {
   }
   async handleMidi(message) {
     const readout = $('#midi-message'); if (readout) readout.textContent = message.type === 'cc' ? `CH ${message.channel + 1} · CC ${message.controller} · ${message.value}` : `${message.type}${message.note === undefined ? '' : ' · note ' + message.note}`;
+    if (this.isBatchRunning?.()) { this.sampler.stop(); this.actionEdges.reset(); if (readout) readout.textContent = 'Batch running — MIDI controls resume after project restoration.'; return; }
     const actions = this.actionEdges.update(message, this.actionMappings, { armed: this.actionsArmed });
     for (const mapping of actions) {
       if (mapping.action.macroId) await this.runMacro(mapping.action.macroId, { origin: 'midi' });

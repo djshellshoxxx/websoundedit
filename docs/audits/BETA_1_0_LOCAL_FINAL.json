@@ -1,0 +1,61 @@
+{
+  "status": "passed",
+  "results": [
+    {
+      "name": "audio",
+      "elapsedMs": 2801,
+      "status": "passed",
+      "report": "audio.json"
+    },
+    {
+      "name": "live-audio",
+      "elapsedMs": 4278,
+      "status": "passed",
+      "report": "live-audio.json"
+    },
+    {
+      "name": "macro",
+      "elapsedMs": 3499,
+      "status": "passed",
+      "report": "macro.json"
+    },
+    {
+      "name": "audacity",
+      "elapsedMs": 901,
+      "status": "passed",
+      "report": "audacity.json"
+    },
+    {
+      "name": "reaper",
+      "elapsedMs": 854,
+      "status": "passed",
+      "report": "reaper.json"
+    },
+    {
+      "name": "api-baseline",
+      "elapsedMs": 1491,
+      "status": "passed",
+      "report": "api-baseline.json"
+    },
+    {
+      "name": "companion",
+      "elapsedMs": 770,
+      "status": "passed",
+      "report": "companion.json"
+    }
+  ],
+  "nodeTests": {
+    "total": 299,
+    "passed": 299,
+    "failed": 0,
+    "skipped": 0
+  },
+  "productionBuild": "passed including DOM-free SDK PCM/WAV/macro execution",
+  "scope": "Latest local post-review checkpoint. Native/browser/dependency/live-publication gates remain pending.",
+  "recordedAt": "2026-11-19T12:55:09.407346+00:00",
+  "logsSha256": {
+    "latest-unit.log": "81845900929c661600e84fe5c5b74047690ccd6bb349f9223f786f5c74c0b87e",
+    "latest-build.log": "72043e6683ae6c288a97db272cf68b44ca93cb85cd635da39257481bb1c83482",
+    "latest-fuzz.log": "458205b00ae526dcc7e7c08ad17e90a386d1ff6355a0cfce47211e395e05425a"
+  }
+}

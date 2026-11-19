@@ -5,11 +5,13 @@ import { escapeHTML, option, bytesLabel } from './ui-utils.js';
 export function normalizeWorkbenchPreferences(value = {}) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Workbench options must be an object.');
   const input = value.input || {}, output = value.output || {};
+  const sourceLayout = value.import?.layout ?? 'auto';
+  if (!['auto', '5.1', '7.1'].includes(sourceLayout)) throw new Error('Choose Auto, 5.1 or 7.1 for imported source layout.');
   const device = id => typeof id === 'string' && id.length <= 200 ? id : 'default';
   const channels = input.channels ?? [0];
   if (!Array.isArray(channels) || !channels.length || channels.length > 8 || channels.some(channel => !Number.isInteger(channel) || channel < 0 || channel > 31) || new Set(channels).size !== channels.length) throw new Error('Choose unique input channel indices from 0 to 31.');
   if (input.gainDb !== undefined && (!Number.isFinite(input.gainDb) || input.gainDb < -96 || input.gainDb > 24)) throw new Error('Input gain must be −96 to 24 dB.');
-  return { tooltips: value.tooltips !== false, input: { source: input.source === 'display' ? 'display' : 'microphone', deviceId: device(input.deviceId), channels: [...channels], gainDb: input.gainDb ?? 0, echoCancellation: input.echoCancellation === true, noiseSuppression: input.noiseSuppression === true, autoGainControl: input.autoGainControl === true }, output: { deviceId: device(output.deviceId), monitorLayout: Object.hasOwn(CHANNEL_LAYOUTS, output.monitorLayout) ? output.monitorLayout : 'stereo' } };
+  return { tooltips: value.tooltips !== false, import: { layout: sourceLayout }, input: { source: input.source === 'display' ? 'display' : 'microphone', deviceId: device(input.deviceId), channels: [...channels], gainDb: input.gainDb ?? 0, echoCancellation: input.echoCancellation === true, noiseSuppression: input.noiseSuppression === true, autoGainControl: input.autoGainControl === true }, output: { deviceId: device(output.deviceId), monitorLayout: Object.hasOwn(CHANNEL_LAYOUTS, output.monitorLayout) ? output.monitorLayout : 'stereo' } };
 }
 const SECTIONS = [['general', 'General & theme'], ['input', 'Audio input'], ['output', 'Audio output'], ['layout', 'Channel layout'], ['midi', 'MIDI & pedals'], ['shortcuts', 'Keyboard shortcuts'], ['macros', 'Macros & import triggers'], ['storage', 'Recording & storage'], ['streaming', 'Streaming companion'], ['help', 'Help & recovery']];
 
@@ -36,6 +38,10 @@ export class OptionsPanel {
     body.innerHTML = `<p>These preferences change the workbench without replacing the open project.</p><div class="form-grid"><label>Theme<select id="options-theme">${Object.entries(THEMES).map(([id, title]) => option(id, title, this.getTheme())).join('')}</select></label><label class="checkbox-field"><input id="options-tooltips" type="checkbox"${preferences.tooltips ? ' checked' : ''}> Show guidance on hover and keyboard focus</label></div><p class="field-hint">Turning tips off preserves accessible names, form labels and the full guide. Device access and active connections are never restored from settings.</p><div class="inline-buttons"><button id="options-save">Save settings JSON</button><button id="options-load">Load settings JSON</button><a class="button-link" href="#help/navigation">Open the illustrated guide ↗</a></div>`;
     body.querySelector('#options-theme').onchange = event => this.safe(() => this.execute('ui.theme.set', { theme: event.target.value }));
     body.querySelector('#options-tooltips').onchange = event => this.safe(() => this.execute('ui.tooltips.set', { enabled: event.target.checked }));
+    const importOptions = document.createElement('section');
+    importOptions.innerHTML = `<h4>Imported file speaker layout</h4><label>Source layout declaration<select id="options-import-layout" data-help="surround" data-guide="Auto reads the file's speaker mask. Declare 5.1 or 7.1 only when you know an unidentified source's speaker order; this does not convert channels.">${[['auto', 'Auto — read file layout'], ['5.1', 'Declare 5.1 — FL, FR, FC, LFE, BL, BR'], ['7.1', 'Declare 7.1 — FL, FR, FC, LFE, BL, BR, SL, SR']].map(([id, label]) => option(id, label, preferences.import.layout)).join('')}</select></label><p class="field-hint">For manual file imports. Auto rejects unidentified surround instead of silently downmixing it. An explicit declaration must match the channel count and known speaker mask; it never converts the source. Return to Auto for ordinary imports. Macro/API imports pass their own layout explicitly.</p>`;
+    body.append(importOptions);
+    body.querySelector('#options-import-layout').onchange = event => this.safe(() => this.execute('ui.importLayout.set', { layout: event.target.value }));
     body.querySelector('#options-save').onclick = this.saveSettings; body.querySelector('#options-load').onclick = this.loadSettings;
   }
   async audio(body, page) {

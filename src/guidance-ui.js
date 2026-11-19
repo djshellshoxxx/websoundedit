@@ -36,7 +36,7 @@ export class GuidanceUI {
     this.tip = document.createElement('div'); this.tip.id = 'feature-guidance'; this.tip.className = 'feature-guidance'; this.tip.setAttribute('role', 'tooltip'); this.tip.setAttribute('popover', 'manual'); this.tip.hidden = true; document.body.append(this.tip);
     this.over = event => { const target = event.target.closest?.('button,input,select,textarea,summary,a[href],[tabindex="0"]'); if (target && !target.closest('#feature-guidance')) this.show(target); };
     this.out = event => { if (!event.relatedTarget?.closest?.('#feature-guidance') && !this.target?.contains(event.relatedTarget)) this.hide(); };
-    this.key = event => { if (event.key === 'Escape' && this.target) { event.preventDefault(); event.stopPropagation(); this.hide(); } };
+    this.key = event => { if (event.key === 'Escape' && this.target) { if (!this.target.closest('#command-palette')) { event.preventDefault(); event.stopPropagation(); } this.hide(); } };
     document.addEventListener('pointerover', this.over); document.addEventListener('focusin', this.over);
     document.addEventListener('pointerout', this.out); document.addEventListener('focusout', this.out); document.addEventListener('keydown', this.key, true);
     this.tip.addEventListener('pointerleave', () => this.hide());

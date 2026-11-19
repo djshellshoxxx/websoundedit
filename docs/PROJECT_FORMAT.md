@@ -10,6 +10,7 @@ A project file is a self-contained snapshot of the current edit. It contains met
   "version": 1,
   "name": "Session name",
   "sampleRate": 48000,
+  "outputLayout": "stereo",
   "bpm": 120,
   "beatsPerBar": 4,
   "beatOffset": 0,
@@ -23,7 +24,7 @@ A project file is a self-contained snapshot of the current edit. It contains met
 }
 ```
 
-All clips share the project sample rate. Current support is mono or stereo and 8,000–192,000 Hz integer sample rates. The app normally works at 48 kHz. Tempo is 20–400 BPM. A clip's start is on the timeline; selection endpoints are relative to their clip. IDs are unique strings made from ASCII letters, numbers, `_` and `-`, at most 100 characters.
+All clips share the project sample rate. Supported PCM layouts are mono, stereo, 5.1 and 7.1 at 8,000–192,000 Hz integer sample rates. `outputLayout` chooses the rendered project layout; source clips retain their own declared layouts. The app normally works at 48 kHz. Tempo is 20–400 BPM. A clip's start is on the timeline; selection endpoints are relative to their clip. IDs are unique strings made from ASCII letters, numbers, `_` and `-`, at most 100 characters.
 
 ## Track and clip
 
@@ -43,6 +44,7 @@ All clips share the project sample rate. Current support is mono or stereo and 8
       "audio": {
         "encoding": "f32le-base64",
         "sampleRate": 48000,
+        "layout": "stereo",
         "frames": 1,
         "channels": ["AAAAAA==", "AAAAAA=="]
       }
@@ -72,7 +74,7 @@ Metadata does not store references to executable code, remote URLs or arbitrary 
 }
 ```
 
-`channels` is `all`, `left` or `right`; right requires stereo. Selections must be nonempty after snapping to samples. Markers use timeline seconds. A loaded selection must refer to a valid clip.
+Selection `channels` is `all`, a legacy `left`/`right` alias where applicable, or a nonempty array of unique zero-based source-channel indices. An explicit speaker selection leaves other channels unchanged. Length-changing edits require all source channels. Selections must be nonempty after snapping to samples. Markers use timeline seconds. A loaded selection must refer to a valid clip.
 
 ## Settings files
 
@@ -107,3 +109,13 @@ Imported MIDI note sequences are stored by clip ID in `settings.midiSequences`. 
 PCM is uncompressed inside the JSON. A 60-second 48 kHz stereo clip contains 23,040,000 bytes of float PCM; its base64 channel payloads take approximately 30,720,000 characters, plus JSON metadata. Compressed MP3/FLAC inputs therefore become much larger project files after decoding. The engine limits decoded project PCM to 256 MiB, tracks to 64, clips to 512, markers to 1,000 and timeline duration to 10 minutes.
 
 The current project is fully recoverable from a valid saved file, including edited sample data and placements. Undo/redo entries are intentionally session-local and are not recovered from JSON. A project is not the same as an exported listening file: use audio export for a WAV/MP3/etc mix, and save project JSON to continue editing.
+
+## Beta layouts and live settings
+
+The native JSON version remains 1 for backward compatibility. Older mono/stereo files without layout fields are accepted; the default project output is stereo. New surround audio must declare `layout: "5.1"` or `"7.1"` alongside six/eight channel payloads. Canonical order is FL, FR, FC, LFE, BL, BR for 5.1, followed by SL, SR for 7.1. A format with ambiguous channel labels requires an explicit import-layout declaration; changing the project output layout is a separate operation.
+
+The browser stores validated live rack definitions under `settings.live`, shaped as `{version:1,racks:{master:{chain:[],automation:[]},trackId:{chain:[],automation:[]}}}`. Stage IDs preserve parameter/XY/automation references when reordered. Settings save definitions, never active device streams, pending capture buffers, MIDI notes, live effect delay history, credentials or armed script triggers. The original clip PCM contains only committed edits. To produce a file with current live racks, explicitly choose a live-settings render or record the running program.
+
+`project.saveTrack` creates a one-track portable project with appropriate selected IDs, clip-keyed MIDI references and only the retained track/master live racks. Independent stem export creates audio files rather than editable project structures. Audacity and REAPER exports use their genuine native structures and documented supported subsets; see [Audacity](AUDACITY.md) and [REAPER](REAPER.md).
+
+Disk recording archives are separate OPFS data, with chunk manifests and recovery accounting. They are not embedded into every project save. Export an archive or import a bounded range to move it into portable files. In-memory audio encodes are capped at 128 MiB (with conservative guard space), and projected resampled PCM at 256 MiB; long archive WAV/RF64 export streams separately to a chosen file.

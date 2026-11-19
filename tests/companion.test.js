@@ -9,10 +9,29 @@ import { CompanionBridge, companionURL } from '../src/companion.js';
 import { encodeWav, decodeWav } from '../src/wav.js';
 import { decodeAudioBytes, nativeCapabilities } from '../scripts/node-codecs.mjs';
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+test('macro validation honors explicitly supplied variable names without executing commands',async()=>{
+  const workbench=new NodeWorkbench();
+  try{
+    assert.equal((await workbench.execute('macro.validate',{text:'let value=custom; track.add({});',variables:{custom:1}})).valid,true);
+    assert.equal((await workbench.execute('macro.validate',{text:'let value=missing; track.add({});',variables:{custom:1}})).valid,false);
+    assert.equal(workbench.getState().tracks.length,0);
+  }finally{await workbench.dispose();}
+});
 const pcm=(frames=1024,channels=1)=>{const bytes=Buffer.alloc(frames*channels*4);for(let i=0;i<frames;i++)for(let c=0;c<channels;c++)bytes.writeFloatLE(.25*Math.sin(2*Math.PI*(440+c*101)*i/48000),(i*channels+c)*4);return bytes;};
 async function receiver(){const socket=createSocket('udp4'),packets=[];socket.on('message',message=>packets.push(Buffer.from(message)));await new Promise((resolve,reject)=>{socket.once('error',reject);socket.bind(0,'127.0.0.1',resolve);});return{socket,packets,destination:{id:'test',label:'Synthetic local receiver',address:'127.0.0.1',port:socket.address().port}};}
 async function withApi(fn,options={}){const api=await startApiServer({port:0,...options});try{return await fn(api);}finally{await api.workbench.dispose();api.server.closeAllConnections();await new Promise(resolve=>api.server.close(resolve));}}
 async function command(api,method,params={},expect=200){const response=await fetch(api.url+'/v1/execute',{method:'POST',headers:{Authorization:'Bearer '+api.token,'Content-Type':'application/json'},body:JSON.stringify({method,params})});const result=await response.json();assert.equal(response.status,expect,JSON.stringify(result));return result;}
+test('HTTP PCM counters require one canonical integer query value and reject ambiguity atomically',async()=>{
+  const r=await receiver();
+  try{await withApi(async api=>{
+    const {result:stream}=await command(api,'stream.start',{destination:'test',profile:'f32le',inputSampleRate:48000,inputLayout:'mono'});
+    for(const sequence of ['','%20','0x0','1e0','0&sequence=1','-0']){
+      const response=await fetch(api.url+'/v1/stream/'+stream.id+'/pcm?sequence='+sequence+'&startFrame=0&frames=1',{method:'POST',headers:{Authorization:'Bearer '+api.token,'Content-Type':'application/octet-stream'},body:pcm(1)});
+      assert.equal(response.status,400);await response.arrayBuffer();assert.equal(api.workbench.streams.status().receivedPackets,0);
+    }
+    await command(api,'stream.stop');assert.equal(r.packets.length,0);
+  },{destinations:[r.destination]});}finally{r.socket.close();}
+});
 test('destinations and encoder profiles cannot select arbitrary hosts, URLs or shell options',()=>{
   for(const destination of [{id:'x',address:'example.com',port:12},{id:'../x',address:'127.0.0.1',port:12},{id:'x',address:'127.0.0.1',port:0},{id:'x',address:'0.0.0.0',port:12}])assert.throws(()=>normalizeDestinations([destination]));
   const args=encoderArgs({profile:'opus',inputSampleRate:48000,sampleRate:48000,layout:'stereo',bitrate:128});assert.ok(args.includes('pipe:1'));assert.equal(args.some(arg=>arg.includes('udp://')),false);

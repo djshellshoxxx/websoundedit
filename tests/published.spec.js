@@ -1,6 +1,7 @@
 import {test,expect} from '@playwright/test';
 test('the published Pages beta loads its exact modules and completes a real edit',async({page})=>{
  test.skip(!process.env.PLAYWRIGHT_BASE_URL,'Live verification runs after Pages deployment.');
+ await expect.poll(async()=>{const response=await page.request.get(new URL('build.json',process.env.PLAYWRIGHT_BASE_URL).href+'?commit='+process.env.GITHUB_SHA);return response.ok()?(await response.json()).commit:null;},{timeout:60000}).toBe(process.env.GITHUB_SHA);
  const errors=[];page.on('pageerror',error=>errors.push(error.message));
  await page.goto('./');await page.waitForFunction(()=>Boolean(window.websoundedit?.ready));await page.evaluate(()=>websoundedit.ready);
  expect(await page.evaluate(()=>websoundedit.version)).toBe('1.0.0-beta.1');

@@ -353,6 +353,11 @@ export class RackPanel {
     }
   }
 
+  cancelGesture() {
+    if (this.pointer) this.pointerEnd({ pointerId: this.pointer.pointerId }, true);
+    this.clearDrag();
+  }
+
   applyPad(event) {
     const rect = this.el.querySelector('[data-rack-xy]').getBoundingClientRect();
     if (!rect.width || !rect.height) return;

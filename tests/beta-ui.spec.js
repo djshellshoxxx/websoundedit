@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { decodeWav } from '../src/wav.js';
+import { encodeWav, decodeWav } from '../src/wav.js';
 
 async function boot(page, hash = '') {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
@@ -46,6 +46,17 @@ test('surround selection UI identifies speakers and changes only the chosen chan
   const result=await page.evaluate(async()=>{const after=await websoundedit.execute('clip.getAudio'),before=window.__surroundBefore;return {layout:after.layout,selection:websoundedit.getState().selection.channels,untouched:after.channels.every((channel,index)=>index===2||channel.every((value,i)=>value===before.channels[index][i])),centerChanged:after.channels[2].some((value,i)=>value!==before.channels[2][i])};});
   expect(result).toEqual({layout:'5.1',selection:[2],untouched:true,centerChanged:true});expect(errors).toEqual([]);
 });
+test('manual import offers an explicit source-layout declaration after rejecting unidentified surround', async ({ page }) => {
+  const errors=await boot(page),audio={sampleRate:48000,layout:'5.1',channels:Array.from({length:6},(_,index)=>new Float32Array(4800).fill((index+1)/16))},bytes=encodeWav(audio,{bitDepth:32,float:true});new DataView(bytes.buffer).setUint32(40,0,true);
+  const before=await page.evaluate(()=>websoundedit.getState().tracks.map(track=>track.id));
+  await page.locator('#audio-input').setInputFiles({name:'unidentified-surround.wav',mimeType:'audio/wav',buffer:Buffer.from(bytes)});
+  await expect(page.locator('#status')).toContainText('explicit channel layout');expect(await page.evaluate(()=>websoundedit.getState().tracks.map(track=>track.id))).toEqual(before);
+  await page.evaluate(()=>websoundedit.execute('ui.options',{page:'general'}));await expect(page.locator('#options-import-layout')).toHaveValue('auto');await page.locator('#options-import-layout').selectOption('5.1');await page.locator('[data-view-close]').click();
+  await page.locator('#audio-input').setInputFiles({name:'declared-surround.wav',mimeType:'audio/wav',buffer:Buffer.from(bytes)});await expect(page.locator('.track-waveform')).toHaveCount(4);
+  const result=await page.evaluate(async()=>{const audio=await websoundedit.execute('clip.getAudio');return{layout:audio.layout,channels:audio.channels.map(channel=>channel[0]),projectLayout:websoundedit.getState().outputLayout,preference:websoundedit.saveSettings().workbench.import.layout};});
+  expect(result).toEqual({layout:'5.1',channels:[1/16,2/16,3/16,4/16,5/16,6/16],projectLayout:'stereo',preference:'5.1'});
+  await page.evaluate(()=>websoundedit.execute('ui.importLayout.set',{layout:'auto'}));expect(await page.evaluate(()=>websoundedit.saveSettings().workbench.import.layout)).toBe('auto');expect(errors).toEqual([]);
+});
 test('macro action recording uses successful semantic edits and structured scripts stay intact', async ({ page }) => {
   const errors=await boot(page);await page.locator('[data-action="macros"]').click();await page.locator('a[href="#macros/record"]').click();await page.locator('#macro-record-start').click();
   await page.locator('#macro-return-editor').click();await page.evaluate(async()=>{await websoundedit.execute('effect.gain',{db:-6});try{await websoundedit.execute('effect.gain',{db:999});}catch{}});
@@ -53,6 +64,59 @@ test('macro action recording uses successful semantic edits and structured scrip
   const recorded=await page.locator('#macro-source').inputValue();expect(recorded).toContain('effect.gain');expect(recorded).toContain('-6');expect(recorded).not.toContain('999');expect((recorded.match(/effect\.gain/g)||[])).toHaveLength(1);
   const structured='// WebSoundEdit Macro 1\nrepeat (2) { effect.gain({db: -1}); }';await page.locator('#macro-source').fill(structured);await page.locator('#macro-visual-tab').click();await expect(page.locator('#macro-validation')).toContainText('structured logic');await expect(page.locator('#macro-source')).toHaveValue(structured);
   await page.locator('#macro-validate').click();await expect(page.locator('#macro-validation')).toContainText('Valid syntax');expect(errors).toEqual([]);
+});
+test('a running batch rejects outside edits and exports and restores once when stopped from the editor', async ({ page }) => {
+  const errors=await boot(page),downloads=[];page.on('download',file=>downloads.push(file.suggestedFilename()));
+  const bytes=Buffer.from(encodeWav({sampleRate:8000,channels:[new Float32Array(800).fill(.125)]},{bitDepth:32,float:true}));
+  await page.locator('[data-action="macros"]').click();
+  await page.locator('#macro-source').fill('wait({seconds:60});file.export({format:"wav",scope:"clip",raw:true});');
+  await page.locator('a[href="#macros/batch"]').click();
+  await page.locator('#batch-files').setInputFiles({name:'batch-input.wav',mimeType:'audio/wav',buffer:bytes});
+  await page.evaluate(async()=>{
+    window.__batchOriginal=await websoundedit.saveProject({download:false});
+    window.__batchTheme=websoundedit.saveSettings().theme;
+    const read=File.prototype.text;
+    File.prototype.text=function(){if(this.name==='deferred-settings.json')return new Promise(resolve=>{window.__releaseSettings=()=>{File.prototype.text=read;resolve(JSON.stringify({...websoundedit.saveSettings(),theme:'terminal'}));};});return read.call(this);};
+  });
+  // The read begins before ownership is acquired and resolves afterward.
+  await page.locator('#settings-input').setInputFiles({name:'deferred-settings.json',mimeType:'application/json',buffer:Buffer.from('{}')});
+  await expect.poll(()=>page.evaluate(()=>typeof window.__releaseSettings)).toBe('function');
+  await page.locator('#batch-run').click();
+  await expect.poll(()=>page.evaluate(async()=>(await websoundedit.execute('macro.status')).batch)).toBe(true);
+  await expect.poll(()=>page.evaluate(()=>websoundedit.getState().tracks.flatMap(track=>track.clips).map(clip=>clip.name))).toEqual(['batch-input']);
+  await page.locator('[data-view-close]').click();await expect(page.locator('#batch-ownership-banner')).toBeVisible();
+  const blocked=await page.evaluate(async()=>{
+    const before=await websoundedit.execute('clip.getAudio'),input=websoundedit.inputs.list()[0];
+    const operations=[
+      ()=>websoundedit.execute('effect.gain',{db:-12}),
+      ()=>websoundedit.execute('track.add',{name:'Outside edit'}),
+      ()=>websoundedit.execute('file.import',{input:input.id}),
+      ()=>websoundedit.execute('file.export',{format:'wav',scope:'clip',download:false}),
+      ()=>websoundedit.execute('file.exportStems',{format:'wav',download:false}),
+      ()=>websoundedit.loadProject(window.__batchOriginal),
+      ()=>websoundedit.loadSettings({...websoundedit.saveSettings(),theme:'terminal'}),
+      ()=>websoundedit.rack.add('delay'),
+      ()=>websoundedit.setPlaybackRate(1.5),
+      ()=>websoundedit.inputs.supply([new File(['outside'],'outside.wav')]),
+      ()=>websoundedit.importFile(new File(['outside'],'outside.wav')),
+    ];
+    const codes=[];for(const operation of operations){try{await operation();codes.push('accepted');}catch(error){codes.push(error.code);}}
+    window.__releaseSettings();
+    const after=await websoundedit.execute('clip.getAudio');
+    return{codes,same:before.channels.every((channel,index)=>channel.every((value,frame)=>value===after.channels[index][frame])),inputs:websoundedit.inputs.list().map(item=>item.name)};
+  });
+  expect(blocked.codes).toEqual(Array(11).fill('BUSY'));expect(blocked.same).toBe(true);expect(blocked.inputs).toEqual(['batch-input.wav']);
+  await expect(page.locator('#status')).toContainText('batch is using');
+  expect(await page.evaluate(()=>websoundedit.saveSettings().theme===window.__batchTheme)).toBe(true);
+  await page.locator('[data-action="track.add"]').click();await expect(page.locator('.track-waveform')).toHaveCount(1);
+  await page.locator('#audio-input').setInputFiles({name:'outside-import.wav',mimeType:'audio/wav',buffer:bytes});await expect(page.locator('.track-waveform')).toHaveCount(1);
+  await page.locator('#batch-ownership-banner [data-batch-cancel]').click();
+  await expect.poll(()=>page.evaluate(async()=>(await websoundedit.execute('macro.status')).batch)).toBe(false);
+  await expect(page.locator('#batch-ownership-banner')).not.toBeVisible();
+  expect(await page.evaluate(async()=>JSON.stringify(await websoundedit.saveProject({download:false}))===JSON.stringify(window.__batchOriginal))).toBe(true);
+  expect((await page.evaluate(()=>websoundedit.execute('macro.status'))).outputs.count).toBe(0);expect(downloads).toEqual([]);
+  await page.evaluate(()=>websoundedit.execute('track.add',{name:'Editing resumed'}));await expect(page.locator('.track-waveform')).toHaveCount(4);
+  expect(errors).toEqual([]);
 });
 test('saved macro import triggers are definitions only and invalid live settings reject before project replacement', async ({ page }) => {
   const errors=await boot(page);
@@ -108,4 +172,15 @@ test('actual OPFS master recording exports committed frames and range import rem
   await page.evaluate(()=>websoundedit.execute('recorder.stop'));
   const exported=await page.evaluate(async()=>{const result=await websoundedit.execute('recordings.list'),recordings=Array.isArray(result)?result:result.recordings,recording=recordings.find(item=>item.name==='Browser archive');const output=await websoundedit.execute('recordings.export',{recordingId:recording.id});await websoundedit.execute('recordings.importRange',{recordingId:recording.id,start:0,end:.05});await websoundedit.execute('recordings.delete',{recordingId:recording.id});return{bytes:Array.from(output.bytes),frames:recording.frames,channels:recording.channels,count:websoundedit.getState().tracks.length};});
   const audio=decodeWav(Uint8Array.from(exported.bytes));expect(audio.channels[0].length).toBe(exported.frames);expect(audio.channels.length).toBe(exported.channels);expect(audio.channels.some(channel=>channel.some(sample=>Math.abs(sample)>.0001))).toBe(true);expect(exported.count).toBe(4);expect(errors).toEqual([]);
+});
+
+test('known missing live capabilities fail macro preflight before an earlier edit',async({page})=>{
+  await page.addInitScript(()=>Object.defineProperty(globalThis,'AudioWorkletNode',{configurable:true,value:undefined}));
+  const errors=await boot(page);
+  const result=await page.evaluate(async()=>{
+    const before=JSON.stringify(websoundedit.getState());let message='';
+    try{await websoundedit.macros.run('audio.generate({duration:.02}); live.rack.set({chain:[]});');}catch(error){message=error.message;}
+    return{same:before===JSON.stringify(websoundedit.getState()),message,available:websoundedit.commandCatalog().find(command=>command.method==='live.rack.set').available};
+  });
+  expect(result.available).toBe(false);expect(result.message).toMatch(/unavailable/i);expect(result.same).toBe(true);expect(errors).toEqual([]);
 });

@@ -5,7 +5,12 @@ class RackProcessor extends AudioWorkletProcessor {
     this.clock={audioTime:0,timelineTime:0,rate:1,loopStart:0,loopEnd:0,playing:false};this.alive=true;this.blocks=0;
     this.port.onmessage=({data})=>{try{
       if(data.method==='chain')this.dsp.updateChain(data.chain);
-      else if(data.method==='parameter')this.dsp.schedule(data.event);
+      else if(data.method==='parameter'){
+        // Manual gestures use the advancing audio sample clock even when the
+        // transport timeline is paused. Explicit timeline schedules are lanes.
+        const at=Number.isFinite(data.event.audioTime)?this.dsp.frames/sampleRate+Math.max(0,data.event.audioTime-currentTime):data.event.at;
+        this.dsp.schedule({...data.event,at});
+      }
       else if(data.method==='automation')this.dsp.setAutomation(data.lanes);
       else if(data.method==='clock'){this.clock={...this.clock,...data.clock};this.dsp.setTempo(data.bpm??this.dsp.bpm);}
       else if(data.method==='dispose')this.alive=false;

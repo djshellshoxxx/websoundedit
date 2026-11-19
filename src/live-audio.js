@@ -10,6 +10,7 @@ import { RecordingClient } from './recording-client.js';
 import { encodeWav } from './wav.js';
 import { validateCommandParams } from './command-schema.js';
 import { LIVE_COMMANDS } from './live-commands.js';
+import { ENCODING_LIMITS } from './codec-budget.js';
 export { LIVE_COMMANDS, LIVE_LIMITS };
 const contracts=new Map(LIVE_COMMANDS.map(command=>[command.method,command]));
 const fail=(message,code='INVALID_ARGUMENT')=>{throw Object.assign(new Error(message),{code});};
@@ -33,7 +34,7 @@ export class LiveAudioRuntime extends EventTarget {
     this.engineListener=event=>this._engineChanged(event.detail||{});this.engine.addEventListener?.('state',this.engineListener);this.knownTracks=new Set(this._project().tracks.map(track=>track.id));
   }
   _project(){return this.engine.getState?.()||{sampleRate:48000,outputLayout:'stereo',bpm:120,beatsPerBar:4,beatOffset:0,tracks:[],duration:0,settings:{}};}
-  capabilities(){return{audioWorklet:!!(globalThis.AudioWorkletNode||this.contextFactory&&this.captureFactory!==CaptureTap.create),...this.devices.capabilities(),outputSelection:!!(this.context?.setSinkId||(globalThis.AudioContext||globalThis.webkitAudioContext)?.prototype?.setSinkId),opfs:this.storageState.available,streamingFileExport:!!globalThis.showSaveFilePicker,layouts:Object.keys(CHANNEL_LAYOUTS),limits:LIVE_LIMITS,editor:{maxSeconds:600,maxBytes:256*1024*1024},recording:{maxSeconds:86400,maxBytes:512*1024**3},timePitchSurround:false};}
+  capabilities(){return{audioWorklet:!!(globalThis.AudioWorkletNode||this.contextFactory&&this.captureFactory!==CaptureTap.create),...this.devices.capabilities(),outputSelection:!!(this.context?.setSinkId||(globalThis.AudioContext||globalThis.webkitAudioContext)?.prototype?.setSinkId),opfs:this.storageState.available,streamingFileExport:!!globalThis.showSaveFilePicker,layouts:Object.keys(CHANNEL_LAYOUTS),limits:LIVE_LIMITS,editor:{maxSeconds:600,maxBytes:256*1024*1024},recording:{maxSeconds:86400,maxBytes:512*1024**3},exportLimits:{...ENCODING_LIMITS},timePitchSurround:false};}
   commands(){return LIVE_COMMANDS.map(command=>copy(command));}
   subscribe(listener){if(typeof listener!=='function')throw new TypeError('Provide a live state listener.');this.listeners.add(listener);return()=>this.listeners.delete(listener);}
   _emit(type,detail={}){const event={type,...detail};for(const listener of this.listeners)try{listener(event);}catch{}this.dispatchEvent(new CustomEvent(type,{detail:event}));}
@@ -99,7 +100,7 @@ export class LiveAudioRuntime extends EventTarget {
       points.sort((a,b)=>a.time-b.time);const lanes=rack.automation.filter(lane=>lane!==prior).concat({slotId:stage.id,param:params.param,points});
       await this._automationSet({target:params.target,lanes});return{target:params.target||'master',...event,scheduled:true};
     }
-    if(this.contextReady){await this.contextReady;await this._ensureTrackIfNeeded(key);await this.graphs.setParameter(key,event);}
+    if(this.contextReady){await this.contextReady;await this._ensureTrackIfNeeded(key);await this.graphs.setParameter(key,{...event,audioTime:this.context.currentTime});}
     if(params.param==='wet')stage.wet=params.value;else stage.params[params.param]=params.value;return{target:params.target||'master',...event};
   }
   async _ensureTrackIfNeeded(key){if(key!=='master')await this._ensureTrack(key);}

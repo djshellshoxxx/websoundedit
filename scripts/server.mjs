@@ -98,8 +98,10 @@ export function createApiServer({ editor = new AudioEditor(), workbench: supplie
       if(request.method==='POST'&&pcmPath){
         if(!/^application\/octet-stream(?:\s*;|$)/i.test(request.headers['content-type']||'')){json(response,415,{error:{code:'CONTENT_TYPE',message:'PCM packets require application/octet-stream.'}});return;}
         const bytes=new Uint8Array(await readBody(request,256*1024,lease)),packet={};
-        for(const key of ['sequence','startFrame','frames'])packet[key]=url.searchParams.has(key)?Number(url.searchParams.get(key)):NaN;
-        packet.droppedFrames=url.searchParams.has('droppedFrames')?Number(url.searchParams.get('droppedFrames')):0;
+        for(const key of ['sequence','startFrame','frames','droppedFrames']){
+          const values=url.searchParams.getAll(key);
+          packet[key]=key==='droppedFrames'&&!values.length?0:values.length===1&&/^(0|[1-9][0-9]{0,15})$/.test(values[0])?Number(values[0]):NaN;
+        }
         const result=workbench.streams.feed(pcmPath[1],bytes,packet);operationCompleted=true;json(response,200,result);return;
       }
       if(request.method==='POST'&&url.pathname==='/v1/inputs'){

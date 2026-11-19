@@ -17,9 +17,12 @@ export function uniqueFilename(value, extension, used) {
 }
 /** Browser file references stay outside scripts/project JSON. Scripts receive aliases only. */
 export class BrowserFileIO {
-  constructor(dependencies) { Object.assign(this, dependencies); this.inputs = new Map(); this.serial = 0; this.collection = null; }
+  constructor(dependencies) { Object.assign(this, dependencies); this.inputs = new Map(); this.serial = 0; this.collection = null; this.accessGuards = new Set(); }
+  addAccessGuard(guard) { if (typeof guard !== 'function') throw new TypeError('Provide a file-operation guard.'); this.accessGuards.add(guard); return () => this.accessGuards.delete(guard); }
+  assertAccess(operation, context = {}) { for (const guard of this.accessGuards) guard({ operation, context }); }
   register(runtime) { for (const descriptor of FILE_COMMANDS) runtime.register(descriptor, (params, context) => this[descriptor.method === 'file.import' ? 'import' : descriptor.method === 'file.export' ? 'export' : 'exportStems'](params, context)); }
-  supply(files, { append = false } = {}) {
+  supply(files, { append = false, ...context } = {}) {
+    this.assertAccess('supply', context);
     if (!Array.isArray(files) || files.length > 128 || files.some(file => !file || typeof file.arrayBuffer !== 'function' || typeof file.name !== 'string')) throw new Error('Supply up to 128 local files.');
     if (!append) this.inputs.clear();
     if (this.inputs.size + files.length > 128) throw new Error('Too many supplied input aliases. Start a new input batch.');
@@ -27,15 +30,17 @@ export class BrowserFileIO {
   }
   aliases() { return [...this.inputs.values()].map(({ alias }) => ({ ...alias })); }
   async import(params, context = {}) {
+    this.assertAccess('import', context);
     const id = typeof params.input === 'string' ? params.input : params.input?.id;
     if (typeof id !== 'string' || !this.inputs.has(id)) throw new Error('This input alias is unavailable. Supply the local file in Import or Batch first.');
     context.signal?.throwIfAborted(); const { file } = this.inputs.get(id);
     const result = await this.importOne(file, params, context);
     return { ...result, input: id, filename: file.name, clipIds: result?.clipIds || (result?.id ? [result.id] : []), ...(result?.warnings ? { warnings: result.warnings } : {}) };
   }
-  beginCollection({ limit = MAX_EXPORT_COLLECTION_BYTES, download = false } = {}) { if (this.collection) throw new Error('An output collection is already active.'); this.collection = { limit: Math.min(limit, MAX_EXPORT_COLLECTION_BYTES), total: 0, files: [], used: new Set(), download }; }
-  finishCollection() { const value = this.collection; this.collection = null; return value ? { files: value.files, total: value.total } : { files: [], total: 0 }; }
-  emit(result, name, download = true) {
+  beginCollection({ limit = MAX_EXPORT_COLLECTION_BYTES, download = false, ...context } = {}) { this.assertAccess('collect', context); if (this.collection) throw new Error('An output collection is already active.'); this.collection = { limit: Math.min(limit, MAX_EXPORT_COLLECTION_BYTES), total: 0, files: [], used: new Set(), download }; }
+  finishCollection(context = {}) { this.assertAccess('collect', context); const value = this.collection; this.collection = null; return value ? { files: value.files, total: value.total } : { files: [], total: 0 }; }
+  emit(result, name, download = true, context = {}) {
+    this.assertAccess('export', context);
     if (this.collection) {
       if (this.collection.total + result.bytes.byteLength > this.collection.limit) throw new Error(`Collected outputs exceed ${bytesLabel(this.collection.limit)}. Use individual downloads or a smaller batch.`);
       const unique = uniqueFilename(name, result.ext, this.collection.used); this.collection.total += result.bytes.byteLength; this.collection.files.push({ name: unique, ...result });
@@ -44,6 +49,7 @@ export class BrowserFileIO {
     return result;
   }
   async export(params = {}, context = {}) {
+    this.assertAccess('export', context);
     context.signal?.throwIfAborted(); const state = this.getState(), scope = params.scope || 'mix', format = params.format || 'wav';
     const trackId = params.trackId || (scope === 'track' ? state.selectedTrackId : undefined);
     if (scope === 'track' && !state.tracks.some(track => track.id === trackId)) throw new Error('Choose an available track to export.');
@@ -63,9 +69,10 @@ export class BrowserFileIO {
       const audio = await (params.live ? this.executeLive('live.render', render, context) : this.executeCore('audio.render', render));
       context.signal?.throwIfAborted(); result = await encodeAudio(audio, { ...params, metadata: state.metadata || {} });
     }
-    context.signal?.throwIfAborted(); return this.emit(result, scope === 'selection' ? `${name}-selection` : name, params.download !== false);
+    context.signal?.throwIfAborted(); return this.emit(result, scope === 'selection' ? `${name}-selection` : name, params.download !== false, context);
   }
   async exportStems(params = {}, context = {}) {
+    this.assertAccess('exportStems', context);
     const state = this.getState(), ids = params.trackIds || state.tracks.filter(track => track.clips.length).map(track => track.id);
     if (!ids.length || ids.length > 64 || new Set(ids).size !== ids.length || ids.some(id => !state.tracks.some(track => track.id === id))) throw new Error('Choose one to 64 unique available tracks for stems.');
     if (['session', 'aup3', 'aup', 'reaper'].includes(params.format)) throw new Error('Stems contain rendered audio. Save a session separately to preserve editable structure.');
@@ -82,7 +89,7 @@ export class BrowserFileIO {
     } finally { this.collection = collection; }
     context.signal?.throwIfAborted(); const bytes = zipSync(files, { level: 0 });
     if (bytes.length > MAX_EXPORT_COLLECTION_BYTES) throw new Error('The stem archive exceeds its output size limit. Export fewer tracks.');
-    return this.emit({ bytes, ext: 'zip', mime: 'application/zip', warnings, tracks: ids.length }, params.name || `${state.name}-stems`, params.download !== false);
+    return this.emit({ bytes, ext: 'zip', mime: 'application/zip', warnings, tracks: ids.length }, params.name || `${state.name}-stems`, params.download !== false, context);
   }
 }
 
