@@ -1,0 +1,352 @@
+{
+  "seed": 1096107097,
+  "seedHex": "0x41554459",
+  "runtime": "v24.22.3",
+  "platform": "linux",
+  "generatedAt": "2026-11-19T11:03:53.447Z",
+  "limits": {
+    "mutationCasesPerFamily": 256,
+    "largestFocusedPayloadBytes": 1048629
+  },
+  "sourceSha256": {
+    "src/audacity.js": "61f31de70e825fd91843516a6aaf59d79fdbb2247b2790a4dc001213e4894ba6",
+    "src/audacity-xml.js": "4afb655e76ed9c3309e597687263f1d9317e60d10e65291fe98d01266e10c890",
+    "src/project-archive.js": "e5d97acd377b7049c2e8fe62c38e40b0881bd88ae33beb4629b56d93f2679591",
+    "src/bounded-inflate.js": "95297a099decd4905eff4f8805a404a5c372a5035ec9495d3ccaf953f3539227",
+    "src/engine.js": "0742bc5c205d499bcf36d53bd5a2589ef2a5cd824b97d0d16a9e5b2084b4f15d",
+    "src/metadata.js": "620a0dc466d4f800f3c5f170fae66df4961b8b421b5810ed7bafcccdc0b8df46",
+    "package-lock.json": "8684a4dc9ea27f40808e54416c9a2d1a6f0fef8cb7a717b03e5a4fdd69278a79"
+  },
+  "families": {
+    "xml-bytes": {
+      "total": 256,
+      "accepted": 10,
+      "rejected": 246,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Audacity project contains an invalid XML name.": 64,
+        "TypeError: The encoded data was not valid for encoding utf-8": 94,
+        "Error: Mismatched Audacity XML closing tag.": 35,
+        "Error: Audacity XML attributes must be quoted.": 14,
+        "Error: Invalid Audacity XML attribute.": 14,
+        "ParseError: Reporting error \"Extra content at the end of the document\" caused Error: Invalid Audacity XML: Extra content at the end of the document": 8,
+        "ParseError: Reporting error \"EntityRef: expecting ;\" caused Error: Invalid Audacity XML: EntityRef: expecting ;": 1,
+        "Error: Truncated Audacity XML attribute.": 9,
+        "Error: Invalid Audacity legacy block length.": 1,
+        "Error: Truncated Audacity XML markup.": 2,
+        "Error: Invalid Audacity sequence length.": 1,
+        "Error: This Audacity project format is newer than the supported 3.x schema. Export audio stems in Audacity.": 2,
+        "Error: Incomplete Audacity XML.": 1
+      }
+    },
+    "binary-xml": {
+      "total": 256,
+      "accepted": 10,
+      "rejected": 246,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Truncated Audacity binary XML.": 107,
+        "Error: Unsupported Audacity binary XML field 93; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Audacity binary XML references an unknown name.": 41,
+        "Error: Unsupported Audacity binary XML field 84; use a supported Audacity 3.x project or export audio stems.": 2,
+        "Error: Unsupported Audacity binary XML field 69; use a supported Audacity 3.x project or export audio stems.": 1,
+        "TypeError: The encoded data was not valid for encoding utf-8": 5,
+        "Error: Unsupported Audacity XML character width.": 7,
+        "Error: Unsupported Audacity binary XML field 20; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 96; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Invalid Audacity dictionary stack.": 1,
+        "Error: Unsupported Audacity binary XML field 17; use a supported Audacity 3.x project or export audio stems.": 2,
+        "Error: Unsupported Audacity binary XML field 139; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 35; use a supported Audacity 3.x project or export audio stems.": 2,
+        "Error: Unsupported Audacity binary XML field 85; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 132; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Incomplete Audacity binary XML.": 6,
+        "Error: Unsupported Audacity binary XML field 107; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 198; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 67; use a supported Audacity 3.x project or export audio stems.": 2,
+        "Error: Unsupported Audacity binary XML field 226; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 130; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 70; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Mismatched Audacity XML closing tag.": 6,
+        "Error: Unsupported Audacity binary XML field 204; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 48; use a supported Audacity 3.x project or export audio stems.": 3,
+        "Error: Unsupported Audacity binary XML field 98; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 66; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 141; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 131; use a supported Audacity 3.x project or export audio stems.": 5,
+        "Error: Unsupported Audacity binary XML field 155; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 136; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 80; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 116; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 28; use a supported Audacity 3.x project or export audio stems.": 2,
+        "Error: Unsupported Audacity binary XML field 210; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 108; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 241; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 129; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 209; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 81; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 188; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 106; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 33; use a supported Audacity 3.x project or export audio stems.": 2,
+        "Error: Unsupported Audacity binary XML field 97; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 34; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 231; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 162; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Audacity XML integer is too large.": 1,
+        "Error: Unsupported Audacity binary XML field 128; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Invalid or duplicate Audacity XML attribute.": 3,
+        "Error: Unsupported Audacity binary XML field 205; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 242; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 19; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 65; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 45; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 252; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 166; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 113; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 68; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 186; use a supported Audacity 3.x project or export audio stems.": 2,
+        "Error: Unsupported Audacity binary XML field 152; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 127; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 117; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 240; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 230; use a supported Audacity 3.x project or export audio stems.": 1
+      }
+    },
+    "au-block": {
+      "total": 256,
+      "accepted": 148,
+      "rejected": 108,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Unsupported Audacity AU encoding or channel layout.": 50,
+        "Error: Audacity AU block length does not match its project.": 54,
+        "Error: Audacity block contains non-finite or unreasonable audio samples.": 3,
+        "Error: Unsupported Audacity AU block header.": 1
+      }
+    },
+    "legacy-zip": {
+      "total": 256,
+      "accepted": 6,
+      "rejected": 250,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Invalid project ZIP directory.": 113,
+        "Error: Oversubscribed DEFLATE Huffman tree.": 4,
+        "Error: Invalid project ZIP payload size or compression.": 19,
+        "Error: Invalid or encrypted project ZIP entry.": 8,
+        "Error: ZIP local and central filenames disagree.": 8,
+        "Error: Project ZIP checksum or size mismatch: project.aup": 14,
+        "Error: Unsupported ZIP64, multipart or oversized project archive.": 27,
+        "TypeError: The encoded data was not valid for encoding utf-8": 5,
+        "Error: DEFLATE distance exceeds available history.": 14,
+        "Error: DEFLATE code repeat exceeds its alphabet.": 3,
+        "Error: DEFLATE length does not match its ZIP entry.": 2,
+        "Error: Incomplete DEFLATE Huffman tree.": 9,
+        "Error: Invalid project ZIP entry.": 3,
+        "Error: Project archive exceeds the decompressed size limit.": 2,
+        "Error: DEFLATE output exceeds its declared size.": 5,
+        "Error: ZIP local and central checksum or sizes disagree.": 5,
+        "Error: Invalid project ZIP payload.": 6,
+        "Error: Invalid or oversized project ZIP.": 1,
+        "Error: DEFLATE end-of-block code is missing.": 1,
+        "Error: Truncated DEFLATE stream.": 1
+      }
+    },
+    "aup3-sqlite": {
+      "total": 256,
+      "accepted": 184,
+      "rejected": 72,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: database disk image is malformed": 39,
+        "Error: Audacity block contains non-finite or unreasonable audio samples.": 1,
+        "Error: malformed database schema (sampleblocks) - near \"AUTOINCREMENT\": syntax error": 2,
+        "Error: Audacity binary XML references an unknown name.": 4,
+        "Error: Unsupported Audacity table schema, generated column or column type.": 1,
+        "Error: malformed database schema (sampleblocks) - incomplete input": 1,
+        "Error: malformed database schema (autosave)": 1,
+        "Error: malformed database schema (sampleblocks) - near \"AUTOIFCREMENT\": syntax error": 1,
+        "Error: Unsupported Audacity binary XML field 130; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: malformed database schema (project)": 1,
+        "Error: Audacity block length does not match its sample data.": 1,
+        "Error: Truncated Audacity binary XML.": 5,
+        "TypeError: The encoded data was not valid for encoding utf-8": 4,
+        "Error: malformed database schema (sampleblocks)": 1,
+        "Error: Audacity saved project document is missing or too large. Close and save it in Audacity first.": 1,
+        "Error: Audacity project contains an invalid XML name.": 2,
+        "Error: malformed database schema (project) - near \"CRECTE\": syntax error": 1,
+        "Error: malformed database schema (autosave) - unrecognized token: \"[ KEY, dict BLOB, doc BLOB)\"": 1,
+        "Error: Invalid or duplicate Audacity XML attribute.": 1,
+        "Error: Unsupported Audacity binary XML field 18; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity XML character width.": 1,
+        "Error: Conflicting Audacity XML dictionary entry.": 1
+      }
+    },
+    "numeric-sample-rate": {
+      "total": 22,
+      "accepted": 2,
+      "rejected": 20,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Invalid Audacity sample rate.": 20
+      }
+    },
+    "numeric-sequence-length": {
+      "total": 22,
+      "accepted": 0,
+      "rejected": 22,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Invalid Audacity sequence length.": 11,
+        "Error: Invalid Audacity legacy block length.": 2,
+        "Error: Audacity sequence is missing audio blocks.": 9
+      }
+    },
+    "numeric-block-start": {
+      "total": 22,
+      "accepted": 3,
+      "rejected": 19,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Invalid Audacity block start.": 17,
+        "Error: Audacity sequence blocks contain gaps or overlaps. Repair the project in Audacity first.": 2
+      }
+    },
+    "numeric-block-length": {
+      "total": 22,
+      "accepted": 0,
+      "rejected": 22,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Invalid Audacity legacy block length.": 20,
+        "Error: Audacity sequence is missing audio blocks.": 2
+      }
+    },
+    "numeric-offset": {
+      "total": 22,
+      "accepted": 11,
+      "rejected": 11,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Invalid Audacity clip offset.": 9,
+        "Error: Audacity audio extends before zero or beyond the 10-minute timeline.": 2
+      }
+    },
+    "numeric-envelope-count": {
+      "total": 22,
+      "accepted": 4,
+      "rejected": 18,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Audacity volume envelopes need rendering in Audacity before import. Export audio stems to preserve their sound.": 18
+      }
+    },
+    "unsafe-zip-paths": {
+      "total": 7,
+      "accepted": 0,
+      "rejected": 7,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Project archive contains an unsafe file path.": 7
+      }
+    },
+    "xml-depth": {
+      "total": 8,
+      "accepted": 4,
+      "rejected": 4,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Audacity project XML is too complex.": 4
+      }
+    },
+    "xml-trust-boundaries": {
+      "total": 8,
+      "accepted": 3,
+      "rejected": 5,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Audacity projects with XML entities or internal DTDs are unsupported.": 1,
+        "Error: Compressed legacy Audacity projects reference external audio. Open and save a self-contained AUP3 in Audacity, or export audio stems, before importing here.": 1,
+        "Error: Audacity effect data cannot be reproduced here. Render effects or export audio stems in Audacity first.": 1,
+        "Error: Audacity notetrack data cannot be reproduced here. Render effects or export audio stems in Audacity first.": 1,
+        "Error: Audacity timetrack data cannot be reproduced here. Render effects or export audio stems in Audacity first.": 1
+      }
+    },
+    "metadata": {
+      "total": 256,
+      "accepted": 48,
+      "rejected": 208,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "RangeError: Unknown metadata field: constructor": 32,
+        "TypeError: Metadata comment must be text.": 8,
+        "RangeError: Metadata comment contains unsupported control characters.": 9,
+        "RangeError: Unknown metadata field: __proto__": 43,
+        "TypeError: Metadata title must be text.": 15,
+        "RangeError: Metadata artist contains unsupported control characters.": 14,
+        "RangeError: Unknown metadata field: unknown": 40,
+        "RangeError: Metadata title is too long.": 13,
+        "RangeError: Metadata title contains unsupported control characters.": 12,
+        "RangeError: Metadata artist is too long.": 12,
+        "TypeError: Metadata artist must be text.": 10
+      }
+    }
+  },
+  "focused": [
+    {
+      "id": "zip-crc-mismatch",
+      "outcome": "rejected",
+      "error": "Error: Project ZIP checksum or size mismatch: project.aup",
+      "elapsedMs": 0.273
+    },
+    {
+      "id": "zip-deflate-size-understatement",
+      "outcome": "rejected",
+      "error": "Error: DEFLATE output exceeds its declared size.",
+      "elapsedMs": 0.277
+    },
+    {
+      "id": "xml-attribute-count",
+      "outcome": "rejected",
+      "error": "Error: Audacity XML has too many attributes.",
+      "elapsedMs": 2.266
+    },
+    {
+      "id": "binary-writer-reader-depth-boundary",
+      "outcome": "accepted",
+      "result": "project",
+      "elapsedMs": 0.373
+    },
+    {
+      "id": "sqlite-generated-column",
+      "outcome": "rejected",
+      "error": "Error: Unsupported Audacity table schema, generated column or column type.",
+      "elapsedMs": 21.649
+    },
+    {
+      "id": "aup3-pcm-outside-editor-range",
+      "outcome": "rejected",
+      "error": "Error: Audacity block contains non-finite or unreasonable audio samples.",
+      "elapsedMs": 2.673
+    }
+  ],
+  "unexpected": [],
+  "totalCases": 1691,
+  "focusedCases": 6,
+  "globalPrototypeIntact": true
+}

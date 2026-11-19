@@ -1,0 +1,1915 @@
+{
+  "version": "1.0.0-beta.1",
+  "commit": "19cc781cf492c6b9678e045c4f242bbf3091c4a4",
+  "createdAt": "2026-11-19T14:50:35.059Z",
+  "images": [
+    {
+      "file": "guide-editor-desktop.png",
+      "chapter": "navigation",
+      "caption": "The running workbench: selection zoom changes the view, track actions keep their explicit target, and sound tools collapse for more waveform space.",
+      "alt": "WebSoundEdit beta editor with arrows to Selection zoom, track Save / Export and Hide sound tools.",
+      "width": 1440,
+      "height": 1250,
+      "callouts": [
+        {
+          "selector": "[data-action=\"view.zoomSelection\"]",
+          "label": "Zoom without changing samples",
+          "box": {
+            "x": 936.890625,
+            "y": 341,
+            "width": 73.5625,
+            "height": 26
+          },
+          "labelBox": {
+            "x": 788.671875,
+            "y": 277,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 800.671875,
+              "y": 284,
+              "width": 177.28125,
+              "height": 14
+            },
+            {
+              "x": 800.671875,
+              "y": 300,
+              "width": 55.734375,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "[data-track-export]",
+          "label": "Save this exact track",
+          "box": {
+            "x": 41,
+            "y": 573,
+            "width": 118,
+            "height": 25
+          },
+          "labelBox": {
+            "x": 95,
+            "y": 616,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 107,
+              "y": 631,
+              "width": 160.546875,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#inspector-toggle",
+          "label": "Give the waveform more room",
+          "box": {
+            "x": 1283.6875,
+            "y": 285,
+            "width": 128.3125,
+            "height": 32
+          },
+          "labelBox": {
+            "x": 1198,
+            "y": 206,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 1210,
+              "y": 213,
+              "width": 183.796875,
+              "height": 14
+            },
+            {
+              "x": 1210,
+              "y": 229,
+              "width": 34.921875,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-effects-desktop.png",
+      "chapter": "effects",
+      "caption": "An actual three-stage rack with stable effect order, individual wet/dry controls and independent XY assignments.",
+      "alt": "Effects rack with echo, tape, filter, wet/dry controls and XY pad.",
+      "width": 1440,
+      "height": 1600,
+      "callouts": [
+        {
+          "selector": "[data-rack-drag]",
+          "label": "Drag or use the arrow keys",
+          "box": {
+            "x": 1084,
+            "y": 656,
+            "width": 20,
+            "height": 40
+          },
+          "labelBox": {
+            "x": 806,
+            "y": 654,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 818,
+              "y": 669,
+              "width": 200.984375,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "[data-rack-wet]",
+          "label": "Each stage has wet / dry",
+          "box": {
+            "x": 1330,
+            "y": 636,
+            "width": 42,
+            "height": 42
+          },
+          "labelBox": {
+            "x": 1198,
+            "y": 572,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 1210,
+              "y": 587,
+              "width": 183.265625,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "[data-rack-xy]",
+          "label": "Two chosen parameters at once",
+          "box": {
+            "x": 1076,
+            "y": 1368.1875,
+            "width": 319,
+            "height": 220
+          },
+          "labelBox": {
+            "x": 828,
+            "y": 1456.1875,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 840,
+              "y": 1463.1875,
+              "width": 195.919921875,
+              "height": 14
+            },
+            {
+              "x": 840,
+              "y": 1479.1875,
+              "width": 32.046875,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#processing-mode",
+          "label": "Choose selection or live mode",
+          "box": {
+            "x": 1123.9375,
+            "y": 430,
+            "width": 271.0625,
+            "height": 32
+          },
+          "labelBox": {
+            "x": 875.9375,
+            "y": 386,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 887.9375,
+              "y": 393,
+              "width": 178.375,
+              "height": 14
+            },
+            {
+              "x": 887.9375,
+              "y": 409,
+              "width": 37.484375,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-channel-layout.png",
+      "chapter": "surround",
+      "caption": "Project layout and canonical speaker order are explicit. Output hardware capability is a separate setting.",
+      "alt": "Options Channel layout page with mono, stereo, 5.1 and 7.1 channel orders.",
+      "width": 1440,
+      "height": 1100,
+      "callouts": [
+        {
+          "selector": "#project-output-layout",
+          "label": "Choose the rendered layout",
+          "box": {
+            "x": 395,
+            "y": 329.75,
+            "width": 870,
+            "height": 32
+          },
+          "labelBox": {
+            "x": 715,
+            "y": 265.75,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 727,
+              "y": 280.75,
+              "width": 205.58203125,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": ".channel-layout-cards",
+          "label": "Read the exact speaker order",
+          "box": {
+            "x": 395,
+            "y": 385.75,
+            "width": 870,
+            "height": 239.5
+          },
+          "labelBox": {
+            "x": 715,
+            "y": 658.25,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 727,
+              "y": 665.25,
+              "width": 176.6953125,
+              "height": 14
+            },
+            {
+              "x": 727,
+              "y": 681.25,
+              "width": 36.890625,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "a[href=\"#options/output\"]",
+          "label": "Set actual monitoring output",
+          "box": {
+            "x": 155,
+            "y": 291,
+            "width": 191,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 135.5,
+            "y": 227,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 147.5,
+              "y": 234,
+              "width": 164.21875,
+              "height": 14
+            },
+            {
+              "x": 147.5,
+              "y": 250,
+              "width": 45.65625,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-midi-pedals.png",
+      "chapter": "midi",
+      "caption": "Pedal mappings select a command, press threshold and debounce. Arming is a separate local action; release never retriggers.",
+      "alt": "MIDI Options pedal mapping controls with local arm, command selection and debounce.",
+      "width": 1440,
+      "height": 1100,
+      "callouts": [
+        {
+          "selector": "#midi-actions-armed",
+          "label": "Arm only after reviewing actions",
+          "box": {
+            "x": 395,
+            "y": 366.5,
+            "width": 14,
+            "height": 14
+          },
+          "labelBox": {
+            "x": 607,
+            "y": 351.5,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 619,
+              "y": 358.5,
+              "width": 185.625,
+              "height": 14
+            },
+            {
+              "x": 619,
+              "y": 374.5,
+              "width": 49,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#midi-action-debounce",
+          "label": "Debounce switch chatter",
+          "box": {
+            "x": 395,
+            "y": 576.25,
+            "width": 425,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 492.5,
+            "y": 512.25,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 504.5,
+              "y": 527.25,
+              "width": 185.8125,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#midi-action-target",
+          "label": "Choose a command or macro",
+          "box": {
+            "x": 840,
+            "y": 576.25,
+            "width": 425,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 937.5,
+            "y": 630.25,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 949.5,
+              "y": 637.25,
+              "width": 166.67578125,
+              "height": 14
+            },
+            {
+              "x": 949.5,
+              "y": 653.25,
+              "width": 41.890625,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-macros-desktop.png",
+      "chapter": "macros",
+      "caption": "Canonical text retains loops and variables. Validate before running; Record actions and Batch files use the same command language.",
+      "alt": "Macro editor showing a loop that imports, trims quiet ends, normalizes and exports files.",
+      "width": 1440,
+      "height": 1100,
+      "callouts": [
+        {
+          "selector": "#macro-source",
+          "label": "Structured logic stays as text",
+          "box": {
+            "x": 395,
+            "y": 518,
+            "width": 870,
+            "height": 260
+          },
+          "labelBox": {
+            "x": 715,
+            "y": 454,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 727,
+              "y": 461,
+              "width": 185.484375,
+              "height": 14
+            },
+            {
+              "x": 727,
+              "y": 477,
+              "width": 27.615234375,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#macro-validate",
+          "label": "Validate before running",
+          "box": {
+            "x": 1070.421875,
+            "y": 824.75,
+            "width": 84.15625,
+            "height": 33.5
+          },
+          "labelBox": {
+            "x": 997.5,
+            "y": 876.25,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 1009.5,
+              "y": 891.25,
+              "width": 178.015625,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-long-recorder.png",
+      "chapter": "recording",
+      "caption": "The long recorder before capture. Its disk archive is separate from the bounded waveform editor; counters distinguish committed and queued bytes.",
+      "alt": "Long recorder source, start/pause controls, elapsed time and written/queued storage counters.",
+      "width": 1440,
+      "height": 1100,
+      "callouts": [
+        {
+          "selector": "#recorder-source",
+          "label": "Choose the program or input",
+          "box": {
+            "x": 395,
+            "y": 405.75,
+            "width": 425,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 492.5,
+            "y": 459.75,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 504.5,
+              "y": 466.75,
+              "width": 173.26171875,
+              "height": 14
+            },
+            {
+              "x": 504.5,
+              "y": 482.75,
+              "width": 35.7890625,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#recorder-start",
+          "label": "Start capture explicitly",
+          "box": {
+            "x": 395,
+            "y": 536.25,
+            "width": 118.859375,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 239.4296875,
+            "y": 472.25,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 251.4296875,
+              "y": 487.25,
+              "width": 173.48046875,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#recorder-written",
+          "label": "Committed audio on disk",
+          "box": {
+            "x": 421,
+            "y": 735.75,
+            "width": 59.015625,
+            "height": 16
+          },
+          "labelBox": {
+            "x": 335.5078125,
+            "y": 769.75,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 347.5078125,
+              "y": 784.75,
+              "width": 187.212890625,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#recorder-queued",
+          "label": "Bounded pending data",
+          "box": {
+            "x": 505.015625,
+            "y": 735.75,
+            "width": 59.015625,
+            "height": 16
+          },
+          "labelBox": {
+            "x": 582.03125,
+            "y": 721.75,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 594.03125,
+              "y": 736.75,
+              "width": 170.875,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-companion-streaming.png",
+      "chapter": "streaming",
+      "caption": "The disconnected companion surface. Credentials stay in memory, and destinations/profiles come from an explicitly connected local companion.",
+      "alt": "Streaming Options with empty token field, loopback endpoint and disabled destination/profile selectors.",
+      "width": 1440,
+      "height": 1100,
+      "callouts": [
+        {
+          "selector": "#companion-connect",
+          "label": "Connect the local companion",
+          "box": {
+            "x": 395,
+            "y": 407.5,
+            "width": 146.1875,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 293.09375,
+            "y": 343.5,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 305.09375,
+              "y": 350.5,
+              "width": 134.671875,
+              "height": 14
+            },
+            {
+              "x": 305.09375,
+              "y": 366.5,
+              "width": 74,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#companion-token",
+          "label": "Per-run token stays in memory",
+          "box": {
+            "x": 840,
+            "y": 353.5,
+            "width": 425,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 937.5,
+            "y": 407.5,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 949.5,
+              "y": 414.5,
+              "width": 167.015625,
+              "height": 14
+            },
+            {
+              "x": 949.5,
+              "y": 430.5,
+              "width": 55.30859375,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#stream-destination",
+          "label": "Only configured destinations",
+          "box": {
+            "x": 395,
+            "y": 538,
+            "width": 425,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 492.5,
+            "y": 592,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 504.5,
+              "y": 599,
+              "width": 124.53125,
+              "height": 14
+            },
+            {
+              "x": 504.5,
+              "y": 615,
+              "width": 84.140625,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-project-compatibility.png",
+      "chapter": "compatibility",
+      "caption": "Genuine editable formats are separate choices. Audacity surround requires explicit speaker-labeled mono splitting; REAPER export includes its referenced media.",
+      "alt": "Project dialog offering native JSON, Audacity AUP3, legacy Audacity ZIP and REAPER project ZIP.",
+      "width": 1440,
+      "height": 1100,
+      "callouts": [
+        {
+          "selector": "#project-native-save",
+          "label": "Keep the full native session",
+          "box": {
+            "x": 382,
+            "y": 242.78125,
+            "width": 211.578125,
+            "height": 33.5
+          },
+          "labelBox": {
+            "x": 372.7890625,
+            "y": 178.78125,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 384.7890625,
+              "y": 193.78125,
+              "width": 205.078125,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#project-reaper-save",
+          "label": "Genuine RPP plus WAV media",
+          "box": {
+            "x": 382,
+            "y": 777.40625,
+            "width": 206.015625,
+            "height": 33.5
+          },
+          "labelBox": {
+            "x": 400.0078125,
+            "y": 713.40625,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 412.0078125,
+              "y": 720.40625,
+              "width": 171.876953125,
+              "height": 14
+            },
+            {
+              "x": 412.0078125,
+              "y": 736.40625,
+              "width": 41.453125,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#project-multichannel",
+          "label": "Choose surround policy explicitly",
+          "box": {
+            "x": 365,
+            "y": 851.40625,
+            "width": 710,
+            "height": 32
+          },
+          "labelBox": {
+            "x": 605,
+            "y": 901.40625,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 617,
+              "y": 908.40625,
+              "width": 176.17578125,
+              "height": 14
+            },
+            {
+              "x": 617,
+              "y": 924.40625,
+              "width": 61.771484375,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-sample-keys.png",
+      "chapter": "keys",
+      "caption": "Key estimates keep written labels and confidence alongside tonic colors. Manual overrides remain available for ambiguous material.",
+      "alt": "Sample keys dialog showing estimated sample keys and individual manual-key selectors.",
+      "width": 1440,
+      "height": 1100,
+      "callouts": [
+        {
+          "selector": "#keys-detect-all",
+          "label": "Analyze every sample",
+          "box": {
+            "x": 527.40625,
+            "y": 464.890625,
+            "width": 140.34375,
+            "height": 32
+          },
+          "labelBox": {
+            "x": 482.578125,
+            "y": 400.890625,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 494.578125,
+              "y": 415.890625,
+              "width": 164.859375,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": ".sample-key-value",
+          "label": "Read the label and confidence",
+          "box": {
+            "x": 396,
+            "y": 559.140625,
+            "width": 500,
+            "height": 11
+          },
+          "labelBox": {
+            "x": 471,
+            "y": 588.140625,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 483,
+              "y": 595.140625,
+              "width": 144.390625,
+              "height": 14
+            },
+            {
+              "x": 483,
+              "y": 611.140625,
+              "width": 73.328125,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "[data-key-override]",
+          "label": "Override an uncertain estimate",
+          "box": {
+            "x": 912,
+            "y": 545.890625,
+            "width": 150,
+            "height": 32
+          },
+          "labelBox": {
+            "x": 952,
+            "y": 595.890625,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 964,
+              "y": 602.890625,
+              "width": 165.671875,
+              "height": 14
+            },
+            {
+              "x": 964,
+              "y": 618.890625,
+              "width": 59.609375,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-export-metadata.png",
+      "chapter": "export",
+      "caption": "Choose scope, exact track, format and explicit committed/live render behavior. Metadata support is reported for the selected format.",
+      "alt": "Export dialog with track scope, source choice, channel layout and metadata support.",
+      "width": 1440,
+      "height": 1100,
+      "callouts": [
+        {
+          "selector": "#export-scope",
+          "label": "Choose the audio or session scope",
+          "box": {
+            "x": 365,
+            "y": 291.65625,
+            "width": 347,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 423.5,
+            "y": 227.65625,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 435.5,
+              "y": 234.65625,
+              "width": 152.98828125,
+              "height": 14
+            },
+            {
+              "x": 435.5,
+              "y": 250.65625,
+              "width": 93.875,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#export-source",
+          "label": "Committed audio or live render",
+          "box": {
+            "x": 365,
+            "y": 442.65625,
+            "width": 347,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 423.5,
+            "y": 496.65625,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 435.5,
+              "y": 503.65625,
+              "width": 179.9375,
+              "height": 14
+            },
+            {
+              "x": 435.5,
+              "y": 519.65625,
+              "width": 45.328125,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#export-metadata-note",
+          "label": "See format-specific tag support",
+          "box": {
+            "x": 365,
+            "y": 791.4375,
+            "width": 710,
+            "height": 40.78125
+          },
+          "labelBox": {
+            "x": 605,
+            "y": 850.21875,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 617,
+              "y": 857.21875,
+              "width": 174.59375,
+              "height": 14
+            },
+            {
+              "x": 617,
+              "y": 873.21875,
+              "width": 53.02734375,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-live-layers.png",
+      "chapter": "looping",
+      "caption": "An actual short program capture created a new loop layer. Beat boundaries, source choice and independent layer controls are visible.",
+      "alt": "Live loop panel containing a real captured layer and independent play, stop, mute and delete buttons.",
+      "width": 1440,
+      "height": 1100,
+      "callouts": [
+        {
+          "selector": "#loop-capture-quantize",
+          "label": "Use sample-clock beat boundaries",
+          "box": {
+            "x": 395,
+            "y": 505,
+            "width": 425,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 492.5,
+            "y": 441,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 504.5,
+              "y": 448,
+              "width": 169.423828125,
+              "height": 14
+            },
+            {
+              "x": 504.5,
+              "y": 464,
+              "width": 75.921875,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#loop-capture-start",
+          "label": "Capture a new layer",
+          "box": {
+            "x": 395,
+            "y": 559,
+            "width": 106.921875,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 333.4609375,
+            "y": 613,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 345.4609375,
+              "y": 628,
+              "width": 153.1171875,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "[data-loop-layer]",
+          "label": "Control each layer independently",
+          "box": {
+            "x": 395,
+            "y": 768.296875,
+            "width": 870,
+            "height": 109.5
+          },
+          "labelBox": {
+            "x": 715,
+            "y": 895.796875,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 727,
+              "y": 902.796875,
+              "width": 140.7421875,
+              "height": 14
+            },
+            {
+              "x": 727,
+              "y": 918.796875,
+              "width": 97.77734375,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-editor-mobile.png",
+      "chapter": "tracks",
+      "caption": "The real mobile workbench with sound tools collapsed. Track actions and selection zoom remain available at a narrow width.",
+      "alt": "Mobile waveform editor with direct track export and selection zoom controls.",
+      "width": 390,
+      "height": 844,
+      "callouts": [
+        {
+          "selector": "[data-action=\"view.zoomSelection\"]",
+          "label": "Zoom the selected region",
+          "box": {
+            "x": 258.890625,
+            "y": 53,
+            "width": 73.5625,
+            "height": 26
+          },
+          "labelBox": {
+            "x": 148,
+            "y": 97,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 160,
+              "y": 112,
+              "width": 190.390625,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "[data-track-export]",
+          "label": "Save this track",
+          "box": {
+            "x": 20,
+            "y": 275,
+            "width": 67.921875,
+            "height": 25
+          },
+          "labelBox": {
+            "x": 28.9609375,
+            "y": 318,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 40.9609375,
+              "y": 333,
+              "width": 119.54296875,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-options-mobile.png",
+      "chapter": "navigation",
+      "caption": "Addressable Options on mobile keeps the current session alive and provides a global guidance switch.",
+      "alt": "Mobile Options page with wrapped section navigation, theme selector and tooltip preference.",
+      "width": 390,
+      "height": 844,
+      "callouts": [
+        {
+          "selector": "#options-theme",
+          "label": "Choose a theme",
+          "box": {
+            "x": 18,
+            "y": 388.59375,
+            "width": 354,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 80,
+            "y": 442.59375,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 92,
+              "y": 457.59375,
+              "width": 125.71875,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#options-tooltips",
+          "label": "One switch for all tips",
+          "box": {
+            "x": 18,
+            "y": 439.84375,
+            "width": 14,
+            "height": 14
+          },
+          "labelBox": {
+            "x": 12,
+            "y": 12,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 24,
+              "y": 27,
+              "width": 165.703125,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-input-options.png",
+      "chapter": "recording",
+      "caption": "Audio input settings before acquisition. Start input requests permission explicitly; source channels and gain are configurable, and monitoring remains off.",
+      "alt": "Idle Audio input Options showing microphone or display source, device, channel indices, gain, processing preferences and unchecked monitoring.",
+      "width": 1440,
+      "height": 1100,
+      "callouts": [
+        {
+          "selector": "#input-source",
+          "label": "Choose microphone or system audio",
+          "box": {
+            "x": 395,
+            "y": 330.75,
+            "width": 425,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 492.5,
+            "y": 266.75,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 504.5,
+              "y": 273.75,
+              "width": 168.755859375,
+              "height": 14
+            },
+            {
+              "x": 504.5,
+              "y": 289.75,
+              "width": 90.265625,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#input-channels",
+          "label": "Declare physical input channels",
+          "box": {
+            "x": 395,
+            "y": 407.25,
+            "width": 425,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 147,
+            "y": 403.25,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 159,
+              "y": 410.25,
+              "width": 168.24609375,
+              "height": 14
+            },
+            {
+              "x": 159,
+              "y": 426.25,
+              "width": 60.234375,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#input-monitor",
+          "label": "Monitoring starts off",
+          "box": {
+            "x": 395,
+            "y": 647,
+            "width": 14,
+            "height": 14
+          },
+          "labelBox": {
+            "x": 287,
+            "y": 679,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 299,
+              "y": 694,
+              "width": 157.4453125,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-output-options.png",
+      "chapter": "surround",
+      "caption": "Audio output shows the browser's reported destination capability separately from the selected monitoring layout.",
+      "alt": "Audio output Options with the real device-selection capability, monitoring layout, Apply routing button and reported maximum channel count.",
+      "width": 1440,
+      "height": 1100,
+      "callouts": [
+        {
+          "selector": "#output-layout",
+          "label": "Choose the monitoring layout",
+          "box": {
+            "x": 840,
+            "y": 330.75,
+            "width": 425,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 937.5,
+            "y": 266.75,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 949.5,
+              "y": 273.75,
+              "width": 171.53125,
+              "height": 14
+            },
+            {
+              "x": 949.5,
+              "y": 289.75,
+              "width": 42.451171875,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#device-state",
+          "label": "Read actual device capability",
+          "box": {
+            "x": 395,
+            "y": 472.75,
+            "width": 870,
+            "height": 53.796875
+          },
+          "labelBox": {
+            "x": 715,
+            "y": 544.546875,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 727,
+              "y": 551.546875,
+              "width": 145.125,
+              "height": 14
+            },
+            {
+              "x": 727,
+              "y": 567.546875,
+              "width": 66.564453125,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-metadata-editor.png",
+      "chapter": "export",
+      "caption": "The actual metadata editor after saving the title and artist. Project tags remain editable and are embedded only by formats that support them.",
+      "alt": "Audio metadata dialog with a saved title and artist, other available tag fields and Save metadata button.",
+      "width": 1440,
+      "height": 1100,
+      "callouts": [
+        {
+          "selector": "[data-metadata=\"title\"]",
+          "label": "Edit the saved file tags",
+          "box": {
+            "x": 365,
+            "y": 352.390625,
+            "width": 347,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 423.5,
+            "y": 288.390625,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 435.5,
+              "y": 303.390625,
+              "width": 173.359375,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#metadata-save",
+          "label": "Save tags before exporting",
+          "box": {
+            "x": 940.625,
+            "y": 865.390625,
+            "width": 134.375,
+            "height": 33.5
+          },
+          "labelBox": {
+            "x": 892.8125,
+            "y": 916.890625,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 904.8125,
+              "y": 931.890625,
+              "width": 201.75,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-macro-recording.png",
+      "chapter": "macros",
+      "caption": "Two successful editing commands captured without thinking time. Enable Record timing to retain elapsed waits in the resulting script.",
+      "alt": "Active action recorder with two genuine captured editing commands, an unchecked Record timing option and Finish recording button.",
+      "width": 1440,
+      "height": 1100,
+      "callouts": [
+        {
+          "selector": "#macro-record-timing",
+          "label": "Choose whether to record waits",
+          "box": {
+            "x": 395,
+            "y": 405.25,
+            "width": 14,
+            "height": 14
+          },
+          "labelBox": {
+            "x": 287,
+            "y": 341.25,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 299,
+              "y": 348.25,
+              "width": 192.75,
+              "height": 14
+            },
+            {
+              "x": 299,
+              "y": 364.25,
+              "width": 36.1875,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#macro-recorded-text",
+          "label": "Successful edits become commands",
+          "box": {
+            "x": 395,
+            "y": 524,
+            "width": 870,
+            "height": 90.0625
+          },
+          "labelBox": {
+            "x": 715,
+            "y": 632.0625,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 727,
+              "y": 639.0625,
+              "width": 183.609375,
+              "height": 14
+            },
+            {
+              "x": 727,
+              "y": 655.0625,
+              "width": 72.75,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#macro-record-stop",
+          "label": "Finish and review the script",
+          "box": {
+            "x": 517.046875,
+            "y": 470,
+            "width": 124.84375,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 269.046875,
+            "y": 466,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 281.046875,
+              "y": 481,
+              "width": 206.19140625,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-macro-visual-steps.png",
+      "chapter": "macros",
+      "caption": "The two recorded commands shown as editable visual steps. Edit arguments and use move controls to change order; structured programs remain available as script text.",
+      "alt": "Visual macro editor with two real recorded effect steps, editable command arguments and accessible order controls.",
+      "width": 1440,
+      "height": 1100,
+      "callouts": [
+        {
+          "selector": "[data-step-params=\"0\"]",
+          "label": "Edit command arguments",
+          "box": {
+            "x": 412,
+            "y": 596.5,
+            "width": 838,
+            "height": 88
+          },
+          "labelBox": {
+            "x": 164,
+            "y": 618.5,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 176,
+              "y": 633.5,
+              "width": 190.890625,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "[data-step-move=\"1\"][data-direction=\"-1\"]",
+          "label": "Move this step earlier",
+          "box": {
+            "x": 1144.328125,
+            "y": 726.5,
+            "width": 21.546875,
+            "height": 28
+          },
+          "labelBox": {
+            "x": 1040.1015625,
+            "y": 772.5,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 1052.1015625,
+              "y": 787.5,
+              "width": 165.427734375,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-batch-preparation.png",
+      "chapter": "macros",
+      "caption": "A saved cleanup-and-export macro with two supplied local synthesized WAV files. This is preparation before Run batch; progress, errors and collected outputs appear during execution.",
+      "alt": "Batch preparation page showing the chosen cleanup macro, two supplied local audio files, error policy and Run batch control.",
+      "width": 1440,
+      "height": 1100,
+      "callouts": [
+        {
+          "selector": "#batch-files",
+          "label": "Supply explicit local files",
+          "box": {
+            "x": 840,
+            "y": 451.25,
+            "width": 425,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 937.5,
+            "y": 387.25,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 949.5,
+              "y": 402.25,
+              "width": 185.5625,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#batch-continue",
+          "label": "Choose the per-file error policy",
+          "box": {
+            "x": 395,
+            "y": 546.25,
+            "width": 14,
+            "height": 14
+          },
+          "labelBox": {
+            "x": 427,
+            "y": 531.25,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 439,
+              "y": 538.25,
+              "width": 184.1484375,
+              "height": 14
+            },
+            {
+              "x": 439,
+              "y": 554.25,
+              "width": 40.173828125,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#batch-run",
+          "label": "Run with session restoration",
+          "box": {
+            "x": 395,
+            "y": 641.5,
+            "width": 86.875,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 323.4375,
+            "y": 695.5,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 335.4375,
+              "y": 702.5,
+              "width": 131.71875,
+              "height": 14
+            },
+            {
+              "x": 335.4375,
+              "y": 718.5,
+              "width": 75.84375,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-effect-automation.png",
+      "chapter": "effects",
+      "caption": "A saved filter-frequency lane schedules 500 Hz at zero seconds and 5500 Hz at four seconds. These audio-clock points are separate from action recorder waits.",
+      "alt": "Effect automation panel with the master filter frequency selected, two linear time/value points and successful saved-lane status.",
+      "width": 1440,
+      "height": 1100,
+      "callouts": [
+        {
+          "selector": "#automation-param",
+          "label": "Choose a numeric effect parameter",
+          "box": {
+            "x": 395,
+            "y": 482.25,
+            "width": 425,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 492.5,
+            "y": 418.25,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 504.5,
+              "y": 425.25,
+              "width": 180.8203125,
+              "height": 14
+            },
+            {
+              "x": 504.5,
+              "y": 441.25,
+              "width": 71.220703125,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#automation-points",
+          "label": "Set timeline time/value points",
+          "box": {
+            "x": 395,
+            "y": 594.25,
+            "width": 870,
+            "height": 260
+          },
+          "labelBox": {
+            "x": 147,
+            "y": 702.25,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 159,
+              "y": 709.25,
+              "width": 174.953125,
+              "height": 14
+            },
+            {
+              "x": 159,
+              "y": 725.25,
+              "width": 42.375,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#automation-apply",
+          "label": "Save the repeatable audio-clock lane",
+          "box": {
+            "x": 395,
+            "y": 902.75,
+            "width": 74.96875,
+            "height": 36
+          },
+          "labelBox": {
+            "x": 317.484375,
+            "y": 956.75,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 329.484375,
+              "y": 963.75,
+              "width": 154.125,
+              "height": 14
+            },
+            {
+              "x": 329.484375,
+              "y": 979.75,
+              "width": 110.203125,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-selection-editing.png",
+      "chapter": "editing",
+      "caption": "A real two-second region is selected and gain has been previewed. IN/OUT and channel scope define the edit; Apply commits the preview to that scope.",
+      "alt": "Waveform editor with a selected region, precise selection bounds, All channels scope and a ready gain preview with Apply control.",
+      "width": 1440,
+      "height": 1400,
+      "callouts": [
+        {
+          "selector": "#selection-start",
+          "label": "Set precise selection boundaries",
+          "box": {
+            "x": 165,
+            "y": 1135,
+            "width": 79,
+            "height": 26
+          },
+          "labelBox": {
+            "x": 89.5,
+            "y": 1071,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 101.5,
+              "y": 1078,
+              "width": 158.40625,
+              "height": 14
+            },
+            {
+              "x": 101.5,
+              "y": 1094,
+              "width": 75.921875,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#channel-scope",
+          "label": "Choose which channels change",
+          "box": {
+            "x": 414,
+            "y": 1135,
+            "width": 94,
+            "height": 26
+          },
+          "labelBox": {
+            "x": 346,
+            "y": 1179,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 358,
+              "y": 1186,
+              "width": 174.203125,
+              "height": 14
+            },
+            {
+              "x": 358,
+              "y": 1202,
+              "width": 49.03125,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#apply-effect",
+          "label": "Commit the ready preview",
+          "box": {
+            "x": 1080,
+            "y": 1300.203125,
+            "width": 311,
+            "height": 38
+          },
+          "labelBox": {
+            "x": 832,
+            "y": 1297.203125,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 844,
+              "y": 1312.203125,
+              "width": 196.328125,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "guide-recovery-controls.png",
+      "chapter": "recovery",
+      "caption": "Help and local recovery controls keep the open project separate from the browser recovery copy. The Clear recovery control is shown without deleting data; save a portable session for a durable copy.",
+      "alt": "Options Help and recovery page with recovery guidance links and a Clear recovery copy button that has not been activated.",
+      "width": 1440,
+      "height": 1100,
+      "callouts": [
+        {
+          "selector": "a[href=\"#help/recovery\"]",
+          "label": "Read recovery limits and steps",
+          "box": {
+            "x": 836,
+            "y": 313.25,
+            "width": 429,
+            "height": 68
+          },
+          "labelBox": {
+            "x": 935.5,
+            "y": 249.25,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 947.5,
+              "y": 256.25,
+              "width": 185.765625,
+              "height": 14
+            },
+            {
+              "x": 947.5,
+              "y": 272.25,
+              "width": 36.75,
+              "height": 14
+            }
+          ]
+        },
+        {
+          "selector": "#options-clear-recovery",
+          "label": "Clear only the recovery copy",
+          "box": {
+            "x": 395,
+            "y": 559,
+            "width": 169.515625,
+            "height": 33.5
+          },
+          "labelBox": {
+            "x": 364.7578125,
+            "y": 610.5,
+            "width": 230,
+            "height": 44
+          },
+          "textBoxes": [
+            {
+              "x": 376.7578125,
+              "y": 617.5,
+              "width": 175.126953125,
+              "height": 14
+            },
+            {
+              "x": 376.7578125,
+              "y": 633.5,
+              "width": 31.947265625,
+              "height": 14
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "complete": true,
+  "updatedAt": "2026-11-19T14:50:45.984Z"
+}

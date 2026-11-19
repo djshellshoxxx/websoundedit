@@ -128,6 +128,7 @@ async function renderPrefix(channels, plan, outputFrames, { signal, onProgress, 
  * estimated transformation and does not promise transient-perfect reconstruction. */
 export async function processTimePitchPCM(channels, sampleRate, settings = {}, { signal, onProgress, yieldControl = nextTask } = {}) {
   throwIfTimePitchAborted(signal);
+  if (channels?.length > 2) throw new RangeError('Pitch-preserving stretch and pitch shift currently support mono/stereo. Use speed for linked surround processing.');
   if (!Array.isArray(channels) || !channels.length || channels.some((channel) => !(channel instanceof Float32Array) || channel.length !== channels[0].length)) {
     throw new TypeError('Provide equal-length Float32Array channels.');
   }

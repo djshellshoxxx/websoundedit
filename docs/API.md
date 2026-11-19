@@ -79,10 +79,10 @@ const projectJSON = await editor.execute('project.save');
 
 ### Audio values and time units
 
-- PCM is `{sampleRate, channels: Float32Array[]}` with one or two equal-length finite channels.
+- PCM is `{sampleRate, channels: Float32Array[], layout}` with 1, 2, 6 or 8 equal-length finite channels. Layouts are `mono`, `stereo`, `5.1` and `7.1`. Surround channel order is explicit; conversion uses the shared matrices in `src/channel-layout.js`.
 - Working samples are floating point. Internal audio may exceed ±1; use the limiter or normalize before integer export if needed.
 - Clip `start` is seconds on the project timeline. Selection `start` and `end` are seconds **relative to that clip** and snap to sample boundaries.
-- A selection affects one clip and either all channels, left or right. Length-changing operations require all channels so the stereo channels stay aligned.
+- A selection affects one clip and all channels, left/right where applicable, or an explicit zero-based channel index list. Length-changing operations require all channels so speaker channels stay aligned.
 - If there is a selection on the active clip, an effect uses it. Otherwise the active clip is used.
 - Explicit `target` overrides the selection: `{trackId?, clipId?, start?, end?, channels?}`. A range must supply both endpoints and contain at least one sample. An explicit target without a range means the whole targeted clip.
 - Duration-changing edits change only the chosen clip. They do not silently move clips later on the timeline. `clip.update` changes placement explicitly.
@@ -380,4 +380,52 @@ const audacity = await websoundedit.exportAudacity('aup3', {download: false});
 
 The pure `api.js` bundle additionally exports `processRack`, `processRackEffect`, `createRackEffect`, `normalizeRackChain`, `detectKey`, `manualKey`, `keyColor`, `normalizeMetadata`, `metadataSupport`, `parseMidiFile`, `encodeMidiFile`, and `renderMidiSequence`. MIDI note-file functions work without hardware permissions. The browser sampler and controller have no automatic device access.
 
+`encodeMidiFile(sequence)` preserves source track indices 0–63, using format 1 when separate tracks are needed. Timings are quantized to 960 PPQ at 120 BPM. Nested overlapping notes with the same pitch and channel within one track are rejected because their note-offs cannot preserve voice identity under FIFO pairing; put those notes on separate source tracks. Ordinary FIFO overlaps and simultaneous starts remain supported.
+
 For native project conversion from source modules, `exportAudacity(portableProject,{format:'aup3'|'aup'})` returns `{bytes,mime,ext,warnings}`. `importAudacity(bytes,{name,files})` returns `{project,warnings}`, where `files` optionally maps relative filenames to legacy AU block bytes. The legacy export is a ZIP with a real `.aup` and its `_data` folder. See [interoperability boundaries](AUDACITY.md) before claiming arbitrary Audacity project compatibility.
+
+## 1.0 beta: typed runtimes and recorded macros
+
+The browser now exposes `websoundedit.commandCatalog()` as a flat array of descriptors. Each descriptor includes `method`, `schema`, recordability and capability information. `websoundedit.commands()` retains the older `{core, ui, all}` grouping. Use the catalog rather than hard-coding feature availability. The built `api.js` also exports `createCoreRuntime`, `createBrowserRuntime`, `MacroRunner`, `parseMacro`, `validateMacro`, `formatMacro`, `LiveAudioRuntime`, `CompanionBridge`, channel-layout helpers, WAV/RF64 helpers and genuine Audacity/REAPER exchange functions.
+
+```js
+import { createCoreRuntime, MacroRunner } from './api.js';
+const runtime = createCoreRuntime();
+const runner = new MacroRunner({
+  execute: runtime.execute.bind(runtime),
+  getCommands: () => runtime.commands()
+});
+await runner.run(`
+  audio.generate({duration: 1, frequency: 440});
+  effect.normalize({targetDb: -3});
+  let stats = analysis.stats({});
+`);
+runtime.dispose();
+```
+
+`createBrowserRuntime()` composes an in-process editor, playback, live effects, input capture, loop layers, disk recording and the companion bridge. It acquires no permission until an explicit command requests that capability. `runtime.live`, `runtime.companion` and `runtime.engine` are the owned interfaces; `await runtime.dispose()` closes admission immediately and releases owned resources. The full workbench adds user-supplied file aliases, download dialogs and UI commands.
+
+`runtime.live.getState()` reports `capture.transition` while arming and `loops[].transition` for captured layers. Input and track capture use `"audio-clock"`; master capture uses `"main-thread"` because its capture input must disconnect before playback reconnects to the master, avoiding a circular audio graph. `transitionDelayFrames` and `transitionDelaySeconds` record the observed master handoff delay while preserving the scheduled repeat phase. They are not hardware input/output latency measurements.
+
+All command inputs are bounded plain data. Accessors, prototype keys and executable objects are rejected. Unknown or unsupported methods fail before execution. Macro text is interpreted, never passed to JavaScript `eval` or `Function`. Static validation catches known argument problems before the first step; dynamic errors report command, line, column and completed steps. Cancellation occurs between atomic edits and interrupts waits; already completed edits remain applied. Digital silence returns `null` for negative-infinite dB values retained in macro variables, matching JSON. Test `stats.peakDb === null` before numeric comparisons.
+
+The browser records successful semantic actions with `macro.record.start` / `macro.record.stop`; imported files become supplied `input` aliases instead of embedded PCM. Imported projects do not arm MIDI, shortcuts, startup scripts or network credentials. See [Macros](MACROS.md) for the language and visual recorder.
+
+### New HTTP companion resources
+
+All paths retain exact Host/Origin validation and Bearer authentication. The server binds loopback only.
+
+| Endpoint or method | Behavior |
+| --- | --- |
+| `GET /v1/commands` | Complete typed core, file, macro and streaming catalog; unavailable browser methods remain explicit |
+| `GET /v1/capabilities` | Installed encoders, pinned UDP destinations, profiles and bounds |
+| `POST /v1/inputs?name=take.wav` | Supply file bytes; response is an alias for `file.import` and isolated batches |
+| `GET /v1/artifacts/:id` | Download a retained output artifact, authenticated |
+| `POST /v1/execute` | Execute `{method, params}` through the shared validated runtime |
+| `POST /v1/cancel` | Cancel an active macro/batch even when normal admission is full |
+| `GET /v1/macro/status` | Read progress without waiting for the editor queue |
+| `POST /v1/stream/:id/pcm` | Bounded binary interleaved f32le input with sequence/frame query fields |
+
+`file.import`, `file.export`, `file.exportStems`, `macro.validate`, `macro.run`, `macro.batch`, `macro.cancel`, `macro.status`, `macro.record.start`, `macro.record.stop`, `stream.start`, `stream.stop` and `stream.status` are available through `/v1/execute`. The Node runtime advertises browser capture/transport commands as unavailable. Filesystem paths cannot be supplied by an HTTP request or macro. Explicit CLI arguments are the operator's file selection.
+
+A workbench retains at most 128 input aliases / 256 MiB and 128 output artifacts / 128 MiB. Download and remove retained artifacts to reclaim memory, or use the CLI's bounded sequential file sink. `file.input.remove` and `file.artifact.remove` release retained data. The server admits at most eight active/queued normal jobs with a 512 MiB aggregate reservation. See [Companion](COMPANION.md) for live UDP setup and its separate bounded queues.

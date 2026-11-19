@@ -75,3 +75,5 @@
 @media(max-width:1100px) { #rack-controls { grid-column:1/-1; } .inspector:has(#rack-controls:not([hidden])) { display:block; } }
 @media(max-width:600px) { .creative-toolbar { gap:8px; } .creative-toolbar>div { width:100%; } .creative-toolbar>div:last-child { justify-content:space-between; } .creative-toolbar button { font-size:10px; padding:6px 8px; } .key-badge { max-width:100px; } .sample-key-row { grid-template-columns:1fr; gap:9px; } .midi-learn-row { flex-wrap:wrap; } .midi-learn-row label { flex-basis:100%; } .midi-mapping { grid-template-columns:80px minmax(0,1fr); } .midi-mapping button { grid-column:2; justify-self:start; } }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto!important; } }
+/* Checkbox controls stay compact inside full-width form fields. */
+.form-grid label input[type=checkbox]{flex:0 0 14px;width:14px;height:14px;min-height:14px;padding:0}

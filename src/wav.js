@@ -3,10 +3,11 @@
  * RIFF chunks may be reordered or padded; malformed/truncated input is rejected.
  */
 import { normalizeMetadata, RIFF_TAGS } from './metadata.js';
+import { audioLayout, normalizeLayout, CHANNEL_LAYOUTS } from './channel-layout.js';
 const MAX_BYTES = 256 * 1024 * 1024;
 function assertAudio(audio) {
   if (!audio || !Number.isInteger(audio.sampleRate) || audio.sampleRate < 8000 || audio.sampleRate > 192000) throw new RangeError('WAV sample rate must be an integer between 8000 and 192000.');
-  if (!Array.isArray(audio.channels) || audio.channels.length < 1 || audio.channels.length > 2) throw new RangeError('WAV export supports mono or stereo.');
+  audioLayout(audio);
   const n = audio.channels[0].length;
   if (n / audio.sampleRate > 600 || n * audio.channels.length * 4 > MAX_BYTES) throw new RangeError('Audio exceeds the 10-minute / 256 MiB decoded-audio limit.');
   for (const channel of audio.channels) {
@@ -21,16 +22,21 @@ export function encodeWav(audio, { bitDepth = 16, float = false, metadata = {} }
   assertAudio(audio);
   if (![16, 24, 32].includes(bitDepth) || (float && bitDepth !== 32)) throw new RangeError('Use PCM 16/24/32-bit, or float with bitDepth: 32.');
   const channels = audio.channels.length, frames = audio.channels[0].length, width = bitDepth / 8;
-  const dataSize = frames * channels * width, headerSize = float ? 56 : 44;
+  const extensible = channels > 2 || audio.layout !== undefined;
+  const dataSize = frames * channels * width, formatSize = extensible ? 40 : 16, headerSize = 28 + formatSize + (float ? 12 : 0);
   const pad = dataSize % 2;
   const tags = Object.entries(normalizeMetadata(metadata)).filter(([key]) => RIFF_TAGS[key]).map(([key, value]) => [RIFF_TAGS[key], new TextEncoder().encode(value)]);
   const infoSize = tags.length ? 12 + tags.reduce((n, [, value]) => n + 8 + value.length + 1 + ((value.length + 1) % 2), 0) : 0;
   const bytes = new Uint8Array(headerSize + dataSize + pad + infoSize), view = new DataView(bytes.buffer);
   ascii(view, 0, 'RIFF'); view.setUint32(4, bytes.length - 8, true); ascii(view, 8, 'WAVE'); ascii(view, 12, 'fmt ');
-  view.setUint32(16, 16, true); view.setUint16(20, float ? 3 : 1, true); view.setUint16(22, channels, true);
+  view.setUint32(16, formatSize, true); view.setUint16(20, extensible ? 0xfffe : float ? 3 : 1, true); view.setUint16(22, channels, true);
   view.setUint32(24, audio.sampleRate, true); view.setUint32(28, audio.sampleRate * channels * width, true);
   view.setUint16(32, channels * width, true); view.setUint16(34, bitDepth, true);
-  if (float) { ascii(view, 36, 'fact'); view.setUint32(40, 4, true); view.setUint32(44, frames, true); }
+  if (extensible) {
+    view.setUint16(36, 22, true); view.setUint16(38, bitDepth, true); view.setUint32(40, CHANNEL_LAYOUTS[audioLayout(audio)].mask, true);
+    view.setUint16(44, float ? 3 : 1, true); bytes.set([0, 0, 0, 0, 16, 0, 128, 0, 0, 170, 0, 56, 155, 113], 46);
+  }
+  if (float) { const at = 20 + formatSize; ascii(view, at, 'fact'); view.setUint32(at + 4, 4, true); view.setUint32(at + 8, frames, true); }
   ascii(view, headerSize - 8, 'data'); view.setUint32(headerSize - 4, dataSize, true);
   let offset = headerSize;
   for (let i = 0; i < frames; i++) for (const channel of audio.channels) {
@@ -50,7 +56,7 @@ export function encodeWav(audio, { bitDepth = 16, float = false, metadata = {} }
   return bytes;
 }
 
-export function decodeWav(input) {
+export function decodeWav(input, { layout: requestedLayout } = {}) {
   let bytes;
   if (input instanceof ArrayBuffer) bytes = new Uint8Array(input);
   else if (ArrayBuffer.isView(input)) bytes = new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
@@ -67,15 +73,18 @@ export function decodeWav(input) {
     if (start + size > end) throw new RangeError(`Truncated WAV ${id} chunk.`);
     if (id === 'fmt ') {
       if (size < 16) throw new RangeError('WAV format chunk is too short.');
-      let code = view.getUint16(start, true);
+      let code = view.getUint16(start, true), mask = 0;
       const channels = view.getUint16(start + 2, true), sampleRate = view.getUint32(start + 4, true), blockAlign = view.getUint16(start + 12, true), bits = view.getUint16(start + 14, true);
       if (code === 0xfffe) {
         if (size < 40 || view.getUint16(start + 16, true) < 22) throw new RangeError('Truncated extensible WAV format.');
         code = view.getUint16(start + 24, true);
+        mask = view.getUint32(start + 20, true);
+        const validBits = view.getUint16(start + 18, true);
+        if (validBits !== 0 && validBits !== bits) throw new RangeError('Packed valid-bit WAV formats are not supported.');
         const guidTail = [0, 0, 0, 0, 16, 0, 128, 0, 0, 170, 0, 56, 155, 113];
         if (guidTail.some((value, i) => view.getUint8(start + 26 + i) !== value)) throw new RangeError('Unsupported extensible WAV encoding.');
       }
-      format = { code, channels, sampleRate, blockAlign, bits };
+      format = { code, channels, sampleRate, blockAlign, bits, mask };
     } else if (id === 'data' && data === null) data = { start, size };
     else if (id === 'LIST' && size >= 4 && text(view, start, 4) === 'INFO') {
       if (size > 16384) throw new RangeError('WAV metadata exceeds the supported size.');
@@ -91,7 +100,11 @@ export function decodeWav(input) {
   if (!format || !data) throw new RangeError('WAV requires both fmt and data chunks.');
   const { code, channels, sampleRate, blockAlign, bits } = format;
   if (![1, 3].includes(code) || (code === 1 && ![8, 16, 24, 32].includes(bits)) || (code === 3 && ![32, 64].includes(bits))) throw new RangeError('Unsupported WAV encoding; use uncompressed PCM or IEEE float.');
-  if (channels < 1 || channels > 2) throw new RangeError('WAV import supports mono or stereo.');
+  if (![1, 2, 6, 8].includes(channels)) throw new RangeError('WAV import supports mono, stereo, 5.1 or 7.1.');
+  const maskedLayout = Object.keys(CHANNEL_LAYOUTS).find(key => CHANNEL_LAYOUTS[key].mask === format.mask && CHANNEL_LAYOUTS[key].count === channels);
+  if (format.mask && !maskedLayout && requestedLayout === undefined) throw new RangeError('WAV has an unsupported speaker mask; choose its channel layout explicitly.');
+  const layout = requestedLayout !== undefined ? normalizeLayout(requestedLayout, channels) : maskedLayout;
+  if (channels > 2 && !layout) throw new RangeError('Ambiguous surround WAV requires an explicit channel layout.');
   if (sampleRate < 8000 || sampleRate > 192000) throw new RangeError('WAV sample rate must be between 8000 and 192000.');
   const width = bits / 8;
   if (blockAlign !== channels * width || data.size % blockAlign !== 0) throw new RangeError('Invalid WAV block alignment.');
@@ -114,5 +127,5 @@ export function decodeWav(input) {
     offset += width;
   }
   const tags = normalizeMetadata(metadata);
-  return { sampleRate, channels: output, ...(Object.keys(tags).length ? { metadata: tags } : {}) };
+  return { sampleRate, ...(layout ? { layout } : {}), channels: output, ...(Object.keys(tags).length ? { metadata: tags } : {}) };
 }

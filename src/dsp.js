@@ -4,6 +4,7 @@
  * All effects return newly owned PCM; inputs are never modified.
  */
 import { processTimePitchPCM } from './time-pitch-pcm.js';
+import { normalizeLayout, layoutMetadata, convertLayout } from './channel-layout.js';
 
 export const AUDIO_LIMITS = Object.freeze({ maxDuration: 600, maxBytes: 256 * 1024 * 1024, minSampleRate: 8000, maxSampleRate: 192000 });
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -25,7 +26,8 @@ function guardAllocation(frames, channels, sampleRate) {
   }
 }
 export function validateAudio(audio, { allowEmpty = true } = {}) {
-  if (!audio || !Array.isArray(audio.channels) || audio.channels.length < 1 || audio.channels.length > 2) throw new TypeError('Audio requires one or two channels.');
+  if (!audio || !Array.isArray(audio.channels) || audio.channels.length < 1 || audio.channels.length > 8) throw new TypeError('Audio requires one to eight channels.');
+  if (audio.layout !== undefined) normalizeLayout(audio.layout, audio.channels.length);
   if (!Number.isInteger(audio.sampleRate) || audio.sampleRate < 8000 || audio.sampleRate > 192000) throw new RangeError('Audio sample rate must be an integer between 8000 and 192000.');
   const frames = audio.channels[0]?.length;
   if (!Number.isSafeInteger(frames) || (!allowEmpty && frames === 0)) throw new RangeError('Select nonempty audio first.');
@@ -36,8 +38,24 @@ export function validateAudio(audio, { allowEmpty = true } = {}) {
   }
   return audio;
 }
-const copy = (audio) => ({ sampleRate: audio.sampleRate, channels: audio.channels.map((c) => c.slice()) });
-const withChannels = (audio, channels) => ({ sampleRate: audio.sampleRate, channels });
+const copy = (audio) => ({ sampleRate: audio.sampleRate, ...layoutMetadata(audio), channels: audio.channels.map((c) => c.slice()) });
+const withChannels = (audio, channels) => ({ sampleRate: audio.sampleRate, ...layoutMetadata(audio, channels.length), channels });
+
+export function trimSilence(audio, params = {}) {
+  validateAudio(audio, { allowEmpty: false });
+  const threshold = dbToGain(number(params.thresholdDb, -60, -120, 0, 'Silence threshold'));
+  const minimum = Math.round(number(params.minDuration, .05, 0, 600, 'Minimum silence') * audio.sampleRate);
+  const padding = Math.round(number(params.padding, .01, 0, 10, 'Silence padding') * audio.sampleRate);
+  const frames = audio.channels[0].length;
+  let first = 0, last = frames;
+  const quiet = i => audio.channels.every(channel => Math.abs(channel[i]) <= threshold);
+  while (first < frames && quiet(first)) first++;
+  if (first === frames) return { ...copy(audio), trimInfo: { allSilent: true, removedFrames: 0, message: 'All selected audio is silent; it was left unchanged.' } };
+  while (last > first && quiet(last - 1)) last--;
+  first = first >= minimum ? Math.max(0, first - padding) : 0;
+  last = frames - last >= minimum ? Math.min(frames, last + padding) : frames;
+  return { ...withChannels(audio, audio.channels.map(channel => channel.slice(first, last))), trimInfo: { allSilent: false, removedFrames: frames - (last - first), leadingFrames: first, trailingFrames: frames - last } };
+}
 
 export function sliceAudio(audio, start = 0, end = audio.channels[0].length / audio.sampleRate) {
   validateAudio(audio);
@@ -59,7 +77,7 @@ export function concatAudio(parts) {
     for (let c = 0; c < channels.length; c++) output[c].set(part.channels[c], offset);
     offset += part.channels[0].length;
   }
-  return { sampleRate, channels: output };
+  return { sampleRate, ...layoutMetadata(parts[0]), channels: output };
 }
 
 /** Band-limited windowed-sinc resampling; the same kernel positions link stereo. */
@@ -67,7 +85,12 @@ export function resampleAudio(audio, sampleRate) {
   validateAudio(audio);
   sampleRate = integer(sampleRate, 48000, 8000, 192000, 'Sample rate');
   if (sampleRate === audio.sampleRate) return copy(audio);
-  const rate = audio.sampleRate / sampleRate;
+  return resampleAtRate(audio, audio.sampleRate / sampleRate, sampleRate);
+}
+
+// Varispeed uses the same linked sinc positions without inventing an out-of-range
+// sample-rate tag (for example 8 kHz audio at 2x still has an 8 kHz output clock).
+function resampleAtRate(audio, rate, sampleRate = audio.sampleRate) {
   const frames = Math.round(audio.channels[0].length / rate);
   guardAllocation(frames, audio.channels.length, sampleRate);
   const cutoff = Math.min(1, 1 / rate), radius = Math.ceil(12 / cutoff), taps = radius * 2, phases = 512;
@@ -94,7 +117,7 @@ export function resampleAudio(audio, sampleRate) {
       output[c][i] = value;
     }
   }
-  return validateAudio({ sampleRate, channels: output });
+  return validateAudio({ sampleRate, ...layoutMetadata(audio), channels: output });
 }
 
 export function analyzeAudio(audio) {
@@ -518,11 +541,11 @@ export async function processAudio(audio, effect, params = {}, context = {}) {
       if (audio.channels.length === 1) {
         const angle = (pan + 1) * Math.PI / 4;
         output = withChannels(audio, [Float32Array.from(audio.channels[0], (x) => x * Math.cos(angle)), Float32Array.from(audio.channels[0], (x) => x * Math.sin(angle))]);
-      } else output = withChannels(audio, [Float32Array.from(audio.channels[0], (x) => x * (pan > 0 ? Math.cos(pan * Math.PI / 2) : 1)), Float32Array.from(audio.channels[1], (x) => x * (pan < 0 ? Math.cos(-pan * Math.PI / 2) : 1))]);
+      } else output = withChannels(audio, audio.channels.map((channel, c) => Float32Array.from(channel, x => x * (c === 0 && pan > 0 ? Math.cos(pan * Math.PI / 2) : c === 1 && pan < 0 ? Math.cos(-pan * Math.PI / 2) : 1))));
       break;
     }
-    case 'mono': output = withChannels(audio, [Float32Array.from({ length: n }, (_, i) => audio.channels.reduce((sum, channel) => sum + channel[i], 0) / audio.channels.length)]); break;
-    case 'swap': output = withChannels(audio, audio.channels.slice().reverse().map((channel) => channel.slice())); break;
+    case 'mono': output = audio.channels.length > 2 ? convertLayout(audio, 'mono') : withChannels(audio, [Float32Array.from({ length: n }, (_, i) => audio.channels.reduce((sum, channel) => sum + channel[i], 0) / audio.channels.length)]); break;
+    case 'swap': { const channels = audio.channels.map(c => c.slice()); if (channels.length > 1) [channels[0], channels[1]] = [channels[1], channels[0]]; output = withChannels(audio, channels); break; }
     case 'eq': output = equalize(audio, params); break;
     case 'compressor': output = compress(audio, params); break;
     case 'limiter': output = limit(audio, params); break;
@@ -538,19 +561,21 @@ export async function processAudio(audio, effect, params = {}, context = {}) {
       output = parts.length ? concatAudio(parts) : withChannels(audio, audio.channels.map(() => new Float32Array(0)));
       break;
     }
+    case 'trimSilence': output = trimSilence(audio, params); break;
     case 'speed': {
       const rate = number(params.rate, 1, 0.5, 2, 'Playback rate');
-      output = withChannels(audio, await processTimePitchPCM(audio.channels, sr, { speed: rate })); break;
+      if (audio.channels.length > 2) output = resampleAtRate(audio, rate);
+      else output = withChannels(audio, await processTimePitchPCM(audio.channels, sr, { speed: rate })); break;
     }
     case 'stretch': {
       const ratio = number(params.ratio, 1, 0.5, 2, 'Time-stretch ratio');
       const settings = params.preservePitch === false ? { speed: 1 / ratio } : { stretch: ratio };
-      output = withChannels(audio, await processTimePitchPCM(audio.channels, sr, settings)); break;
+      output = audio.channels.length > 2 && settings.speed ? resampleAtRate(audio, settings.speed) : withChannels(audio, await processTimePitchPCM(audio.channels, sr, settings)); break;
     }
     case 'pitch': {
       const semitones = number(params.semitones, 0, -12, 12, 'Pitch semitones');
       const settings = params.preserveDuration === false ? { speed: 2 ** (semitones / 12) } : { pitchSemitones: semitones };
-      output = withChannels(audio, await processTimePitchPCM(audio.channels, sr, settings)); break;
+      output = audio.channels.length > 2 && settings.speed ? resampleAtRate(audio, settings.speed) : withChannels(audio, await processTimePitchPCM(audio.channels, sr, settings)); break;
     }
     default: throw new RangeError(`Unknown audio effect: ${effect}`);
   }
@@ -565,7 +590,8 @@ export function generateAudio(params = {}) {
   const amplitude = number(params.amplitude, 0.5, 0, 1, 'Generator amplitude');
   const frequency = number(params.frequency, 220, 1, sampleRate * 0.49, 'Generator frequency');
   const type = params.type || 'tone';
-  const channels = integer(params.channels, type === 'drums' ? 2 : 1, 1, 2, 'Generator channels');
+  const channels = params.layout ? ({ mono: 1, stereo: 2, '5.1': 6, '7.1': 8 })[normalizeLayout(params.layout)] : integer(params.channels, type === 'drums' ? 2 : 1, 1, 8, 'Generator channels');
+  if (![1, 2, 6, 8].includes(channels)) throw new RangeError('Choose 1, 2, 6 or 8 generator channels.');
   const n = Math.max(1, Math.round(duration * sampleRate));
   guardAllocation(n, channels, sampleRate);
   const output = Array.from({ length: channels }, () => new Float32Array(n));
@@ -579,7 +605,7 @@ export function generateAudio(params = {}) {
       const snare = beatIndex % 2 === 1 ? (random() * 2 - 1) * Math.exp(-phase * 28) * 0.42 : 0;
       const value = (kick * 0.7 + snare + hat) * amplitude * 0.8;
       output[0][i] = value;
-      if (channels === 2) output[1][i] = value * 0.94 + hat * amplitude * 0.1;
+      if (channels >= 2) output[1][i] = value * 0.94 + hat * amplitude * 0.1;
     }
   } else if (type === 'tone' || type === 'noise' || type === 'sweep') {
     const endFrequency = type === 'sweep' ? number(params.endFrequency, Math.min(12000, sampleRate * 0.45), 1, sampleRate * 0.49, 'Sweep end frequency') : frequency;
@@ -593,5 +619,5 @@ export function generateAudio(params = {}) {
       for (const channel of output) channel[i] = value;
     }
   } else throw new RangeError(`Unknown generator type: ${type}`);
-  return validateAudio({ sampleRate, channels: output });
+  return validateAudio({ sampleRate, ...layoutMetadata({ layout: params.layout, channels: output }), channels: output });
 }

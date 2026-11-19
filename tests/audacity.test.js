@@ -4,6 +4,7 @@ import { AudioEditor } from '../src/engine.js';
 import { exportAudacity, importAudacity, encodeAudacityAU, decodeAudacityAU, loadAudacityCodec } from '../src/audacity.js';
 import { xmlNode, encodeBinaryXML, decodeBinaryXML, readXML, writeXML } from '../src/audacity-xml.js';
 import { zipSync, unzipSync } from 'fflate';
+import { CHANNEL_LAYOUTS } from '../src/channel-layout.js';
 
 async function fixture() {
   const engine = new AudioEditor({ name: 'Café & <sample>', sampleRate: 8000, bpm: 128 });
@@ -18,6 +19,34 @@ async function fixture() {
   engine.getProject().settings.audacityLabelEnds = { 'label-1': .25 };
   return { engine, first };
 }
+
+test('Audacity surround is explicit: reject by default, split named PCM channel stems on request', async () => {
+  for (const layout of ['5.1', '7.1']) {
+    const engine = new AudioEditor({ sampleRate: 8000, outputLayout: layout }), track = await engine.execute('track.add', { name: 'Surround' });
+    const audio = { sampleRate: 8000, layout, channels: CHANNEL_LAYOUTS[layout].channels.map((_, i) => Float32Array.of(.01 * (i + 1), -.25, .5)) };
+    await engine.execute('track.update', { trackId: track.id, gainDb: -3, pan: .4, solo: true });
+    await engine.execute('clip.add', { trackId: track.id, name: 'Clip', start: .1, audio });
+    const portable = await engine.execute('project.save');
+    await assert.rejects(exportAudacity(portable), /split-mono/);
+    for (const format of ['aup3', 'aup']) {
+      const exported = await exportAudacity(portable, { format, multichannel: 'split-mono' });
+      assert.ok(exported.warnings.some(warning => warning.includes('not a surround project mixer')));
+      const imported = await importAudacity(exported.bytes), loaded = new AudioEditor(); await loaded.execute('project.load', { project: imported.project });
+      assert.equal(loaded.getProject().tracks.length, audio.channels.length);
+      for (const [ch, stem] of loaded.getProject().tracks.entries()) {
+        assert.ok(stem.name.endsWith(`[${layout} ${CHANNEL_LAYOUTS[layout].channels[ch]}]`));
+        assert.equal(stem.pan, 0); assert.ok(Math.abs(stem.gainDb + 3) < 1e-10); assert.equal(stem.solo, true);
+        assert.equal(stem.clips[0].start, .1); assert.deepEqual(stem.clips[0].audio.channels, [audio.channels[ch]]);
+      }
+    }
+  }
+});
+
+test('Audacity split-mono expansion respects the shared track and clip budgets', async () => {
+  const engine = new AudioEditor({ sampleRate: 8000, outputLayout: '7.1' });
+  for (let i = 0; i < 9; i++) await engine.execute('clip.add', { name: `Surround ${i}`, audio: { sampleRate: 8000, layout: '7.1', channels: Array.from({ length: 8 }, () => Float32Array.of(.1)) } });
+  await assert.rejects(exportAudacity(await engine.execute('project.save'), { multichannel: 'split-mono' }), /exceed 64 Audacity tracks/);
+});
 function comparable(project) {
   return { sampleRate: project.sampleRate, bpm: project.bpm, metadata: project.metadata,
     tracks: project.tracks.map(track => ({ name: track.name, gainDb: Math.round(track.gainDb * 1e7) / 1e7, pan: track.pan, mute: track.mute, solo: track.solo, clips: track.clips.map(clip => ({ name: clip.name, start: clip.start, audio: clip.audio })) })),

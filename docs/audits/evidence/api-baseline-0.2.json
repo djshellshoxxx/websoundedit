@@ -1,0 +1,54 @@
+{
+  "baseline": "5906ba639d5c56e6d64a6c0eb64a8f469fc09d72",
+  "seed": 1374429222,
+  "node": "v24.22.3",
+  "startedAt": "2026-11-19T10:45:46.506Z",
+  "cases": 1210,
+  "findings": [
+    {
+      "id": "API-04",
+      "severity": "low",
+      "title": "False parameters become an empty object at the HTTP boundary",
+      "evidence": {
+        "status": 200,
+        "tracksAdded": 1
+      }
+    },
+    {
+      "id": "API-01",
+      "severity": "medium",
+      "title": "No aggregate HTTP job/body admission budget",
+      "evidence": {
+        "concurrentRequests": 25,
+        "accepted": 25,
+        "rejected": 0,
+        "maxProbeBodyBytes": 27000
+      }
+    },
+    {
+      "id": "API-02",
+      "severity": "medium",
+      "title": "Failed worker postMessage leaves pending entry",
+      "evidence": {
+        "pending": 1
+      }
+    },
+    {
+      "id": "API-03",
+      "severity": "medium",
+      "title": "Commands after terminal worker failure remain pending",
+      "evidence": {
+        "result": "pending"
+      }
+    }
+  ],
+  "queueProbe": {
+    "concurrentRequests": 25,
+    "accepted": 25,
+    "rejected": 0,
+    "maxProbeBodyBytes": 27000
+  },
+  "workerPendingAfterCloneFailure": 1,
+  "commandAfterWorkerFailure": "pending",
+  "finishedAt": "2026-11-19T10:45:48.486Z"
+}

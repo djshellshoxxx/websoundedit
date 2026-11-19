@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "seeds": [
+    "0x57455345",
+    "0x00c0ffee",
+    "0x51ec7100"
+  ],
+  "limits": {
+    "sequencesPerSeed": 8,
+    "stepsPerSequence": 100,
+    "maxClipFrames": 319,
+    "maxTracks": 6,
+    "maxClips": 12
+  },
+  "counts": {
+    "engineCases": 2400,
+    "accepted": 1766,
+    "expectedRejections": 634,
+    "unexpectedRejections": 0,
+    "atomicChecks": 634,
+    "stateChecks": 1766,
+    "historyRoundTrips": 142,
+    "projectRoundTrips": 113,
+    "dspCases": 600,
+    "wavRoundTrips": 1800,
+    "wavMutations": 1800,
+    "wavAcceptedMutations": 389,
+    "wavRejectedMutations": 1411
+  },
+  "failures": []
+}

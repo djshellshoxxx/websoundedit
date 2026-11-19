@@ -1,0 +1,287 @@
+{
+  "status": "failed-browser-gate; corrections in progress, not publication evidence",
+  "repository": "djshellshoxxx/websoundedit",
+  "run": 44534120888,
+  "job": 135594938041,
+  "url": "https://github.com/djshellshoxxx/websoundedit/actions/runs/44534120888",
+  "head": "517f7d33547dfa6fa3b2c83bd223bdca1b11fd4d",
+  "checkout": "887497fe5aada524565d24b5948dd4a872624227",
+  "tree": "62f52485acf68a5efe0d763059f55d426991c5f7",
+  "startedAt": "2026-11-19T14:09:04Z",
+  "completedAt": "2026-11-19T14:13:28Z",
+  "unit": {
+    "passed": 316,
+    "failed": 0,
+    "skipped": 0
+  },
+  "fuzzFamilies": {
+    "passed": 7,
+    "failed": 0
+  },
+  "productionBuildAndDOMFreeSDK": "passed",
+  "dependencies": {
+    "auditReportVersion": 2,
+    "vulnerabilities": {},
+    "metadata": {
+      "vulnerabilities": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "dependencies": {
+        "prod": 10,
+        "dev": 50,
+        "optional": 34,
+        "peer": 0,
+        "peerOptional": 0,
+        "total": 59
+      }
+    }
+  },
+  "nativeAudacity": {
+    "passed": true,
+    "cases": [
+      {
+        "format": "aup3",
+        "nativeMix": {
+          "maximumDifference": 2.9802322387695312e-08,
+          "rmsDifference": 5.4371696428540426e-09,
+          "tolerance": 0.0002,
+          "frames": 72000,
+          "channels": 2
+        },
+        "returnedMix": {
+          "maximumDifference": 2.9802322387695312e-08,
+          "rmsDifference": 4.318370213798617e-09,
+          "tolerance": 2e-06,
+          "frames": 72000,
+          "channels": 2
+        },
+        "warnings": []
+      },
+      {
+        "format": "aup",
+        "nativeMix": {
+          "maximumDifference": 2.9802322387695312e-08,
+          "rmsDifference": 5.4371696428540426e-09,
+          "tolerance": 0.0002,
+          "frames": 72000,
+          "channels": 2
+        },
+        "returnedMix": {
+          "maximumDifference": 2.9802322387695312e-08,
+          "rmsDifference": 4.318370213798617e-09,
+          "tolerance": 2e-06,
+          "frames": 72000,
+          "channels": 2
+        },
+        "warnings": []
+      },
+      {
+        "format": "independent-native-aup3",
+        "returnedMix": {
+          "maximumDifference": 0,
+          "rmsDifference": 0,
+          "tolerance": 0.0002,
+          "frames": 48000,
+          "channels": 2
+        },
+        "warnings": []
+      }
+    ],
+    "sampleRate": 48000,
+    "notes": [
+      "Native hardware audio I/O is not used. Audio is exported to disk and compared numerically."
+    ],
+    "nativeVersion": "3.4.2+dfsg-1build4"
+  },
+  "nativeReaper": {
+    "version": "7.86",
+    "archiveSha256": "c2f9d8616bd1dc6175993b82451e1c6e352c6761e7ae6d72400a3f3dfb03bedb",
+    "cases": [
+      {
+        "kind": "web-export-native-open-render-save-reimport",
+        "layout": "mono",
+        "renderDifference": {
+          "maximum": 5.960464477539063e-08,
+          "rms": 3.16932643631711e-08,
+          "tolerance": 4e-05,
+          "frames": 7440,
+          "channels": 1
+        },
+        "reimportDifference": {
+          "maximum": 0,
+          "rms": 0,
+          "tolerance": 5e-07,
+          "frames": 7440,
+          "channels": 1
+        },
+        "warnings": [
+          "REAPER saves committed PCM, clip placement, translated track mix, markers, fixed tempo and supported tags. WebSoundEdit live racks, macros, themes and MIDI mappings remain in the native JSON session.",
+          "Imported REAPER projects contain committed audio and supported timeline/mix data. Native scripts, device settings and project extensions are never executed or armed."
+        ]
+      },
+      {
+        "kind": "independently-created-native-project-import-render",
+        "layout": "mono",
+        "difference": {
+          "maximum": 5.960464477539063e-08,
+          "rms": 3.262645947421349e-08,
+          "tolerance": 4e-05,
+          "frames": 4320,
+          "channels": 1
+        },
+        "warnings": [
+          "Visible source trims were rendered into imported PCM; hidden trimmed audio remains in the original media.",
+          "Imported REAPER projects contain committed audio and supported timeline/mix data. Native scripts, device settings and project extensions are never executed or armed."
+        ]
+      },
+      {
+        "kind": "web-export-native-open-render-save-reimport",
+        "layout": "stereo",
+        "renderDifference": {
+          "maximum": 5.98374754190445e-08,
+          "rms": 3.338726664601538e-08,
+          "tolerance": 4e-05,
+          "frames": 7440,
+          "channels": 2
+        },
+        "reimportDifference": {
+          "maximum": 0,
+          "rms": 0,
+          "tolerance": 5e-07,
+          "frames": 7440,
+          "channels": 2
+        },
+        "warnings": [
+          "REAPER saves committed PCM, clip placement, translated track mix, markers, fixed tempo and supported tags. WebSoundEdit live racks, macros, themes and MIDI mappings remain in the native JSON session.",
+          "Imported REAPER projects contain committed audio and supported timeline/mix data. Native scripts, device settings and project extensions are never executed or armed."
+        ]
+      },
+      {
+        "kind": "independently-created-native-project-import-render",
+        "layout": "stereo",
+        "difference": {
+          "maximum": 5.960464477539063e-08,
+          "rms": 3.210516143953564e-08,
+          "tolerance": 4e-05,
+          "frames": 4320,
+          "channels": 2
+        },
+        "warnings": [
+          "Visible source trims were rendered into imported PCM; hidden trimmed audio remains in the original media.",
+          "Imported REAPER projects contain committed audio and supported timeline/mix data. Native scripts, device settings and project extensions are never executed or armed."
+        ]
+      },
+      {
+        "kind": "web-export-native-open-render-save-reimport",
+        "layout": "5.1",
+        "renderDifference": {
+          "maximum": 6.007030606269836e-08,
+          "rms": 3.196131016819578e-08,
+          "tolerance": 4e-05,
+          "frames": 7440,
+          "channels": 6
+        },
+        "reimportDifference": {
+          "maximum": 1.3877787807814457e-17,
+          "rms": 6.568378182181543e-20,
+          "tolerance": 5e-07,
+          "frames": 7440,
+          "channels": 6
+        },
+        "warnings": [
+          "REAPER saves committed PCM, clip placement, translated track mix, markers, fixed tempo and supported tags. WebSoundEdit live racks, macros, themes and MIDI mappings remain in the native JSON session.",
+          "REAPER\u2019s numbered master channels are interpreted in canonical 5.1 speaker order. Confirm the original speaker routing before playback.",
+          "Imported REAPER projects contain committed audio and supported timeline/mix data. Native scripts, device settings and project extensions are never executed or armed."
+        ]
+      },
+      {
+        "kind": "independently-created-native-project-import-render",
+        "layout": "5.1",
+        "difference": {
+          "maximum": 6.030313670635223e-08,
+          "rms": 3.2128928964476355e-08,
+          "tolerance": 4e-05,
+          "frames": 4320,
+          "channels": 6
+        },
+        "warnings": [
+          "REAPER\u2019s numbered master channels are interpreted in canonical 5.1 speaker order. Confirm the original speaker routing before playback.",
+          "Visible source trims were rendered into imported PCM; hidden trimmed audio remains in the original media.",
+          "Imported REAPER projects contain committed audio and supported timeline/mix data. Native scripts, device settings and project extensions are never executed or armed."
+        ]
+      },
+      {
+        "kind": "web-export-native-open-render-save-reimport",
+        "layout": "7.1",
+        "renderDifference": {
+          "maximum": 6.007030606269836e-08,
+          "rms": 3.1832326475169894e-08,
+          "tolerance": 4e-05,
+          "frames": 7440,
+          "channels": 8
+        },
+        "reimportDifference": {
+          "maximum": 1.3877787807814457e-17,
+          "rms": 5.688382367432667e-20,
+          "tolerance": 5e-07,
+          "frames": 7440,
+          "channels": 8
+        },
+        "warnings": [
+          "REAPER saves committed PCM, clip placement, translated track mix, markers, fixed tempo and supported tags. WebSoundEdit live racks, macros, themes and MIDI mappings remain in the native JSON session.",
+          "REAPER\u2019s numbered master channels are interpreted in canonical 7.1 speaker order. Confirm the original speaker routing before playback.",
+          "Imported REAPER projects contain committed audio and supported timeline/mix data. Native scripts, device settings and project extensions are never executed or armed."
+        ]
+      },
+      {
+        "kind": "independently-created-native-project-import-render",
+        "layout": "7.1",
+        "difference": {
+          "maximum": 6.05359673500061e-08,
+          "rms": 3.2240345692197016e-08,
+          "tolerance": 4e-05,
+          "frames": 4320,
+          "channels": 8
+        },
+        "warnings": [
+          "REAPER\u2019s numbered master channels are interpreted in canonical 7.1 speaker order. Confirm the original speaker routing before playback.",
+          "Visible source trims were rendered into imported PCM; hidden trimmed audio remains in the original media.",
+          "Imported REAPER projects contain committed audio and supported timeline/mix data. Native scripts, device settings and project extensions are never executed or armed."
+        ]
+      }
+    ],
+    "status": "passed"
+  },
+  "browser": {
+    "passed": 39,
+    "failed": 16,
+    "skipped": 1,
+    "failures": [
+      "Options guide selector matched two valid links",
+      "Recording worker treats numeric manifest channels as an array",
+      "Late-armed loop capture loses the missed start frames",
+      "Browser FFmpeg encoded output size probe does not capture a readable result"
+    ],
+    "publishedSmoke": "intentionally skipped for local preview; required after main Pages deployment"
+  },
+  "helpCaptures": {
+    "complete": true,
+    "count": 22,
+    "commit": "887497fe5aada524565d24b5948dd4a872624227",
+    "visualReview": "Arrow-label text overflow found; measured wrapping and new capture required before publication"
+  },
+  "artifact": {
+    "id": 14537633215,
+    "sha256": "e4058ce4db0e0fc5d1fe82d8b750d5a05561e96ffbe95eb79ff21e6949d5e448",
+    "logSha256": "4c58fbbd6d6a199647106622f56d54e6b58a9ba48ee8f31ba434ef5342c62f3c"
+  },
+  "notes": [
+    "This checkpoint records actual executed evidence, including failures; it is not a passing beta gate.",
+    "Native checks compare rendered files numerically and do not test physical audio or MIDI hardware."
+  ]
+}

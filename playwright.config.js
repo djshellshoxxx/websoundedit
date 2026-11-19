@@ -25,7 +25,7 @@ export default defineConfig({
       args: ['--disable-dev-shm-usage'],
     },
   },
-  webServer: {
+  webServer: process.env.PLAYWRIGHT_BASE_URL ? undefined : {
     command: 'npm run preview -- --strictPort',
     url: baseURL,
     reuseExistingServer: !process.env.CI,

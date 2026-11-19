@@ -11,68 +11,61 @@ concurrency:
   cancel-in-progress: true
 jobs:
   verify:
+    if: github.ref != 'refs/heads/main' || github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci --no-audit --no-fund
-      - name: Install audio verification dependencies
-        run: |
-          # The regional runner mirror can stall large audio-library downloads.
-          if [ -f /etc/apt/apt-mirrors.txt ]; then
-            printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
-          fi
-          sudo apt-get -o Acquire::Retries=3 update -qq
-          sudo apt-get install -y --no-install-recommends ffmpeg audacity xvfb xauth
-      - run: npm test
-      - run: npm run build
-        id: build
-      - name: Install Chromium
-        id: chromium
-        run: npx playwright install --with-deps chromium
-      - name: Verify native Audacity project exchange
-        id: native
-        run: xvfb-run -a node scripts/verify-audacity.mjs
-      - name: Save native interchange evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-audacity-evidence
-          path: test-results/native-audacity/
-          retention-days: 14
-      - name: Test browser editing and real codec conversion
-        # Collect browser results even if native interoperability fails. Either
-        # failure still fails this job and prevents the Pages artifact/deploy.
-        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.chromium.outcome == 'success' }}
-        run: npm run test:e2e
-      - name: Save browser evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: browser-evidence
-          path: |
-            playwright-report/
-            test-results/browser/
-          retention-days: 14
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-  deploy:
+      - uses: ./.github/actions/verify
+  publish:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: verify
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     permissions:
+      contents: write
       pages: write
       id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/verify
       - uses: actions/configure-pages@v5
       - name: Deploy verified static app
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify published beta
+        env:
+          PLAYWRIGHT_BASE_URL: https://djshellshoxxx.github.io/websoundedit/
+        run: npx playwright test tests/published.spec.js
+      - name: Package verified web and companion sources
+        run: |
+          mkdir -p artifacts
+          python3 -m zipfile -c artifacts/websoundedit-web-1.0.0-beta.1.zip dist
+          git archive --format=tar.gz --output=artifacts/websoundedit-companion-1.0.0-beta.1.tar.gz HEAD
+          cp docs/releases/1.0.0-beta.1.md artifacts/RELEASE_NOTES.md
+          cd artifacts
+          sha256sum websoundedit-* > SHA256SUMS.txt
+      - name: Publish and verify the GitHub wiki
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/publish-wiki.mjs > artifacts/wiki-publication.json
+      - name: Publish 1.0 beta prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/publish-release.mjs
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/v1.0.0-beta.1" > artifacts/release.json
+      - name: Save publication evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: publication-evidence
+          path: |
+            test-results/browser/published-*/
+            artifacts/release.json
+            artifacts/wiki-publication.json
+            artifacts/SHA256SUMS.txt
+            dist/build.json
+          retention-days: 30

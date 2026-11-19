@@ -2,11 +2,12 @@
  * All times are seconds; selection positions are relative to their clip.
  * Audio buffers are immutable inside the engine, allowing bounded history to share PCM.
  */
-import { processAudio, detectBpm, detectSilence, analyzeAudio, generateAudio, sliceAudio, concatAudio, resampleAudio } from './dsp.js';
+import { processAudio, detectBpm, detectSilence, analyzeAudio, generateAudio, sliceAudio, concatAudio, resampleAudio, validateAudio } from './dsp.js';
 import { processRack, processRackEffect } from './rack-dsp.js';
 import { RACK_EFFECTS } from './rack-config.js';
 import { detectKey, manualKey, validateKeyAnalysis } from './key-detection.js';
 import { normalizeMetadata } from './metadata.js';
+import { audioLayout, normalizeLayout, layoutMetadata, layoutForChannels, CHANNEL_LAYOUTS, channelIndices, convertLayout, trackMixMatrix } from './channel-layout.js';
 
 export const LIMITS = Object.freeze({ projectBytes: 256 * 1024 * 1024, renderBytes: 256 * 1024 * 1024, historyBytes: 256 * 1024 * 1024, historyEntries: 30, tracks: 64, clips: 512, recipeCommands: 256, timelineSeconds: 600 });
 export class EditorError extends Error {
@@ -25,10 +26,17 @@ function name(value, fallback = 'Untitled') {
   if (typeof value !== 'string' || !value.trim() || value.length > 200) fail('Names must contain 1–200 characters.');
   return value.trim();
 }
+function suffixedName(value, suffix) {
+  let prefix = value.slice(0, 200 - suffix.length);
+  // Avoid cutting a supplementary Unicode character between its UTF-16 halves.
+  const last = prefix.charCodeAt(prefix.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) prefix = prefix.slice(0, -1);
+  return prefix + suffix;
+}
 function id(prefix) { return `${prefix}_${globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`}`; }
 function audioDuration(audio) { return audio.channels[0].length / audio.sampleRate; }
 function checkAudio(audio, clone = false, { allowEmpty = false } = {}) {
-  if (!audio || !Array.isArray(audio.channels) || audio.channels.length < 1 || audio.channels.length > 2) fail('Audio must contain one or two PCM channels.');
+  audioLayout(audio);
   const sampleRate = number(audio.sampleRate, undefined, 8000, 192000, 'Sample rate');
   if (!Number.isInteger(sampleRate)) fail('Sample rate must be an integer.');
   const length = audio.channels[0]?.length;
@@ -39,12 +47,12 @@ function checkAudio(audio, clone = false, { allowEmpty = false } = {}) {
     for (let i = 0; i < channel.length; i++) if (!Number.isFinite(channel[i]) || Math.abs(channel[i]) > 1e6) fail('PCM contains a non-finite or unreasonable sample.');
     return clone || !(channel instanceof Float32Array) ? Float32Array.from(channel) : channel;
   });
-  return { sampleRate, channels };
+  return { sampleRate, ...layoutMetadata(audio), channels };
 }
-function emptyProject({ sampleRate = 48000, name: projectName = 'Untitled session', bpm = 120 } = {}) {
+function emptyProject({ sampleRate = 48000, name: projectName = 'Untitled session', bpm = 120, outputLayout = 'stereo' } = {}) {
   number(sampleRate, undefined, 8000, 192000, 'Sample rate');
   if (!Number.isInteger(sampleRate)) fail('Sample rate must be an integer.');
-  return { version: 1, name: name(projectName), sampleRate, bpm: number(bpm, 120, 20, 400, 'BPM'), beatsPerBar: 4, beatOffset: 0, tracks: [], markers: [], selection: null, settings: {}, metadata: {}, selectedTrackId: null, selectedClipId: null };
+  return { version: 1, name: name(projectName), sampleRate, outputLayout: normalizeLayout(outputLayout), bpm: number(bpm, 120, 20, 400, 'BPM'), beatsPerBar: 4, beatOffset: 0, tracks: [], markers: [], selection: null, settings: {}, metadata: {}, selectedTrackId: null, selectedClipId: null };
 }
 function snapshot(project) {
   return { ...project, tracks: project.tracks.map(t => ({ ...t, clips: t.clips.map(c => ({ ...c, audio: c.audio })) })), markers: project.markers.map(m => ({ ...m })), selection: project.selection && { ...project.selection }, settings: copyJSON(project.settings), metadata: copyJSON(project.metadata || {}) };
@@ -57,10 +65,11 @@ function byteUsage(projects) {
   return bytes;
 }
 function projectDuration(p) { let end = 0; for (const t of p.tracks) for (const c of t.clips) end = Math.max(end, c.start + audioDuration(c.audio)); return end; }
-function clipInfo(c, trackId) { return { id: c.id, clipId: c.id, trackId, name: c.name, start: c.start, duration: audioDuration(c.audio), sampleRate: c.audio.sampleRate, channels: c.audio.channels.length, frames: c.audio.channels[0].length, keyAnalysis: c.keyAnalysis ? copyJSON(c.keyAnalysis) : null }; }
+function clipInfo(c, trackId) { return { id: c.id, clipId: c.id, trackId, name: c.name, start: c.start, duration: audioDuration(c.audio), sampleRate: c.audio.sampleRate, channels: c.audio.channels.length, layout: audioLayout(c.audio), frames: c.audio.channels[0].length, keyAnalysis: c.keyAnalysis ? copyJSON(c.keyAnalysis) : null }; }
 function trackInfo(t) { return { id: t.id, name: t.name, gainDb: t.gainDb, pan: t.pan, mute: t.mute, solo: t.solo, clips: t.clips.map(c => clipInfo(c, t.id)) }; }
 function alignChannels(audio, count) {
   if (audio.channels.length === count) return audio;
+  if (audio.channels.length > 2 || count > 2) return convertLayout(audio, layoutForChannels(count));
   if (count === 2) return { ...audio, channels: [audio.channels[0].slice(), audio.channels[0].slice()] };
   const mono = new Float32Array(audio.channels[0].length);
   for (let i = 0; i < mono.length; i++) mono[i] = (audio.channels[0][i] + audio.channels[1][i]) / 2;
@@ -69,12 +78,12 @@ function alignChannels(audio, count) {
 function portion(audio, start, end) {
   const a = Math.max(0, Math.min(audio.channels[0].length, Math.round(start * audio.sampleRate)));
   const b = Math.max(a, Math.min(audio.channels[0].length, Math.round(end * audio.sampleRate)));
-  return { sampleRate: audio.sampleRate, channels: audio.channels.map(c => c.slice(a, b)) };
+  return { sampleRate: audio.sampleRate, ...layoutMetadata(audio), channels: audio.channels.map(c => c.slice(a, b)) };
 }
 function spliceAudio(audio, start, end, replacement) {
   const a = Math.round(start * audio.sampleRate), b = Math.round(end * audio.sampleRate);
   const inserted = replacement ? alignChannels(replacement, audio.channels.length) : { sampleRate: audio.sampleRate, channels: audio.channels.map(() => new Float32Array(0)) };
-  return { sampleRate: audio.sampleRate, channels: audio.channels.map((c, ch) => {
+  return { sampleRate: audio.sampleRate, ...layoutMetadata(audio), channels: audio.channels.map((c, ch) => {
     const out = new Float32Array(a + inserted.channels[ch].length + c.length - b);
     out.set(c.subarray(0, a)); out.set(inserted.channels[ch], a); out.set(c.subarray(b), a + inserted.channels[ch].length); return out;
   }) };
@@ -85,20 +94,32 @@ function bytesToBase64(bytes) {
   return btoa(binary);
 }
 function base64ToBytes(text) {
-  if (typeof text !== 'string' || text.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(text)) fail('Project contains invalid base64 PCM.');
+  if (typeof text !== 'string' || text.length % 4 !== 0) fail('Project contains invalid base64 PCM.');
   if (text.length > Math.ceil(LIMITS.projectBytes * 4 / 3) + 4) fail('Project PCM exceeds memory limit.', 'RESOURCE_LIMIT');
+  const padding = text.endsWith('==') ? 2 : text.endsWith('=') ? 1 : 0;
+  // A linear scan has constant stack use even for a full-length session.
+  for (let i = 0; i < text.length - padding; i++) {
+    const code = text.charCodeAt(i);
+    if (!((code >= 65 && code <= 90) || (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || code === 43 || code === 47)) fail('Project contains invalid base64 PCM.');
+  }
+  if (padding) {
+    const code = text.charCodeAt(text.length - padding - 1);
+    const sextet = code >= 65 && code <= 90 ? code - 65 : code >= 97 && code <= 122 ? code - 71 : code >= 48 && code <= 57 ? code + 4 : code === 43 ? 62 : 63;
+    if (sextet & (padding === 2 ? 15 : 3)) fail('Project contains noncanonical base64 PCM padding.');
+  }
   if (typeof Buffer !== 'undefined') return Uint8Array.from(Buffer.from(text, 'base64'));
   const raw = atob(text), bytes = new Uint8Array(raw.length); for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i); return bytes;
 }
 function encodePCM(audio) {
-  return { encoding: 'f32le-base64', sampleRate: audio.sampleRate, frames: audio.channels[0].length, channels: audio.channels.map(channel => {
+  return { encoding: 'f32le-base64', sampleRate: audio.sampleRate, ...layoutMetadata(audio), frames: audio.channels[0].length, channels: audio.channels.map(channel => {
     const bytes = new Uint8Array(channel.length * 4), view = new DataView(bytes.buffer);
     for (let i = 0; i < channel.length; i++) view.setFloat32(i * 4, channel[i], true);
     return bytesToBase64(bytes);
   }) };
 }
 function decodePCM(data, budget) {
-  if (!data || data.encoding !== 'f32le-base64' || !Array.isArray(data.channels) || data.channels.length < 1 || data.channels.length > 2 || !Number.isSafeInteger(data.frames) || data.frames < 1) fail('Invalid project PCM format.');
+  if (!data || data.encoding !== 'f32le-base64' || !Array.isArray(data.channels) || ![1, 2, 6, 8].includes(data.channels.length) || !Number.isSafeInteger(data.frames) || data.frames < 1) fail('Invalid project PCM format.');
+  audioLayout(data);
   const bytes = data.frames * data.channels.length * 4;
   if (bytes > budget.remaining) fail('Project exceeds the 256 MiB PCM limit.', 'RESOURCE_LIMIT');
   budget.remaining -= bytes;
@@ -110,7 +131,7 @@ function decodePCM(data, budget) {
     for (let i = 0; i < out.length; i++) out[i] = view.getFloat32(i * 4, true);
     return out;
   });
-  return checkAudio({ sampleRate: data.sampleRate, channels });
+  return checkAudio({ sampleRate: data.sampleRate, ...layoutMetadata(data), channels });
 }
 const effects = [
   ['gain', 'Adjust amplitude in dB', { db: 0 }], ['fadeIn', 'Fade selected audio in', { duration: 0.05 }], ['fadeOut', 'Fade selected audio out', { duration: 0.05 }],
@@ -126,6 +147,7 @@ const effects = [
   ['beatRepeat', 'Slice and reorder a rhythm', { division: 4, pattern: [0, 1, 2, 3] }],
   ['granular', 'Build a seeded granular texture', { grainMs: 80, density: 8, spread: 0.2, seed: 1, mix: 0.5 }],
   ['rack', 'Process an ordered creative effects chain as one edit', { chain: [] }],
+  ['trimSilence', 'Trim quiet ends while preserving internal pauses; all-silent audio remains unchanged', { thresholdDb: -60, minDuration: .05, padding: .01 }],
   ...Object.entries(RACK_EFFECTS).map(([effect, info]) => [effect, info.description || info.title, { ...info.defaults, wet: info.wet }])
 ];
 export const EFFECTS = Object.freeze(effects.map(([effect, description, parameters]) => ({ effect, description, parameters })));
@@ -134,6 +156,7 @@ export const COMMANDS = Object.freeze([
   command('commands.list', 'Discover all core methods'), command('project.state', 'Read metadata without PCM'), command('project.new', 'Create an empty project', { name: 'Untitled session', sampleRate: 48000, bpm: 120 }, true),
   command('project.update', 'Set project name, tempo, grid and offset', { name: 'Session', bpm: 120, beatsPerBar: 4, beatOffset: 0 }, true), command('project.select', 'Select a track and clip', { trackId: 'track-id', clipId: 'clip-id' }),
   command('project.save', 'Create portable JSON with embedded PCM'), command('project.load', 'Load a portable JSON project', { project: {} }, true),
+  command('project.saveTrack', 'Save one explicit track as an editable native session', { trackId: 'track-id' }),
   command('metadata.update', 'Replace audio export metadata', { metadata: {} }, true),
   command('analysis.key', 'Estimate and store the whole sample key', { clipId: null }, true),
   command('analysis.keyAll', 'Estimate and store each sample key', {}, true),
@@ -150,13 +173,14 @@ export const COMMANDS = Object.freeze([
   command('analysis.bpm', 'Estimate tempo and confidence', { minBpm: 60, maxBpm: 200 }), command('analysis.silence', 'Find quiet regions', { thresholdDb: -45, minDuration: 0.25, padding: 0.02 }), command('analysis.stats', 'Measure amplitude, DC and stereo correlation'),
   command('audio.generate', 'Create a tone, noise, sweep or drum clip', { type: 'tone', duration: 4, frequency: 440, amplitude: 0.3, seed: 1 }, true),
   command('audio.render', 'Render mix, track, clip or selection as PCM', { scope: 'mix', trackId: null, clipId: null, start: 0, end: null }),
+  command('audio.playbackPlan', 'Read independent track sources for live routing', { scope: 'mix', excludeTrackIds: [] }),
   command('audio.renderPreview', 'Audition a draft effect through the mixer without committing', { effect: 'gain', params: { db: 0 }, target: null, scope: 'mix' }),
   command('markers.add', 'Add a timeline marker', { time: 0, name: 'Marker' }, true), command('markers.remove', 'Remove a marker', { markerId: 'marker-id' }, true),
   command('loop.create', 'Create a loop clip from selected audio', { repeats: 4, crossfadeMs: 5, newTrack: true }, true),
   command('recipe.run', 'Run a JSON command sequence atomically', { commands: [{ method: 'effect.normalize', params: { targetDb: -1 } }] }, true)
 ]);
 const registry = new Map(COMMANDS.map(c => [c.method, c]));
-const lengthEffects = new Set(['stretch', 'speed', 'removeSilence', 'loop', 'beatRepeat']);
+const lengthEffects = new Set(['stretch', 'speed', 'removeSilence', 'trimSilence', 'loop', 'beatRepeat']);
 const channelEffects = new Set(['mono', 'swap', 'pan']);
 
 export class AudioEditor {
@@ -166,7 +190,7 @@ export class AudioEditor {
   getProject() { return this.project; }
   getState() {
     const p = this.project;
-    return { version: p.version, name: p.name, sampleRate: p.sampleRate, bpm: p.bpm, beatsPerBar: p.beatsPerBar, beatOffset: p.beatOffset, duration: projectDuration(p), tracks: p.tracks.map(trackInfo), markers: p.markers.map(m => ({ ...m })), selection: p.selection && { ...p.selection }, settings: copyJSON(p.settings), metadata: copyJSON(p.metadata || {}), selectedTrackId: p.selectedTrackId, selectedClipId: p.selectedClipId, history: { undo: this.undo.length, redo: this.redo.length, bytes: byteUsage([p, ...this.undo, ...this.redo]) }, canUndo: this.undo.length > 0, canRedo: this.redo.length > 0, hasClipboard: !!this.clipboard, revision: this.revision };
+    return { version: p.version, name: p.name, sampleRate: p.sampleRate, outputLayout: p.outputLayout, bpm: p.bpm, beatsPerBar: p.beatsPerBar, beatOffset: p.beatOffset, duration: projectDuration(p), tracks: p.tracks.map(trackInfo), markers: p.markers.map(m => ({ ...m })), selection: p.selection && copyJSON(p.selection), settings: copyJSON(p.settings), metadata: copyJSON(p.metadata || {}), selectedTrackId: p.selectedTrackId, selectedClipId: p.selectedClipId, history: { undo: this.undo.length, redo: this.redo.length, bytes: byteUsage([p, ...this.undo, ...this.redo]) }, canUndo: this.undo.length > 0, canRedo: this.redo.length > 0, hasClipboard: !!this.clipboard, revision: this.revision };
   }
   execute(method, params = {}) {
     const next = this._queue.then(() => this._execute(method, params)); this._queue = next.catch(() => {}); return next;
@@ -229,12 +253,12 @@ export class AudioEditor {
     const start = Math.round(rawStart * rate) / rate, end = Math.round(rawEnd * rate) / rate;
     if (!(end > start)) fail('Selection must contain at least one sample.', 'EMPTY_SELECTION');
     const channels = requested.channels ?? range?.channels ?? 'all';
-    if (!['all', 'left', 'right'].includes(channels) || (channels === 'right' && clip.audio.channels.length < 2)) fail('Choose an available channel.');
-    return { track, clip, start, end, channels };
+    const indices = channelIndices(channels, clip.audio.channels.length);
+    return { track, clip, start, end, channels: Array.isArray(channels) ? indices : channels, indices };
   }
   _selectedAudio(target) {
     const audio = portion(target.clip.audio, target.start, target.end);
-    if (target.channels !== 'all') audio.channels = [audio.channels[target.channels === 'left' ? 0 : 1]];
+    if (target.channels !== 'all') { audio.channels = target.indices.map(index => audio.channels[index]); delete audio.layout; }
     return audio;
   }
   _addTrack(params = {}) {
@@ -268,7 +292,8 @@ export class AudioEditor {
     const rendered = effect === 'rack' ? await processRack(source, effectOptions, context)
       : Object.hasOwn(RACK_EFFECTS, effect) ? await processRackEffect(source, effect, rackEffectOptions, wet ?? RACK_EFFECTS[effect].wet, context)
       : await processAudio(source, effect, effectOptions, context);
-    const processed = checkAudio(rendered, false, { allowEmpty: effect === 'removeSilence' });
+    const processed = target.channels === 'all' ? checkAudio(rendered, false, { allowEmpty: effect === 'removeSilence' }) : validateAudio(rendered, { allowEmpty: false });
+    if (rendered.trimInfo?.allSilent) return preview ? portion(target.clip.audio, 0, audioDuration(target.clip.audio)) : { ...clipInfo(target.clip, target.track.id), ...rendered.trimInfo };
     let replacement;
     if (target.channels === 'all') {
       let background = alignChannels(target.clip.audio, processed.channels.length);
@@ -282,9 +307,9 @@ export class AudioEditor {
       }
       replacement = effect === 'mono' ? processed : spliceAudio(background, target.start, target.end, processed);
     } else {
-      if (processed.channels.length !== 1 || processed.channels[0].length !== source.channels[0].length) fail('Single-channel processing changed the selection dimensions.');
-      replacement = { sampleRate: target.clip.audio.sampleRate, channels: target.clip.audio.channels.map(c => c.slice()) };
-      replacement.channels[target.channels === 'left' ? 0 : 1].set(processed.channels[0], Math.round(target.start * replacement.sampleRate));
+      if (processed.channels.length !== source.channels.length || processed.channels[0].length !== source.channels[0].length) fail('Channel processing changed the selection dimensions.');
+      replacement = { sampleRate: target.clip.audio.sampleRate, ...layoutMetadata(target.clip.audio), channels: target.clip.audio.channels.map(c => c.slice()) };
+      target.indices.forEach((index, c) => replacement.channels[index].set(processed.channels[c], Math.round(target.start * replacement.sampleRate)));
     }
     checkAudio(replacement, false, { allowEmpty: effect === 'removeSilence' });
     if (preview) return replacement;
@@ -296,46 +321,83 @@ export class AudioEditor {
     target.clip.keyAnalysis = null;
     if (this.project.selection?.clipId === target.clip.id) this.project.selection = processed.channels[0].length ? { trackId: target.track.id, clipId: target.clip.id, start: target.start, end: target.start + audioDuration(processed), channels: target.channels } : null;
     this._select(target.track, target.clip);
-    return clipInfo(target.clip, target.track.id);
+    return { ...clipInfo(target.clip, target.track.id), ...(rendered.trimInfo ? { trimInfo: rendered.trimInfo } : {}) };
   }
-  _renderTracks(tracks, start, end, { ignoreMute = false } = {}) {
-    const sr = this.project.sampleRate, frames = Math.round((end - start) * sr);
-    if (!Number.isFinite(frames) || frames <= 0) fail('The render range must contain audio.', 'EMPTY_AUDIO');
-    if (frames * 8 > LIMITS.renderBytes) fail('Rendered audio exceeds the 256 MiB PCM limit.', 'RESOURCE_LIMIT');
-    const channels = [new Float32Array(frames), new Float32Array(frames)];
+  _renderTracks(tracks, start, end, { ignoreMute = false, outputLayout = this.project.outputLayout, raw = false } = {}) {
+    const sr = this.project.sampleRate, frames = Math.round((end - start) * sr), layout = normalizeLayout(outputLayout);
+    const count = CHANNEL_LAYOUTS[layout].count;
+    if (!Number.isSafeInteger(frames) || frames <= 0) fail('The render range must contain audio.', 'EMPTY_AUDIO');
+    if (frames * count * 4 > LIMITS.renderBytes) fail('Rendered audio exceeds the 256 MiB PCM limit.', 'RESOURCE_LIMIT');
+    const channels = Array.from({ length: count }, () => new Float32Array(frames));
     for (const track of tracks) {
       if (track.mute && !ignoreMute) continue;
-      const gain = 10 ** (track.gainDb / 20), pan = track.pan;
       for (const clip of track.clips) {
         const begin = Math.round((clip.start - start) * sr), from = Math.max(0, -begin), to = Math.min(clip.audio.channels[0].length, frames - begin);
         if (to <= from) continue;
-        const [left, right] = clip.audio.channels;
-        // Equal-power mono pan; stereo balance never collapses an opposite channel.
-        const gl = right ? (pan > 0 ? Math.cos(pan * Math.PI / 2) : 1) : Math.cos((pan + 1) * Math.PI / 4);
-        const gr = right ? (pan < 0 ? Math.cos(-pan * Math.PI / 2) : 1) : Math.sin((pan + 1) * Math.PI / 4);
-        for (let i = from; i < to; i++) { channels[0][begin + i] += left[i] * gain * gl; channels[1][begin + i] += (right || left)[i] * gain * gr; }
+        const matrix = trackMixMatrix(audioLayout(clip.audio), layout, raw ? {} : track);
+        for (let c = 0; c < count; c++) for (let source = 0; source < clip.audio.channels.length; source++) {
+          const gain = matrix[c][source]; if (!gain) continue;
+          for (let i = from; i < to; i++) channels[c][begin + i] += clip.audio.channels[source][i] * gain;
+        }
       }
     }
-    return { sampleRate: sr, channels };
+    return { sampleRate: sr, layout, channels };
   }
   _render(params) {
     const scope = params.scope || 'mix';
+    for (const key of ['respectMute', 'respectSolo', 'raw']) if (params[key] !== undefined && typeof params[key] !== 'boolean') fail(`${key} must be boolean.`);
+    const outputLayout = normalizeLayout(params.outputLayout ?? this.project.outputLayout);
     if (scope === 'selection' || scope === 'clip') {
       const target = this._target(scope === 'selection' ? params : { target: { clipId: params.clipId ?? this.project.selectedClipId, trackId: params.trackId, ...(params.start !== undefined ? { start: params.start, end: params.end } : {}) } }, { requireSelection: scope === 'selection' });
-      const audio = this._selectedAudio(target);
-      if (params.raw === true) return audio;
-      const track = { ...target.track, clips: [{ ...target.clip, start: 0, audio }], mute: false };
-      const rendered = this._renderTracks([track], 0, audioDuration(audio));
-      if (target.channels !== 'all') return { ...rendered, channels: [audio.channels[0].map(v => v * 10 ** (target.track.gainDb / 20))] };
-      return rendered;
+      let audio = this._selectedAudio(target);
+      if (target.channels !== 'all' && target.indices.length > 1) {
+        audio = portion(target.clip.audio, target.start, target.end);
+        audio.channels.forEach((channel, index) => { if (!target.indices.includes(index)) channel.fill(0); });
+      }
+      if (params.raw === true) return params.outputLayout ? convertLayout(audio, outputLayout) : audio;
+      if (target.channels !== 'all' && target.indices.length === 1 && !params.outputLayout) return { sampleRate: audio.sampleRate, channels: [audio.channels[0].map(v => v * 10 ** (target.track.gainDb / 20))] };
+      const respectMute = params.respectMute === true, solo = params.respectSolo === true && this.project.tracks.some(t => t.solo);
+      const track = { ...target.track, clips: [{ ...target.clip, start: 0, audio }], mute: (respectMute && target.track.mute) || (solo && !target.track.solo) };
+      return this._renderTracks([track], 0, audioDuration(audio), { outputLayout });
     }
     if (scope !== 'mix' && scope !== 'track') fail('Render scope must be mix, track, clip or selection.');
-    const solo = this.project.tracks.some(t => t.solo);
-    const tracks = scope === 'track' ? [this._track(params.trackId)] : this.project.tracks.filter(t => !solo || t.solo);
-    const extent = tracks.reduce((max, t) => t.clips.reduce((e, c) => Math.max(e, c.start + audioDuration(c.audio)), max), 0);
+    const respectSolo = params.respectSolo ?? (params.raw ? false : scope === 'mix'), solo = respectSolo && this.project.tracks.some(t => t.solo);
+    const candidates = scope === 'track' ? [this._track(params.trackId)] : this.project.tracks;
+    const tracks = candidates.filter(t => !solo || t.solo);
+    const extent = candidates.reduce((max, t) => t.clips.reduce((e, c) => Math.max(e, c.start + audioDuration(c.audio)), max), 0);
     const start = number(params.start, 0, 0, LIMITS.timelineSeconds, 'Render start'), end = number(params.end, extent, 0, LIMITS.timelineSeconds, 'Render end');
-    if (end <= start) fail('The render range must contain audio.', 'EMPTY_AUDIO');
-    return this._renderTracks(tracks, start, end);
+    return this._renderTracks(tracks, start, end, { ignoreMute: params.respectMute === false || (params.raw === true && params.respectMute === undefined), outputLayout, raw: params.raw === true });
+  }
+  _playbackPlan(params = {}) {
+    const p = this.project, scope = params.scope ?? 'mix', excluded = params.excludeTrackIds ?? [];
+    if (!Array.isArray(excluded) || excluded.length > LIMITS.tracks || excluded.some(x => typeof x !== 'string')) fail('Excluded track IDs must be an array.');
+    const layout = normalizeLayout(params.outputLayout ?? p.outputLayout);
+    if (scope === 'clip' || scope === 'selection') {
+      const target = this._target(scope === 'selection' ? params : { target: { clipId: params.clipId ?? p.selectedClipId } }, { requireSelection: scope === 'selection' });
+      const audio = portion(target.clip.audio, target.start, target.end);
+      if (target.channels !== 'all') audio.channels.forEach((channel, i) => { if (!target.indices.includes(i)) channel.fill(0); });
+      return { sampleRate: p.sampleRate, layout, start: target.clip.start + target.start, end: target.clip.start + target.end, bpm: p.bpm, beatsPerBar: p.beatsPerBar, beatOffset: p.beatOffset, tracks: excluded.includes(target.track.id) ? [] : [{ ...trackInfo(target.track), clips: [{ clipId: target.clip.id, start: target.clip.start + target.start, audio }] }] };
+    }
+    if (!['mix', 'track'].includes(scope)) fail('Invalid playback scope.');
+    const solo = (params.respectSolo ?? scope === 'mix') && p.tracks.some(t => t.solo);
+    const candidates = scope === 'track' ? [this._track(params.trackId)] : p.tracks;
+    const start = number(params.start, 0, 0, LIMITS.timelineSeconds, 'Playback start');
+    const end = number(params.end, candidates.reduce((max, t) => t.clips.reduce((value, c) => Math.max(value, c.start + audioDuration(c.audio)), max), 0), 0, LIMITS.timelineSeconds, 'Playback end');
+    if (end <= start) fail('Playback range is empty.', 'EMPTY_AUDIO');
+    const tracks = candidates.filter(t => !excluded.includes(t.id) && (!solo || t.solo) && (params.respectMute === false || !t.mute)).map(t => ({ ...trackInfo(t), clips: t.clips.filter(c => c.start < end && c.start + audioDuration(c.audio) > start).map(c => ({ clipId: c.id, start: c.start, audio: checkAudio(c.audio, true) })) }));
+    return { sampleRate: p.sampleRate, layout, start, end, bpm: p.bpm, beatsPerBar: p.beatsPerBar, beatOffset: p.beatOffset, tracks };
+  }
+  _saveTrack(trackId) {
+    const track = this._track(trackId), portable = this._saveProject(), ids = new Set(track.clips.map(c => c.id));
+    portable.tracks = portable.tracks.filter(t => t.id === track.id);
+    portable.selectedTrackId = track.id;
+    portable.selectedClipId = ids.has(portable.selectedClipId) ? portable.selectedClipId : track.clips[0]?.id ?? null;
+    if (!ids.has(portable.selection?.clipId)) portable.selection = null;
+    if (portable.settings.midiSequences) portable.settings.midiSequences = Object.fromEntries(Object.entries(portable.settings.midiSequences).filter(([id]) => ids.has(id)));
+    if (portable.settings.live?.racks) portable.settings.live.racks = Object.fromEntries(Object.entries(portable.settings.live.racks).filter(([id]) => id === 'master' || id === track.id));
+    if (portable.settings.live?.tracks) portable.settings.live.tracks = Object.fromEntries(Object.entries(portable.settings.live.tracks).filter(([id]) => id === track.id));
+    if (portable.settings.live?.loops) portable.settings.live.loops = portable.settings.live.loops.filter(loop => loop.trackId === track.id && ids.has(loop.clipId));
+    return portable;
   }
   _saveProject() {
     const p = snapshot(this.project);
@@ -385,12 +447,14 @@ export class AudioEditor {
       case 'project.new': this.project = emptyProject(params); return this.getState();
       case 'project.update': {
         if (own(params, 'name')) p.name = name(params.name);
+        if (own(params, 'outputLayout')) p.outputLayout = normalizeLayout(params.outputLayout);
         if (own(params, 'bpm')) p.bpm = number(params.bpm, undefined, 20, 400, 'BPM');
         if (own(params, 'beatsPerBar')) { p.beatsPerBar = number(params.beatsPerBar, undefined, 1, 16, 'Beats per bar'); if (!Number.isInteger(p.beatsPerBar)) fail('Beats per bar must be an integer.'); }
         if (own(params, 'beatOffset')) p.beatOffset = number(params.beatOffset, undefined, -LIMITS.timelineSeconds, LIMITS.timelineSeconds, 'Beat offset'); return this.getState();
       }
       case 'project.select': { const track = params.trackId ? this._track(params.trackId) : params.clipId ? this._clip(params.clipId).track : this._track(); const clip = params.clipId ? this._clip(params.clipId, track.id).clip : track.clips[0]; this._select(track, clip); return this.getState(); }
       case 'project.save': return this._saveProject();
+      case 'project.saveTrack': return this._saveTrack(params.trackId);
       case 'project.load': return this._loadProject(params.project);
       case 'metadata.update': p.metadata = normalizeMetadata(params.metadata); return copyJSON(p.metadata);
       case 'analysis.key': { const { clip } = this._clip(params.clipId || p.selectedClipId); clip.keyAnalysis = detectKey(clip.audio); return copyJSON(clip.keyAnalysis); }
@@ -408,11 +472,11 @@ export class AudioEditor {
       }
       case 'track.remove': { const t = this._track(params.trackId); p.tracks = p.tracks.filter(x => x.id !== t.id); this._repairSelection(); return true; }
       case 'clip.add': return this._addClip(params);
-      case 'clip.getAudio': { const { clip } = this._clip(params.clipId, params.trackId); return { sampleRate: clip.audio.sampleRate, channels: clip.audio.channels.map(c => c.slice()) }; }
+      case 'clip.getAudio': { const { clip } = this._clip(params.clipId, params.trackId); return { sampleRate: clip.audio.sampleRate, ...layoutMetadata(clip.audio), channels: clip.audio.channels.map(c => c.slice()) }; }
       case 'clip.update': { const { track, clip } = this._clip(params.clipId, params.trackId); if (own(params, 'name')) clip.name = name(params.name); if (own(params, 'start')) clip.start = number(params.start, undefined, 0, LIMITS.timelineSeconds, 'Clip start'); if (params.destinationTrackId && params.destinationTrackId !== track.id) { const destination = this._track(params.destinationTrackId); track.clips = track.clips.filter(c => c.id !== clip.id); destination.clips.push(clip); this._select(destination, clip); if (p.selection?.clipId === clip.id) p.selection.trackId = destination.id; return clipInfo(clip, destination.id); } return clipInfo(clip, track.id); }
       case 'clip.remove': { const { track, clip } = this._clip(params.clipId, params.trackId); track.clips = track.clips.filter(c => c.id !== clip.id); this._repairSelection(); return true; }
-      case 'clip.duplicate': { const { track, clip } = this._clip(params.clipId, params.trackId); const dest = params.newTrack ? this._addTrack({ name: `${track.name} copy` }) : track; const duplicate = { ...clip, id: id('clip'), name: `${clip.name} copy`, start: number(params.start, clip.start + audioDuration(clip.audio), 0, LIMITS.timelineSeconds, 'Clip start') }; dest.clips.push(duplicate); this._select(dest, duplicate); return clipInfo(duplicate, dest.id); }
-      case 'clip.split': { const { track, clip } = this._clip(params.clipId, params.trackId); const at = number(params.at, p.selection?.clipId === clip.id ? p.selection.start : undefined, 0, audioDuration(clip.audio), 'Split position'); const frame = Math.round(at * clip.audio.sampleRate); if (frame <= 0 || frame >= clip.audio.channels[0].length) fail('Split position must be inside the clip.'); const cut = frame / clip.audio.sampleRate; const right = { ...clip, id: id('clip'), name: `${clip.name} · B`, start: clip.start + cut, keyAnalysis: null, audio: portion(clip.audio, cut, audioDuration(clip.audio)) }; clip.audio = portion(clip.audio, 0, cut); clip.keyAnalysis = null; track.clips.splice(track.clips.indexOf(clip) + 1, 0, right); this._select(track, right); return { left: clipInfo(clip, track.id), right: clipInfo(right, track.id) }; }
+      case 'clip.duplicate': { const { track, clip } = this._clip(params.clipId, params.trackId); const dest = params.newTrack ? this._addTrack({ name: suffixedName(track.name, ' copy') }) : track; const duplicate = { ...clip, id: id('clip'), name: suffixedName(clip.name, ' copy'), start: number(params.start, clip.start + audioDuration(clip.audio), 0, LIMITS.timelineSeconds, 'Clip start') }; dest.clips.push(duplicate); this._select(dest, duplicate); return clipInfo(duplicate, dest.id); }
+      case 'clip.split': { const { track, clip } = this._clip(params.clipId, params.trackId); const at = number(params.at, p.selection?.clipId === clip.id ? p.selection.start : undefined, 0, audioDuration(clip.audio), 'Split position'); const frame = Math.round(at * clip.audio.sampleRate); if (frame <= 0 || frame >= clip.audio.channels[0].length) fail('Split position must be inside the clip.'); const cut = frame / clip.audio.sampleRate; const right = { ...clip, id: id('clip'), name: suffixedName(clip.name, ' · B'), start: clip.start + cut, keyAnalysis: null, audio: portion(clip.audio, cut, audioDuration(clip.audio)) }; clip.audio = portion(clip.audio, 0, cut); clip.keyAnalysis = null; track.clips.splice(track.clips.indexOf(clip) + 1, 0, right); this._select(track, right); return { left: clipInfo(clip, track.id), right: clipInfo(right, track.id) }; }
       case 'selection.set': {
         const { track, clip } = this._clip(params.clipId, params.trackId); const duration = audioDuration(clip.audio);
         const start = Math.max(0, Math.min(duration, number(params.start, undefined, -LIMITS.timelineSeconds, LIMITS.timelineSeconds, 'Selection start'))), end = Math.max(0, Math.min(duration, number(params.end, undefined, -LIMITS.timelineSeconds, LIMITS.timelineSeconds, 'Selection end')));
@@ -423,7 +487,7 @@ export class AudioEditor {
       case 'edit.copy': { const target = this._target(params); this.clipboard = this._selectedAudio(target); return { duration: audioDuration(this.clipboard), channels: this.clipboard.channels.length }; }
       case 'edit.cut':
       case 'edit.delete': { const target = this._target(params, { requireSelection: true }); if (target.channels !== 'all') fail('Cut and delete require All channels; use Silence for one channel.'); if (method === 'edit.cut') this.clipboard = this._selectedAudio(target); const audio = spliceAudio(target.clip.audio, target.start, target.end, null); if (!audio.channels[0].length) { target.track.clips = target.track.clips.filter(c => c.id !== target.clip.id); } else { target.clip.audio = audio; target.clip.keyAnalysis = null; } p.selection = null; this._repairSelection(); return true; }
-      case 'edit.trim': { const target = this._target(params, { requireSelection: true }); if (target.channels !== 'all') fail('Trim requires All channels.'); target.clip.audio = this._selectedAudio(target); target.clip.keyAnalysis = null; if (params.keepTimelinePosition !== false) target.clip.start += target.start; p.selection = { trackId: target.track.id, clipId: target.clip.id, start: 0, end: audioDuration(target.clip.audio), channels: 'all' }; return clipInfo(target.clip, target.track.id); }
+      case 'edit.trim': { const target = this._target(params, { requireSelection: true }); if (target.channels !== 'all') fail('Trim requires All channels.'); target.clip.audio = this._selectedAudio(target); target.clip.keyAnalysis = null; if (params.keepTimelinePosition !== false) target.clip.start += target.start; this._select(target.track, target.clip); p.selection = { trackId: target.track.id, clipId: target.clip.id, start: 0, end: audioDuration(target.clip.audio), channels: 'all' }; return clipInfo(target.clip, target.track.id); }
       case 'edit.paste': {
         if (!this.clipboard) fail('The internal clipboard is empty.', 'EMPTY_CLIPBOARD');
         if (!p.selectedClipId && !params.clipId) return this._addClip({ audio: this.clipboard, trackId: params.trackId || p.selectedTrackId || undefined, name: 'Pasted audio', start: params.start || 0 });
@@ -437,6 +501,7 @@ export class AudioEditor {
       case 'analysis.stats': return analyzeAudio(this._selectedAudio(this._target(params)));
       case 'audio.generate': { const audio = await generateAudio({ ...params, sampleRate: p.sampleRate, bpm: params.bpm ?? p.bpm }); return this._addClip({ audio, trackId: params.trackId, name: params.name || `${params.type || 'tone'} signal`, start: params.start }); }
       case 'audio.render': return this._render(params);
+      case 'audio.playbackPlan': return this._playbackPlan(params);
       case 'audio.renderPreview': {
         const target = this._target(params), preview = await this._effect(params, true), original = this.project;
         const selectionEnd = target.end + audioDuration(preview) - audioDuration(target.clip.audio);
@@ -450,14 +515,14 @@ export class AudioEditor {
       }
       case 'markers.add': { if (p.markers.length >= 1000) fail('Marker limit reached.'); const marker = { id: id('marker'), name: name(params.name, `Marker ${p.markers.length + 1}`), time: number(params.time, 0, 0, LIMITS.timelineSeconds, 'Marker time') }; p.markers.push(marker); p.markers.sort((a, b) => a.time - b.time); return { ...marker }; }
       case 'markers.remove': { const index = p.markers.findIndex(m => m.id === params.markerId); if (index < 0) fail('Marker not found.', 'NOT_FOUND'); p.markers.splice(index, 1); return true; }
-      case 'loop.create': { const target = this._target(params); const audio = checkAudio(await processAudio(this._selectedAudio(target), 'loop', { repeats: params.repeats ?? 4, crossfadeMs: params.crossfadeMs ?? 5 })); return this._addClip({ audio, trackId: params.newTrack === false ? target.track.id : undefined, name: params.name || `${target.clip.name} loop`, start: params.start ?? target.clip.start + target.start }); }
+      case 'loop.create': { const target = this._target(params); const audio = checkAudio(await processAudio(this._selectedAudio(target), 'loop', { repeats: params.repeats ?? 4, crossfadeMs: params.crossfadeMs ?? 5 })); return this._addClip({ audio, trackId: params.newTrack === false ? target.track.id : undefined, name: params.name || suffixedName(target.clip.name, ' loop'), start: params.start ?? target.clip.start + target.start }); }
       case 'recipe.run': {
         const steps = params.commands || params.steps || params.recipe?.commands || params.recipe?.steps || params.recipe;
         if (!Array.isArray(steps) || !steps.length || steps.length > LIMITS.recipeCommands) fail('A recipe requires 1–256 commands.');
         const results = [];
         for (const step of steps) {
           if (!step || typeof step.method !== 'string' || !registry.has(step.method) || ['recipe.run', 'history.undo', 'history.redo'].includes(step.method)) fail('Recipe contains an unknown or recursive/history command.');
-          const args = step.params || {}; if (typeof args !== 'object' || Array.isArray(args)) fail('Recipe parameters must be objects.');
+          const args = step.params === undefined ? {} : step.params; if (!args || typeof args !== 'object' || Array.isArray(args)) fail('Recipe parameters must be objects.');
           results.push(await this._dispatch(step.method, args)); this._checkLimits();
         }
         return results;

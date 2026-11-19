@@ -1,0 +1,37 @@
+{
+  "seed": "0x434f4d31",
+  "node": "v24.22.3",
+  "corpusSha256": "835c8cb7036b136335dad15d095ca44fa9c17bfabec60b10879cb32d2e638d73",
+  "sourceFilesSha256": {
+    "scripts/server.mjs": "ea3d352cb74b8871223e21ff65a6b4f58007771fad5b640b039a24c71c2d02eb",
+    "scripts/node-runtime.mjs": "dae545f30d3f21665a4d3e80f0f17ada5a1a1319998897e63b9a97667a52164b",
+    "scripts/udp-streams.mjs": "cf3c51614bae2181d27bd2a1f92181c2525bcbee973ec18af39c95e239aad126",
+    "src/companion.js": "91f98d79fae236e79ae054746055162a5a6cda30a76175b1feb20f17bb3ea6bd",
+    "src/command-schema.js": "a4542adc483f861ba30d95fe4630d34e7cb25d6d7f1ded90c700739a523e9f62",
+    "tests/fuzz/companion.mjs": "d22abccea9f79fa617e0c555885d40210bf449c22584e1a5064b4f32af538174"
+  },
+  "counts": {
+    "cases": 2056,
+    "passed": 2056,
+    "failed": 0,
+    "schema": 1024,
+    "schemaValid": 512,
+    "schemaInvalid": 512,
+    "pcm": 768,
+    "pcmValid": 256,
+    "pcmInvalid": 512,
+    "pcmOutputComparisons": 8,
+    "lifecycle": 128,
+    "http": 128,
+    "invariantFailures": 0
+  },
+  "elapsedMs": 611,
+  "phaseTimes": {
+    "schemaMs": 45,
+    "pcmMs": 114,
+    "lifecycleMs": 301,
+    "httpMs": 142
+  },
+  "networkScope": "Synthetic UDP sockets/encoders and authenticated 127.0.0.1 HTTP only; no external datagrams or native encoder spawned.",
+  "failures": []
+}

@@ -1,0 +1,89 @@
+{
+  "seeds": {
+    "parser": "0x4d414331",
+    "programs": "0x4d414332",
+    "negative": "0x4d414333"
+  },
+  "node": "v24.22.3",
+  "corpusSha256": "358e0ebed48ffc0214d7f785679c126101d6f28a96aa834c8e54a8be547162cc",
+  "counts": {
+    "parserCases": 4096,
+    "parserAccepted": 2267,
+    "parserRejected": 1829,
+    "astRoundTrips": 2267,
+    "oraclePrograms": 512,
+    "oraclePassed": 512,
+    "schemaValid": 128,
+    "schemaInvalid": 128,
+    "staticPreflight": 128,
+    "dynamicErrors": 64,
+    "executionBounds": 32,
+    "hostileData": 32,
+    "cases": 5120,
+    "passed": 5117,
+    "failed": 3,
+    "unexpectedRawErrors": 0,
+    "forbiddenGetterCalls": 3,
+    "ambientNetworkCalls": 0,
+    "prototypeMutations": 0
+  },
+  "elapsedMs": 3497,
+  "phaseTimes": {
+    "parserMs": 1261,
+    "oracleMs": 2098,
+    "schemaMs": 84,
+    "boundsMs": 18,
+    "hostileDataMs": 31
+  },
+  "limits": {
+    "sourceBytes": 131072,
+    "tokens": 30000,
+    "nodes": 20000,
+    "depth": 48,
+    "iterations": 10000,
+    "commands": 10000,
+    "operations": 200000,
+    "valueNodes": 50000,
+    "valueBytes": 8388608,
+    "stringLength": 131072,
+    "wallMs": 14400000
+  },
+  "sourceFilesSha256": {
+    "src/macro.js": "5739b4fa8f10d88f6322ba8350365cc0b7f1f1c115d58e9c713552956cf6b57d",
+    "src/command-schema.js": "733b5f36e3252c13653fa43e6e2da0f350e91ff8e27efbcc26c74535f302e748",
+    "src/command-runtime.js": "4baece6751e80c20457ba9ff189f6ea73e6a68a10644a5b21d2c7667eea8250e",
+    "tests/fuzz/macros.mjs": "84f1d0770c6e5d02833ba66e0ebf0da37aad6589bd19a0f41b0fed8bbe37f1b8"
+  },
+  "failures": [
+    {
+      "phase": "hostile-data",
+      "index": 27,
+      "sha256": "f6305cb2473c41585d6bd063e9e54ef0c6e58496c61887ef00a57b20c7fe3f0e",
+      "name": "AssertionError",
+      "code": "ERR_ASSERTION",
+      "message": "Missing expected exception: Hidden accessors must be rejected before a handler reads them",
+      "source": "api-hidden-getter",
+      "sourceTruncated": false
+    },
+    {
+      "phase": "hostile-data",
+      "index": 28,
+      "sha256": "a525a8746aee0d254947bf36df96a3c04efcd69d06d97d98dd7688222dd063a3",
+      "name": "AssertionError",
+      "code": "ERR_ASSERTION",
+      "message": "Expected values to be strictly equal:\n\n1 !== 0\n",
+      "source": "api-hidden-array-element-getter",
+      "sourceTruncated": false
+    },
+    {
+      "phase": "hostile-data",
+      "index": 29,
+      "sha256": "b9b276b4a7578c28917f4465cbb24e4b8e1e4025afebce346434bf938c2a43ae",
+      "name": "AssertionError",
+      "code": "ERR_ASSERTION",
+      "message": "Expected values to be strictly equal:\n\n2 !== 0\n",
+      "source": "ast-inherited-location-getter",
+      "sourceTruncated": false
+    }
+  ]
+}

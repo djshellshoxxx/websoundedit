@@ -1,0 +1,284 @@
+/** Help text is shared by the in-app guide and documentation screenshot exporter. */
+export const HELP_CHAPTERS = [
+  { id: 'navigation', title: 'Find your way around', lead: 'The waveform is your workspace. The transport, selection tools and effects all act on the same open session.', sections: [
+    ['Start a session', 'Import audio, record a short take, or use Sound generator. Each imported audio file becomes a track. Click a waveform to place the cursor; drag to select a region. The project name and tempo are editable above the transport.'],
+    ['Play and compare', 'Space plays or pauses the mix. Shift Space plays the selection. Escape stops playback. Loop repeats the current range. The audition speed control changes listening speed; use the Speed tool to change the saved samples. The metronome is a monitoring aid and is excluded from program recording.'],
+    ['More waveform space', 'Hide sound tools collapses Shape the sound without losing the rack. Show sound tools restores it. Options and Help are addressable views: browser Back navigates sections while the project stays open. The theme picker is synchronized with Options.'],
+    ['Find any action', 'Ctrl/⌘ K opens command search. Type a feature or command name. Up/Down moves through results and Enter runs the selected action. Options → Shortcuts lists every keyboard binding. Most letter sequences begin with G or E; text fields retain ordinary typing.'],
+    ['Tips and accessibility', 'Hover over a feature or focus it with Tab to read its guidance. Escape dismisses a tip. Options → General turns tips off globally while preserving accessible labels. Sliders respond to arrow keys, Home and End. Each effect has a numeric alternative.']
+  ], commands: ['transport.play', 'transport.pause', 'transport.stop', 'view.fit', 'ui.options'] },
+  { id: 'tracks', title: 'Tracks, selections and zoom', lead: 'Selection boundaries refer to samples inside one clip; clip placement refers to time in the whole project.', sections: [
+    ['Select precisely', 'Drag a waveform or type IN and OUT seconds. Drag either selection edge to refine it. All selects the entire clip; Clear returns processing to the whole selected clip. Snap aligns cursor and selection edits to the chosen beat subdivision.'],
+    ['Zoom without changing the audio', 'Selection zoom (Z) fills the visible waveform with the selected region but never changes its boundaries. Plus and Minus zoom around the cursor. Fit (F) shows the whole project. The horizontal slider scrolls the visible time range.'],
+    ['Choose channels', 'The editing-channel menu follows the clip: mono, stereo, 5.1 or 7.1. Choose all channels or a named speaker. The API also accepts an array of channel indices. Selection effects only touch chosen channels. A surround clip remains surround when one channel is edited.'],
+    ['Manage a track', 'The direct Save/Export button always targets the track you clicked, even when another track is selected. Close removes that track and its live loop voice; Undo restores its project audio. Mute and Solo control the mix. Gain is measured in dB; pan moves the front left/right image.'],
+    ['Place clips', 'Alt-drag moves a clip on the project timeline. Double-click selects the clip. Track and clip settings offer exact numeric positions and destination tracks. Overlapping clips are summed; they do not trim each other automatically.']
+  ], commands: ['selection.set', 'clip.update', 'track.remove', 'project.saveTrack', 'view.zoomSelection'] },
+  { id: 'editing', title: 'Edit with a clear scope', lead: 'Preview first, then apply an edit to the selected region or the whole selected clip.', sections: [
+    ['Destructive editing with Undo', 'Cut, delete, trim and applied effects change the stored samples. Undo and Redo retain bounded recent edit history. Save a portable session for a durable editable copy. Browser recovery is an additional local copy, not an exported project file.'],
+    ['Selection tools', 'Trim keeps only the selection; Delete removes it; Cut also copies it. Paste inserts copied audio at the cursor. Split creates two clips at the cursor. Reverse changes sample order inside the current scope.'],
+    ['Shape, EQ, Dynamics, Rhythm and Tools', 'The original processing groups include gain, pitch, time stretch, fades, EQ, compression, normalization, silence tools, beat rearrangement and texture generation. Values have explicit units and limits. Typed invalid values restore the last accepted value instead of applying a hidden different setting.'],
+    ['Trim quiet ends versus remove silence', 'effect.trimSilence removes leading and trailing quiet portions while preserving internal pauses. Remove silence can cut quiet regions inside the sound. An entirely silent source stays unchanged when no useful non-silent region is found.'],
+    ['Preview lifecycle', 'A preview is temporary and is discarded when the selection or source changes. A/B compares it with the original. Export committed audio includes effects only after Apply. Live rack rendering is an explicit separate export choice.']
+  ], code: '// WebSoundEdit Macro 1\neffect.trimSilence({thresholdDb: -48, minDuration: 0.05, padding: 0.01});\neffect.normalize({targetDb: -1});', commands: ['edit.trim', 'edit.delete', 'effect.trimSilence', 'history.undo'] },
+  { id: 'effects', title: 'Effects, wet/dry and XY', lead: 'An ordered rack turns a chain of simple stages into one sound. Order changes the result.', sections: [
+    ['Build and reorder', 'Open Effects beside Tools and add echo, delay, reverb, chorus, flanger, phaser, distortion, tremolo, a filter, tape, stutter or bitcrusher. Add the same effect more than once. Drag the grip to reorder; touch works too. With the grip focused, use Up/Down or Home/End. Move buttons provide another alternative. The rack holds up to twelve stages.'],
+    ['Wet/dry and bypass', 'Every stage blends its output with the signal arriving at that stage. Wet 0% passes dry input; Wet 100% uses only processed output. Bypass skips a stage while keeping its settings. A downstream effect receives the blend made by the previous effect.'],
+    ['Space, movement and texture', 'Echo makes a finite set of repeats; delay feeds echoes back into its own input. Reverb adds a diffuse room tail. Chorus, flanger and phaser modulate time or phase. Tremolo modulates level. Distortion, tape and bitcrusher color the signal. Filters change the frequency balance. Stutter repeats a beat-divided slice inside the selected range.'],
+    ['XY controller', 'Choose a parameter for each axis. Move the pad to change both together, or use the X/Y sliders and arrow keys. Axis assignments use stable stage IDs, so dragging an effect keeps the mapping attached to the same stage. Removing its stage clears that assignment.'],
+    ['Commit or play live', 'Selection mode previews and applies an offline edit. Live mode sends changes to the audio clock without stopping transport. Select Master or a specific track for its live rack. Live rendering uses the current settings and automation, starting effect history empty at the requested range boundary. A recorder captures the actual running feedback and tails.'],
+    ['Limits and tails', 'Effects do not append hidden audio beyond a chosen export range. The live runtime checks its aggregate graph, voice and memory limits before swapping a rack, preserving the current graph if a change is rejected. Capabilities reports the actual configured limits.']
+  ], commands: ['effect.rack', 'live.rack.set', 'live.param.set', 'live.render'] },
+  { id: 'keys', title: 'Sample keys and waveform colors', lead: 'Color helps you scan a session; the written key label carries the musical meaning.', sections: [
+    ['Analyze samples', 'Detect key analyzes the selected sample. Sample keys offers Detect every sample and a per-sample override. Detection uses tonal pitch-class evidence; drums, noise, short sounds and mixed keys can remain uncertain. Confidence is a heuristic, not a probability guarantee.'],
+    ['Read colors', 'Tonic controls the key color. Major/minor is written in the label, so a shared tonic does not imply the same mode. Color is never the only identifier. The waveform also shows signal magnitude and frequency character with theme-aware contrast.'],
+    ['Correct an estimate', 'Choose a manual key in Sample keys when your musical knowledge is more reliable. Clearing it removes the override. Key results and manual choices travel in native sessions, including single-track saves.']
+  ], commands: ['analysis.key', 'analysis.keyAll', 'clip.key'] },
+  { id: 'export', title: 'Save, export and metadata', lead: 'A saved session preserves editable structure. An exported audio file contains rendered sound.', sections: [
+    ['Save sessions', 'Save project downloads a WebSoundEdit JSON session with embedded PCM, tracks, settings, selection, metadata and sample keys. A track’s Save/Export control can save a true one-track session. Save all tracks keeps the full project. JSON is never presented as an Audacity or REAPER native file.'],
+    ['Choose export scope', 'Export the mix, a specific track, a clip or the selected region. Direct track export always carries that track ID. Independent stems include gain and pan and normally ignore mute/solo. Honor track mute is an explicit option. Align stems to project length keeps every stem starting at zero and ending at the common project end.'],
+    ['Committed audio and live effects', 'Committed audio includes edits already applied to PCM. Dry/source export bypasses mix controls. Render current live effects applies the current rack and audio-clock automation through the same DSP as live playback. Its effect memory begins empty at the selected range start and it adds no unrequested tails. Record to preserve the exact current running state.'],
+    ['Formats and channel layout', 'WAV is available locally without the large conversion engine. Other formats advertise supported rates and channels. Choose an explicit output layout; unsupported surround codec combinations are rejected instead of dropping channels. Integer formats clip values beyond full scale. Reduce levels or apply limiting when needed.'],
+    ['Metadata', 'Edit title, artist, album and other supported tags in Metadata. They are saved with the session and embedded where the chosen format supports them. The export dialog states format support and reports encoder warnings. Filenames are cleaned, bounded and deduplicated in stem ZIPs.'],
+    ['Batch output bounds', 'Batch jobs process supplied files in order. Outputs are kept under a bounded byte limit or downloaded individually; a full collection stops with a clear message. Already completed downloads cannot be undone.']
+  ], commands: ['project.save', 'project.saveTrack', 'file.export', 'file.exportStems', 'metadata.update'] },
+  { id: 'midi', title: 'MIDI controllers and pedals', lead: 'Connect MIDI explicitly, then use notes, continuous controls or edge-triggered actions.', sections: [
+    ['Connect and select ports', 'Options → MIDI requests MIDI access only when you click Connect. Choose an input and optional output. The visible state follows disconnects. Web MIDI is browser-dependent; unsupported browsers show an unavailable state. MIDI files can still be imported without a hardware connection.'],
+    ['Play samples and map knobs', 'Incoming note-on messages trigger the selected sample; note-off releases it. Stop all notes releases active voices. Choose a rack parameter or XY axis, click Learn next CC, and move a hardware knob. CC values scale to the parameter’s actual range.'],
+    ['Pedal and command mappings', 'A note or CC pedal can trigger any registered command or a saved macro. Choose its channel, number and threshold, then arm actions locally. Only a low-to-high transition fires; release and note-off reset the edge. Debounce suppresses switch chatter. Imported definitions remain disarmed until you explicitly enable them.'],
+    ['Live guitar loops', 'Assign a pedal to loop.capture.toggle. Start input first, choose a quantized beat length in Live performance, then arm the pedal mapping. The completed take becomes a new loop layer. Independent layer controls mute, stop, play or delete it.'],
+    ['MIDI files', 'SMF format 0/1 files render as a simple sine instrument. Export retains original note timing, velocity and source track identity, not later audio edits or original instrument sounds. Ambiguous nested same-pitch notes on the same channel and source track cannot be represented faithfully and are rejected; put them on separate source tracks.']
+  ], commands: ['midi.connect', 'midi.disconnect', 'midi.panic', 'loop.capture.toggle'] },
+  { id: 'surround', title: 'Channel layouts and routing', lead: 'The channels in a file, the project render layout and your output device capability are separate facts.', sections: [
+    ['Canonical speaker order', 'Mono: M. Stereo: FL, FR. 5.1: FL, FR, FC, LFE, BL, BR. 7.1: FL, FR, FC, LFE, BL, BR, SL, SR. Surround WAV uses the appropriate WAVEFORMATEXTENSIBLE speaker mask. Ambiguous source channel assignments require an explicit choice.'],
+    ['Project and monitoring', 'Options → Layout selects the project output layout. Options → Output shows actual destination channel capability and any explicit monitoring downmix. Choosing 7.1 does not turn stereo headphones into an eight-channel output. The default downmix excludes LFE.'],
+    ['Program signal path', 'Track sources pass through their track racks, then the master rack, then the recording tap. Monitoring converts that program for the chosen output device. The metronome joins only the monitoring path. MIDI sample voices join the shared master, so they are included when recording the program.'],
+    ['Gain and pan', 'Mono uses equal-power front left/right pan. In multichannel audio, pan changes the front pair while preserving the remaining speaker channels and track gain. A channel-specific edit never implicitly downmixes its source.'],
+    ['DAW exchange', 'REAPER exchange preserves supported canonical multichannel media. Audacity exchange defaults to rejecting surround; explicit split-mono export writes speaker-labeled channel tracks. That preserves channel PCM and identity but does not claim Audacity provides a native surround mixer.']
+  ], commands: ['project.update', 'audio.output.set', 'audio.render', 'audio.capabilities'] },
+  { id: 'recording', title: 'Input and long recordings', lead: 'Short takes go into the waveform editor. Long sets go to a disk-backed archive with bounded range import.', sections: [
+    ['Connect an input', 'Options → Input chooses a microphone/interface or browser-provided display audio. Clicking Start input opens the browser permission request or picker. The browser may not supply system audio; that is reported and all acquired tracks are released. Processing preferences request echo cancellation, noise reduction and automatic gain behavior only where supported.'],
+    ['Monitor deliberately', 'Input monitoring starts off. Enable it only when you want to hear the input through the selected output. Input gain and selected channel controls state their actual values. Changing or losing a device updates the visible state and releases the old input.'],
+    ['Record a long set', 'Live performance → Recorder selects program, input or one track. Start, Pause, Resume and Stop operate on the same archive. Pause removes the wall-clock gap. The panel shows format/channels, elapsed time, committed bytes, queued bytes and estimated available storage. Storage estimates are not guarantees.'],
+    ['Recover a partial take', 'The archive writes bounded chunks and a recoverable manifest. Quota or backpressure failures stop with an explicit partial-recording error. Refresh the archive and recover owned sessions after interruption. Delete is explicit; stopping does not erase a take.'],
+    ['Audition, import and export', 'Choose a bounded start/end range to audition or import into the editor. The editable project remains limited to ten minutes and 256 MiB of decoded PCM. Long archive export streams to a chosen file where supported, using RF64 for large output. Archive recordings stay on the current browser/device until exported.'],
+    ['What testing means', 'Accelerated storage/recorder tests check accounting and recovery; they do not imply a physical multi-hour microphone test. Hardware permission and output routing depend on the browser and device.']
+  ], commands: ['audio.input.start', 'audio.input.stop', 'recorder.start', 'recorder.stop', 'recordings.importRange', 'recordings.export'] },
+  { id: 'looping', title: 'Live loop layers', lead: 'Capture input on the beat, then layer independent takes without rebuilding the whole mix.', sections: [
+    ['Prepare capture', 'For guitar or pedal loops, start the input in Options and choose Live input. Master program and individual tracks can also be capture sources. Set a beat count and Off/Beat/Bar quantization. Tempo and beats per bar determine the sample-clock boundaries. Capture state distinguishes armed, recording and playing.'],
+    ['Capture and commit', 'Start capture begins immediately or at its quantized boundary. The requested beat count ends the take automatically and creates a new editable track with one loop voice. Input and track captures enter playback directly on the audio clock. Master program capture can have a brief initial playback delay while its loop phase stays aligned to the audio clock. Stop and commit keeps completed audio; Cancel discards the in-progress capture.'],
+    ['Build layers', 'Each completed capture appears as a layer. Play, Stop, Mute and Delete operate on that layer only. Runtime-owned loop tracks are omitted from ordinary transport playback so the same audio does not sound twice. Removing a track releases its associated live voice.'],
+    ['Use a pedal', 'A mapped loop.capture.toggle command lets a pedal start/stop the capture. MIDI action mappings must be armed locally. Release does not fire a second action. Panic stops active notes and capture without restarting anything.'],
+    ['Offline repetition', 'Loop studio still creates repeated PCM copies from a selection. Zero crossfade keeps beat-exact duration; overlapping crossfades shorten joins. This is distinct from live loop capture.']
+  ], commands: ['loop.capture.start', 'loop.capture.stop', 'loop.capture.cancel', 'loop.track.play', 'loop.track.mute', 'loop.track.remove'] },
+  { id: 'macros', title: 'Macros, action recording and batch', lead: 'Record or write one canonical text program and run it through the same commands as the workbench.', sections: [
+    ['Record actions', 'Record actions captures successful semantic operations. Stop recording creates a .wsemacro text program. Default mode preserves order and omits thinking time. Enable Record timing to insert explicit waits between actions. Failed actions, queries and transient preview pointer motion are not recorded as edits.'],
+    ['Visual and script editing', 'Simple command-call sequences appear as editable steps with move/remove controls and JSON parameter fields. Add commands from the catalog. Programs containing variables, loops or conditions remain authoritative script text; visual mode never flattens their logic. Validate reports line/column and command errors before running known-invalid operations.'],
+    ['Language basics', 'Scripts support variables, bounded arrays and objects, arithmetic/comparison/Boolean expressions, if/else, repeat, for…of and while. Command calls use object parameters. Own-property reads are permitted, prototype access and ambient JavaScript are not. There is no eval, shell access or arbitrary file/network acquisition.'],
+    ['Run and cancel', 'Run shows progress and the current command. Stop requests cancellation; a current atomic command can finish first. Errors include completed work. Already downloaded exports and recorded/network output are not falsely rolled back. Source, loops, commands, execution time and queues have enforced bounds.'],
+    ['Automation versus event timing', 'For a repeatable smooth effect sweep, use automation.set with time/value points and step or linear curves. Those points are scheduled on the audio clock. Record timing is useful for gesture order and pauses, not a substitute for a dense sample-accurate automation curve.'],
+    ['Shortcuts and import triggers', 'Save a macro and assign an unused keyboard shortcut. An optional on-import macro must be armed locally. Importing scripts or projects never arms it. Successful manual import batches trigger once; macro/batch-origin imports suppress the hook to avoid recursion.'],
+    ['Batch processing', 'Choose explicit files, a macro and whether to continue after per-file errors. Each file runs sequentially in a cleared project with an input alias and per-file context. The open project is restored after the batch. From snapshot through restoration, outside edits, imports, exports and MIDI controls are paused; API mutations report BUSY. Progress, Help and the persistent Stop batch button remain available. Earlier commands must finish before starting a batch. Use semantic commands such as effect.gain and file.export in batch scripts. Ordinary Run macros remain interactive. Results list successes/failures and completed outputs; output collection is bounded.']
+  ], code: '// WebSoundEdit Macro 1\nfor (file of inputs) {\n  file.import({input: file, replace: true});\n  effect.trimSilence({thresholdDb: -48, minDuration: 0.05, padding: 0.01});\n  effect.normalize({targetDb: -1});\n  file.export({scope: "track", format: "flac", name: file.stem});\n}', commands: ['macro.run', 'macro.cancel', 'automation.set', 'file.import', 'file.export'] },
+  { id: 'streaming', title: 'Local companion and UDP', lead: 'Pages cannot send raw UDP. Streaming uses an explicitly connected local companion with configured destinations.', sections: [
+    ['Start the companion', 'Run the project’s Node companion locally using the documented command. It binds loopback, enforces the allowed browser origin and gives a per-run bearer token. Configure named destination profiles on that companion before connecting from Options → Streaming.'],
+    ['Connect and arm', 'Enter the companion endpoint and token in the live connection form. Credentials remain in memory only; never put them in URLs, saved projects, settings or macros. Explicitly connect and arm the session before streaming. Your browser may request local-network permission for the loopback connection. Importing a project cannot connect or broadcast.'],
+    ['Choose a named destination', 'Select an advertised destination and supported encoder profile. Scripts can select configured names and typed format parameters, not arbitrary network URLs, host paths or FFmpeg command strings. Unsupported rates/channel/codec combinations produce an actionable error.'],
+    ['Watch status', 'The bounded input stream includes sequence, frame count, layout and discontinuity information. Slow consumers or encoder errors stop/report a discontinuity rather than building an unlimited queue. Stop terminates the owned streaming session and encoder.']
+  ], commands: ['stream.start', 'stream.stop', 'stream.status'] },
+  { id: 'compatibility', title: 'Audacity, REAPER and project exchange', lead: 'Exchange genuine project files within a documented subset. Unsupported sound-changing features are rejected explicitly.', sections: [
+    ['WebSoundEdit sessions', 'Native JSON is the most complete way to preserve this editor’s own settings, effect drafts, sample keys, MIDI source notes and selection. Save an individual track or the full session. Device permissions, armed triggers and active networking are never restored from a file.'],
+    ['Audacity', 'AUP3 export is a genuine SQLite Audacity project with supported PCM clips, positions, mix, labels and metadata. Legacy export is an AUP plus its data folder in a ZIP. Extract both together. For Audacity 3.4.2 legacy import, first set the blank project sample rate to the exported project rate to preserve positions. AUP3 avoids that legacy issue.'],
+    ['Surround and Audacity', 'Mono/stereo exchange is native. Surround requires the explicit split-mono option, which writes speaker-labeled channel stems and explains the lack of native surround mixing. Realtime plugin chains and editor draft rack settings are not transferred; apply or render effects first.'],
+    ['REAPER', 'Export writes an actual .rpp plus relative media/*.wav in a ZIP. Supported PCM, track names, positions, visible trims, one active take, constant mix, overlap sums, markers and fixed tempo are retained. Multichannel sources retain their canonical channel layout.'],
+    ['Supply referenced media', 'For a loose RPP, explicitly select its referenced media along with the project or choose a folder. Absolute source references can match a supplied alias or an unambiguous uploaded basename, with a notice. The browser never follows them onto your host filesystem or network.'],
+    ['Unsupported DAW features', 'Active plugins, automation, complex routing/folders, comping, unsupported source modes and time/pitch transforms are rejected instead of silently changing sound. Render compatible stems in the source DAW or in this editor before exchanging such processing.']
+  ], commands: ['project.load', 'project.save', 'file.import', 'file.export'] },
+  { id: 'recovery', title: 'Recovery, limits and troubleshooting', lead: 'Keep a portable project file. Local recovery and recording manifests provide additional recovery paths.', sections: [
+    ['Session recovery', 'The workbench periodically saves a recovery copy in this browser. Save project makes a portable file independent of browser storage. Options can clear the local recovery copy while keeping the open project. Corrupt cached preferences restore defaults with a visible message.'],
+    ['Recording recovery', 'Long recordings are stored separately as bounded chunks and manifests. Recover scans only owned recording records. After an interruption, the last committed frames remain available; uncommitted queue data is not claimed as saved. Export before clearing browser site data.'],
+    ['Memory and timeline limits', 'Editable PCM is capped at 256 MiB with a ten-minute timeline. Use bounded range import for long recordings. Live graphs, automation queues, macros and exports have additional advertised limits. Rejected rack changes preserve the currently running graph.'],
+    ['Permission and device failures', 'Start/connect controls request permissions only from explicit interaction. Denial, device removal or unsupported APIs remain visible. Monitoring starts off. Reconnect deliberately after changing devices; importing a saved preference never grants permission.'],
+    ['Report a reproducible issue', 'Include app version, browser, the command and exact error, a minimal non-sensitive input if possible, and whether it occurred in committed or live mode. Commands and scripts are useful reproducible examples. Do not include companion bearer tokens in reports or screenshots.']
+  ], commands: ['audio.capabilities', 'recordings.recover', 'history.undo'] }
+];
+
+// Reviewed original CI captures; source commits and SHA-256 hashes are preserved in help/provenance.json.
+export const HELP_IMAGES = [
+  {
+    "path": "help/guide-editor-desktop.png",
+    "chapter": "navigation",
+    "alt": "WebSoundEdit beta editor with arrows to Selection zoom, track Save / Export and Hide sound tools.",
+    "caption": "The running workbench: selection zoom changes the view, track actions keep their explicit target, and sound tools collapse for more waveform space.",
+    "width": 1440,
+    "height": 1250
+  },
+  {
+    "path": "help/guide-effects-desktop.png",
+    "chapter": "effects",
+    "alt": "Effects rack with echo, tape, filter, wet/dry controls and XY pad.",
+    "caption": "An actual three-stage rack with stable effect order, individual wet/dry controls and independent XY assignments.",
+    "width": 1440,
+    "height": 1600
+  },
+  {
+    "path": "help/guide-channel-layout.png",
+    "chapter": "surround",
+    "alt": "Options Channel layout page with mono, stereo, 5.1 and 7.1 channel orders.",
+    "caption": "Project layout and canonical speaker order are explicit. Output hardware capability is a separate setting.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-midi-pedals.png",
+    "chapter": "midi",
+    "alt": "MIDI Options pedal mapping controls with local arm, command selection and debounce.",
+    "caption": "Pedal mappings select a command, press threshold and debounce. Arming is a separate local action; release never retriggers.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-macros-desktop.png",
+    "chapter": "macros",
+    "alt": "Macro editor showing a loop that imports, trims quiet ends, normalizes and exports files.",
+    "caption": "Canonical text retains loops and variables. Validate before running; Record actions and Batch files use the same command language.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-long-recorder.png",
+    "chapter": "recording",
+    "alt": "Long recorder source, start/pause controls, elapsed time and written/queued storage counters.",
+    "caption": "The long recorder before capture. Its disk archive is separate from the bounded waveform editor; counters distinguish committed and queued bytes.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-companion-streaming.png",
+    "chapter": "streaming",
+    "alt": "Streaming Options with empty token field, loopback endpoint and disabled destination/profile selectors.",
+    "caption": "The disconnected companion surface. Credentials stay in memory, and destinations/profiles come from an explicitly connected local companion.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-project-compatibility.png",
+    "chapter": "compatibility",
+    "alt": "Project dialog offering native JSON, Audacity AUP3, legacy Audacity ZIP and REAPER project ZIP.",
+    "caption": "Genuine editable formats are separate choices. Audacity surround requires explicit speaker-labeled mono splitting; REAPER export includes its referenced media.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-sample-keys.png",
+    "chapter": "keys",
+    "alt": "Sample keys dialog showing estimated sample keys and individual manual-key selectors.",
+    "caption": "Key estimates keep written labels and confidence alongside tonic colors. Manual overrides remain available for ambiguous material.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-export-metadata.png",
+    "chapter": "export",
+    "alt": "Export dialog with track scope, source choice, channel layout and metadata support.",
+    "caption": "Choose scope, exact track, format and explicit committed/live render behavior. Metadata support is reported for the selected format.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-live-layers.png",
+    "chapter": "looping",
+    "alt": "Live loop panel containing a real captured layer and independent play, stop, mute and delete buttons.",
+    "caption": "An actual short program capture created a new loop layer. Beat boundaries, source choice and independent layer controls are visible.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-editor-mobile.png",
+    "chapter": "tracks",
+    "alt": "Mobile waveform editor with direct track export and selection zoom controls.",
+    "caption": "The real mobile workbench with sound tools collapsed. Track actions and selection zoom remain available at a narrow width.",
+    "width": 390,
+    "height": 844
+  },
+  {
+    "path": "help/guide-options-mobile.png",
+    "chapter": "navigation",
+    "alt": "Mobile Options page with wrapped section navigation, theme selector and tooltip preference.",
+    "caption": "Addressable Options on mobile keeps the current session alive and provides a global guidance switch.",
+    "width": 390,
+    "height": 844
+  },
+  {
+    "path": "help/guide-input-options.png",
+    "chapter": "recording",
+    "alt": "Idle Audio input Options showing microphone or display source, device, channel indices, gain, processing preferences and unchecked monitoring.",
+    "caption": "Audio input settings before acquisition. Start input requests permission explicitly; source channels and gain are configurable, and monitoring remains off.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-output-options.png",
+    "chapter": "surround",
+    "alt": "Audio output Options with the real device-selection capability, monitoring layout, Apply routing button and reported maximum channel count.",
+    "caption": "Audio output shows the browser's reported destination capability separately from the selected monitoring layout.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-metadata-editor.png",
+    "chapter": "export",
+    "alt": "Audio metadata dialog with a saved title and artist, other available tag fields and Save metadata button.",
+    "caption": "The actual metadata editor after saving the title and artist. Project tags remain editable and are embedded only by formats that support them.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-macro-recording.png",
+    "chapter": "macros",
+    "alt": "Active action recorder with two genuine captured editing commands, an unchecked Record timing option and Finish recording button.",
+    "caption": "Two successful editing commands captured without thinking time. Enable Record timing to retain elapsed waits in the resulting script.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-macro-visual-steps.png",
+    "chapter": "macros",
+    "alt": "Visual macro editor with two real recorded effect steps, editable command arguments and accessible order controls.",
+    "caption": "The two recorded commands shown as editable visual steps. Edit arguments and use move controls to change order; structured programs remain available as script text.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-batch-preparation.png",
+    "chapter": "macros",
+    "alt": "Batch preparation page showing the chosen cleanup macro, two supplied local audio files, error policy and Run batch control.",
+    "caption": "A saved cleanup-and-export macro with two supplied local synthesized WAV files. This is preparation before Run batch; progress, errors and collected outputs appear during execution.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-effect-automation.png",
+    "chapter": "effects",
+    "alt": "Effect automation panel with the master filter frequency selected, two linear time/value points and successful saved-lane status.",
+    "caption": "A saved filter-frequency lane schedules 500 Hz at zero seconds and 5500 Hz at four seconds. These audio-clock points are separate from action recorder waits.",
+    "width": 1440,
+    "height": 1100
+  },
+  {
+    "path": "help/guide-selection-editing.png",
+    "chapter": "editing",
+    "alt": "Waveform editor with a selected region, precise selection bounds, All channels scope and a ready gain preview with Apply control.",
+    "caption": "A real two-second region is selected and gain has been previewed. IN/OUT and channel scope define the edit; Apply commits the preview to that scope.",
+    "width": 1440,
+    "height": 1400
+  },
+  {
+    "path": "help/guide-recovery-controls.png",
+    "chapter": "recovery",
+    "alt": "Options Help and recovery page with recovery guidance links and a Clear recovery copy button that has not been activated.",
+    "caption": "Help and local recovery controls keep the open project separate from the browser recovery copy. The Clear recovery control is shown without deleting data; save a portable session for a durable copy.",
+    "width": 1440,
+    "height": 1100
+  }
+];

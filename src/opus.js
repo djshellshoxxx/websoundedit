@@ -9,6 +9,7 @@
  */
 import { createEncoder, loadLibopus, Application, Signal, EncoderCtl } from 'libopus-wasm';
 import { vorbisComments } from './metadata.js';
+import { outputPolicy } from './codec-budget.js';
 
 const RATE = 48000;
 const FRAME = 960; // 20 ms; granules always count 48 kHz samples per channel.
@@ -111,8 +112,9 @@ function validate(audio, bitrate) {
  * zero padded, enough extra input flushes encoder lookahead, and the EOS granule
  * trims padding back to the exact original sample count after pre-skip.
  */
-export async function encodeOpus(audio, { bitrate = 192, onProgress, signal, metadata = {} } = {}) {
+export async function encodeOpus(audio, { bitrate = 192, onProgress, signal, metadata = {}, maxOutputBytes } = {}) {
   abortIfRequested(signal);
+  const outputLimit=outputPolicy(maxOutputBytes).maxOutputBytes;
   const frames = validate(audio, bitrate), channels = audio.channels.length;
   const encoder = await createEncoder({ sampleRate: RATE, channels, application: Application.Audio,
     signal: Signal.Music, bitrate: Math.round(bitrate * 1000), complexity: 10, vbr: true, frameSize: FRAME });
@@ -124,8 +126,9 @@ export async function encodeOpus(audio, { bitrate = 192, onProgress, signal, met
     const totalFrames = frames + preSkip;
     const packetCount = Math.ceil(totalFrames / FRAME);
     const serial = streamSerial();
-    const pages = [createOggPage([opusHead(channels, preSkip)], { serial, sequence: 0, granule: 0, flags: 2 }),
-      createOggPage([opusTags(metadata)], { serial, sequence: 1, granule: 0 })];
+    const pages=[];let outputBytes=0;
+    const appendPage=(packets,options)=>{const size=27+packets.reduce((sum,packet)=>sum+packet.length+Math.floor(packet.length/255)+1,0);if(outputBytes+size>outputLimit)throw Object.assign(new RangeError('Opus output exceeds the bounded encoded-output limit. Choose a shorter range or lower bitrate.'),{code:'RESOURCE_LIMIT'});const page=createOggPage(packets,options);pages.push(page);outputBytes+=page.length;};
+    appendPage([opusHead(channels,preSkip)],{serial,sequence:0,granule:0,flags:2});appendPage([opusTags(metadata)],{serial,sequence:1,granule:0});
     const pcm = new Float32Array(FRAME * channels);
     let pagePackets = [], pageSegments = 0, sequence = 2, decodedFrames = 0;
     onProgress?.(0);
@@ -139,12 +142,12 @@ export async function encodeOpus(audio, { bitrate = 192, onProgress, signal, met
       const packet = encoder.encodeFloat(pcm);
       const segments = Math.floor(packet.length / 255) + 1;
       if (pagePackets.length && (pageSegments + segments > 255 || pagePackets.length >= 50)) {
-        pages.push(createOggPage(pagePackets, { serial, sequence: sequence++, granule: decodedFrames }));
+        appendPage(pagePackets, { serial, sequence: sequence++, granule: decodedFrames });
         pagePackets = []; pageSegments = 0;
       }
       pagePackets.push(packet); pageSegments += segments; decodedFrames += FRAME;
       if (packetIndex === packetCount - 1) {
-        pages.push(createOggPage(pagePackets, { serial, sequence: sequence++, granule: totalFrames, flags: 4 }));
+        appendPage(pagePackets, { serial, sequence: sequence++, granule: totalFrames, flags: 4 });
       }
       if ((packetIndex + 1) % 64 === 0) {
         onProgress?.(Math.min(1, (packetIndex + 1) / packetCount));
@@ -153,7 +156,7 @@ export async function encodeOpus(audio, { bitrate = 192, onProgress, signal, met
       }
     }
     abortIfRequested(signal);
-    const length = pages.reduce((sum, page) => sum + page.length, 0), bytes = new Uint8Array(length);
+    const length = outputBytes, bytes = new Uint8Array(length);
     let offset = 0;
     for (const page of pages) { bytes.set(page, offset); offset += page.length; }
     onProgress?.(1);

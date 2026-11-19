@@ -4,6 +4,8 @@
  * Clicks use the audio clock, with lookahead scheduling:
  * https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Advanced_techniques
  */
+import { audioLayout, normalizeLayout, CHANNEL_LAYOUTS, trackMixMatrix } from './channel-layout.js';
+import { connectMatrix } from './audio-routing.js';
 const bounded = (value, fallback, min, max, name) => {
   const n = value === undefined ? fallback : Number(value);
   if (!Number.isFinite(n) || n < min || n > max) throw new RangeError(`${name} must be between ${min} and ${max}.`);
@@ -58,6 +60,7 @@ export class Playback {
     this._timer = null;
     this._scheduledUntil = 0;
     this._visibilityHandler = () => this._tick();
+    this._route = null; this._sources = []; this._plan = null;
   }
   get context() { return this._context; }
   get playing() { return this._playing; }
@@ -66,8 +69,31 @@ export class Playback {
   get loop() { return this._loop; }
   get metronome() { return this._metronome; }
 
-  async play(audio, { offset = 0, loop = false, loopStart = 0, loopEnd, rate = 1, bpm = 120, beatsPerBar = 4, beatOffset = 0, metronome = false, timelineOffset = 0 } = {}) {
-    if (!audio || !Array.isArray(audio.channels) || audio.channels.length < 1 || audio.channels.length > 2 || !Number.isInteger(audio.sampleRate) || audio.sampleRate < 8000 || audio.sampleRate > 192000) throw new TypeError('Playback requires mono or stereo PCM with a valid sample rate.');
+  setAudioRoute(route = null) { if (this._playing) throw new Error('Set the audio route before starting transport.'); this._route = route; }
+  _notifyRoute() { this._route?.onClock?.({ audioTime: this._context?.currentTime || 0, timelineTime: this.position, rate: this._rate, playing: this._playing, loopStart: this._loop ? this._timelineOffset + this._loopStart : 0, loopEnd: this._loop ? this._timelineOffset + this._loopEnd : 0 }, this._bpm); }
+  async playPlan(plan, options = {}) {
+    if (!plan || !Array.isArray(plan.tracks) || plan.tracks.length > 64) throw new RangeError('Playback plan supports at most 64 tracks.');
+    const layout = normalizeLayout(plan.layout), channels = CHANNEL_LAYOUTS[layout].count, frames = Math.round((plan.end - plan.start) * plan.sampleRate);
+    if (!Number.isInteger(plan.sampleRate) || plan.sampleRate < 8000 || plan.sampleRate > 192000 || frames <= 0 || frames / plan.sampleRate > 600 || frames * channels * Math.max(1,plan.tracks.length) * 4 > 256 * 1024 * 1024) throw new RangeError('Independent playback tracks exceed the 256 MiB / ten-minute playback budget.');
+    const prepared = [];
+    for (const track of plan.tracks) {
+      const audio = { sampleRate: plan.sampleRate, layout, channels: Array.from({ length: channels }, () => new Float32Array(frames)) };
+      for (const clip of track.clips) {
+        if (clip.audio.sampleRate !== plan.sampleRate) throw new RangeError('Playback plan sample rates must match.');
+        const matrix = trackMixMatrix(audioLayout(clip.audio), layout, track), offset = Math.round((clip.start - plan.start) * plan.sampleRate), from = Math.max(0, -offset), end = Math.min(clip.audio.channels[0].length, frames - offset);
+        if (clip.audio.channels.some(c => !(c instanceof Float32Array) || c.length !== clip.audio.channels[0].length)) throw new RangeError('Invalid playback clip channels.');
+        for (let c = 0; c < channels; c++) for (let input = 0; input < clip.audio.channels.length; input++) if (matrix[c][input]) for (let i = from; i < end; i++) { const sample = clip.audio.channels[input][i]; if (!Number.isFinite(sample)) throw new RangeError('Playback PCM must be finite.'); audio.channels[c][i + offset] += sample * matrix[c][input]; }
+      }
+      prepared.push({ trackId: track.id, audio });
+    }
+    // A silent source supplies the transport clock when every audible track is
+    // already owned by a loop voice, or the entire project is muted.
+    if (!prepared.length) prepared.push({ trackId: null, audio: {sampleRate:plan.sampleRate,layout,channels:Array.from({length:channels},()=>new Float32Array(frames))} });
+    return this.play(prepared[0].audio, { bpm: plan.bpm, beatsPerBar: plan.beatsPerBar, beatOffset: plan.beatOffset, timelineOffset: plan.start, ...options, _trackSources: prepared });
+  }
+  async play(audio, { offset = 0, loop = false, loopStart = 0, loopEnd, rate = 1, bpm = 120, beatsPerBar = 4, beatOffset = 0, metronome = false, timelineOffset = 0, _trackSources = null } = {}) {
+    audioLayout(audio);
+    if (!Number.isInteger(audio.sampleRate) || audio.sampleRate < 8000 || audio.sampleRate > 192000) throw new TypeError('Playback requires PCM with a valid sample rate.');
     const frames = audio.channels[0]?.length;
     if (!frames || audio.channels.some((channel) => !(channel instanceof Float32Array) || channel.length !== frames)) throw new RangeError('Select nonempty, equal-length audio channels to play.');
     if (frames / audio.sampleRate > 600 || frames * audio.channels.length * 4 > 256 * 1024 * 1024) throw new RangeError('Playback exceeds the 10-minute / 256 MiB decoded-audio limit.');
@@ -89,8 +115,9 @@ export class Playback {
     const generation = this._generation;
     this._halt(false);
     const Context = globalThis.AudioContext || globalThis.webkitAudioContext;
-    if (!Context) throw new Error('This browser does not support Web Audio playback.');
-    if (!this._context || this._context.state === 'closed') this._context = new Context({ latencyHint: 'interactive' });
+    if (!Context && !this._route?.contextProvider) throw new Error('This browser does not support Web Audio playback.');
+    if (this._route?.contextProvider) this._context = await this._route.contextProvider();
+    else if (!this._context || this._context.state === 'closed') this._context = new Context({ latencyHint: 'interactive' });
     const ctx = this._context;
     // Call resume synchronously inside the initiating play gesture, before copying PCM.
     if (ctx.state !== 'running') await ctx.resume();
@@ -98,6 +125,12 @@ export class Playback {
     if (ctx.state !== 'running') throw new Error('Audio playback needs a user gesture. Press Play again.');
     this._buffer = ctx.createBuffer(audio.channels.length, frames, audio.sampleRate);
     audio.channels.forEach((channel, c) => this._buffer.copyToChannel(channel, c));
+    this._audioLayout = audioLayout(audio);
+    this._plan = _trackSources?.map((entry, index) => {
+      const buffer = index ? ctx.createBuffer(entry.audio.channels.length, frames, audio.sampleRate) : this._buffer;
+      if (index) entry.audio.channels.forEach((channel, c) => buffer.copyToChannel(channel, c));
+      return { trackId: entry.trackId, buffer };
+    }) || null;
     this._duration = duration;
     this._timelineOffset = options.timelineOffset;
     this._rate = options.rate;
@@ -115,44 +148,51 @@ export class Playback {
     this._createMeterGraph();
     this._playing = true;
     // A short scheduling lead allows the first click and PCM to start together.
-    this._startSource(position, ctx.currentTime + 0.015);
+    try { this._startSource(position, ctx.currentTime + 0.015); } catch (error) { this._halt(false); throw error; }
     this._scheduledUntil = this._anchorTime;
     globalThis.document?.addEventListener('visibilitychange', this._visibilityHandler);
     this._timer = setInterval(() => this._tick(), 25);
     this._tick();
+    this._notifyRoute();
     return true;
   }
 
   _createMeterGraph() {
     const ctx = this._context;
     this._output = ctx.createGain(); this._output.gain.value = 1;
-    this._output.connect(ctx.destination);
-    this._splitter = ctx.createChannelSplitter(2);
-    this._output.connect(this._splitter);
+    this._output.connect(this._route?.outputNode?.() || ctx.destination);
+    this._splitter = ctx.createChannelSplitter(this._channelCount);
+    this._externalMeterTap = this._route?.meterNode?.();
+    (this._externalMeterTap || this._output).connect(this._splitter);
     this._silentSink = ctx.createGain(); this._silentSink.gain.value = 0;
     this._silentSink.connect(ctx.destination);
-    this._analysers = [ctx.createAnalyser(), ctx.createAnalyser()];
+    this._analysers = Array.from({ length: Math.max(2, this._channelCount) }, () => ctx.createAnalyser());
     this._meterData = this._analysers.map((analyser, index) => {
       analyser.fftSize = 2048;
-      this._splitter.connect(analyser, index);
+      this._splitter.connect(analyser, index < this._channelCount ? index : 0);
       analyser.connect(this._silentSink);
       return new Float32Array(analyser.fftSize);
     });
     this._nodes = [this._output, this._splitter, this._silentSink, ...this._analysers];
     // Metronome deliberately bypasses output meters and export PCM.
     this._clickOutput = ctx.createGain(); this._clickOutput.gain.value = 1;
-    this._clickOutput.connect(ctx.destination);
+    this._clickOutput.connect(this._route?.monitorNode?.() || ctx.destination);
     this._nodes.push(this._clickOutput);
   }
 
   _startSource(position, when) {
+    if (this._plan) return this._startPlanSources(position, when);
     const ctx = this._context, source = ctx.createBufferSource();
     source.buffer = this._buffer;
     source.playbackRate.setValueAtTime(this._rate, when);
     source.loop = this._loop;
     source.loopStart = this._loopStart;
     source.loopEnd = this._loopEnd;
-    source.connect(this._output);
+    const release = this._route?.reserveVoice?.(Math.round(this._duration * this._buffer.sampleRate || this._duration * ctx.sampleRate || 0) * this._channelCount * 4) || (() => {});
+    let route;
+    try { route = this._route?.layout ? connectMatrix(ctx, source, this._audioLayout, this._route.layout(), this._output) : null; } catch (error) { release(); safelyDisconnect(source); throw error; }
+    if (!route) source.connect(this._output);
+    this._sources = [{ source, release, route }];
     this._source = source;
     this._anchorPosition = position;
     this._anchorTime = when;
@@ -165,8 +205,28 @@ export class Playback {
       this._position = endPosition;
       this.onTime?.(endPosition);
       this.onEnded?.(endPosition);
+      this._notifyRoute();
     };
     source.start(when, position);
+  }
+  _startPlanSources(position, when) {
+    const ctx = this._context, generation = this._generation;
+    this._anchorPosition = position; this._anchorTime = when; this._position = this._timelineOffset + position;
+    for (const entry of this._plan) {
+      const release = this._route?.reserveVoice?.((entry.buffer.length || Math.round(this._duration * ctx.sampleRate)) * this._channelCount * 4) || (() => {}), source = ctx.createBufferSource();
+      source.buffer = entry.buffer; source.playbackRate.setValueAtTime(this._rate, when); source.loop = this._loop; source.loopStart = this._loopStart; source.loopEnd = this._loopEnd;
+      source.connect(this._route?.outputNode?.(entry.trackId) || this._output);
+      this._sources.push({ source, release, trackId: entry.trackId });
+      source.onended = () => { if (generation !== this._generation || !this._playing) return; const end = this._timelineOffset + this._duration; this._halt(false); this._position = end; this.onTime?.(end); this.onEnded?.(end); this._notifyRoute(); };
+      source.start(when, position);
+    }
+    this._source = this._sources[0]?.source;
+  }
+  _stopSources() { for (const entry of this._sources) { entry.source.onended = null; try { entry.source.stop(); } catch {} safelyDisconnect(entry.source); entry.route?.dispose(); entry.release(); } this._sources = []; this._source = null; }
+  removeTrack(trackId) {
+    for (const entry of this._sources.filter(entry => entry.trackId === trackId)) { entry.source.onended = null; try { entry.source.stop(); } catch {} safelyDisconnect(entry.source); entry.release(); }
+    this._sources = this._sources.filter(entry => entry.trackId !== trackId); this._plan = this._plan?.filter(entry => entry.trackId !== trackId) || null; this._source = this._sources[0]?.source || null;
+    if (this._playing && !this._sources.length) this.pause();
   }
 
   _audioPositionAt(time) {
@@ -184,7 +244,7 @@ export class Playback {
         return peak;
       });
       const left = peaks[0], right = this._channelCount === 1 ? left : peaks[1];
-      this.onMeter?.({ left, right, clipped: left >= 1 || right >= 1 });
+      this.onMeter?.({ left, right, channels: peaks.slice(0, this._channelCount), clipped: peaks.some(value => value >= 1) });
     }
     if (this._metronome) this._scheduleMetronome();
   }
@@ -255,11 +315,11 @@ export class Playback {
       const now = Math.max(this._anchorTime, this._context.currentTime);
       this._anchorPosition = this._audioPositionAt(now);
       this._anchorTime = now;
-      this._source.playbackRate.cancelScheduledValues(now);
-      this._source.playbackRate.setValueAtTime(rate, now);
+      for (const entry of this._sources) { entry.source.playbackRate.cancelScheduledValues(now); entry.source.playbackRate.setValueAtTime(rate, now); }
       this._clearClicks();
     }
     this._rate = rate;
+    this._notifyRoute();
     if (this._playing && this._metronome) this._scheduleMetronome();
   }
   setMetronome(enabled) {
@@ -273,6 +333,7 @@ export class Playback {
     const nextBarLength = barLength(beatsPerBar);
     this._bpm = nextBpm;
     this._beatOffset = nextOffset;
+    this._notifyRoute();
     this._beatsPerBar = nextBarLength;
     this._clearClicks();
     if (this._playing && this._metronome) this._scheduleMetronome();
@@ -286,14 +347,13 @@ export class Playback {
     this._loopStart = start; this._loopEnd = end;
     this._clearClicks();
     if (this._playing) {
-      this._source.onended = null;
-      try { this._source.stop(); } catch { /* Already stopped. */ }
-      safelyDisconnect(this._source);
+      this._stopSources();
       if (this._loop && position >= end) position = start + modulo(position - end, end - start);
       this._startSource(clamp(position, 0, this._duration), this._context.currentTime);
       this._scheduledUntil = this._anchorTime;
       if (this._metronome) this._scheduleMetronome();
     }
+    this._notifyRoute();
   }
   pause() {
     const position = this.position;
@@ -301,33 +361,32 @@ export class Playback {
     this._halt(false);
     this._position = position;
     this.onTime?.(position);
+    this._notifyRoute();
     return position;
   }
   stop() {
     this._generation++;
     this._halt(true);
     this.onTime?.(0);
+    this._notifyRoute();
   }
   _halt(reset) {
     this._playing = false;
     clearInterval(this._timer); this._timer = null;
     globalThis.document?.removeEventListener('visibilitychange', this._visibilityHandler);
-    if (this._source) {
-      this._source.onended = null;
-      try { this._source.stop(); } catch { /* Natural end or previous stop. */ }
-      safelyDisconnect(this._source);
-      this._source = null;
-    }
+    this._stopSources();
     this._clearClicks();
     this._nodes.forEach(safelyDisconnect); this._nodes = [];
+    if (this._externalMeterTap) { try { this._externalMeterTap.disconnect(this._splitter); } catch {} this._externalMeterTap = null; }
     this._analysers = null; this._meterData = null;
     this._buffer = null;
+    this._plan = null;
     this.onMeter?.({ left: 0, right: 0, clipped: false });
     if (reset) { this._position = 0; this._timelineOffset = 0; }
   }
   async dispose() {
     this.stop();
-    if (this._context && this._context.state !== 'closed') await this._context.close();
+    if (!this._route?.contextProvider && this._context && this._context.state !== 'closed') await this._context.close();
     this._context = null;
   }
 }
