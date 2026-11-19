@@ -21,7 +21,13 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - name: Install native codec test dependency
-        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+        run: |
+          # The regional runner mirror can stall large audio-library downloads.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
+          fi
+          sudo apt-get -o Acquire::Retries=3 update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
       - run: npm test
       - run: npm run build
       - name: Install Chromium
@@ -51,7 +57,12 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - name: Install Audacity and virtual display
-        run: sudo apt-get update -qq && sudo apt-get install -y audacity xvfb xauth ffmpeg
+        run: |
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
+          fi
+          sudo apt-get -o Acquire::Retries=3 update -qq
+          sudo apt-get install -y --no-install-recommends audacity xvfb xauth
       - name: Verify native Audacity project exchange
         run: xvfb-run -a node scripts/verify-audacity.mjs
       - name: Save native interchange evidence

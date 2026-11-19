@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Native interoperability gate. Run on a Linux runner with audacity, xvfb,
- * xauth and ffmpeg installed: xvfb-run -a node scripts/verify-audacity.mjs
+ * and xauth installed: xvfb-run -a node scripts/verify-audacity.mjs
  * Reference commands: https://manual.audacityteam.org/man/scripting_reference.html
  * No existing Audacity configuration is edited. All XDG paths are private fixtures.
  */

@@ -82,7 +82,7 @@ The suite retains desktop/tablet/mobile layout checks and adds screenshots for t
 
 ## Native Audacity verification gate
 
-The `native-interop` job installs Audacity, FFmpeg and a virtual display, then runs:
+The `native-interop` job installs Audacity, Xvfb and xauth, then runs:
 
 ```sh
 xvfb-run -a node scripts/verify-audacity.mjs
