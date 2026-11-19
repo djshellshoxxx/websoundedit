@@ -1,0 +1,788 @@
+{
+  "version": 1,
+  "seeds": [
+    "0x57455345",
+    "0x00c0ffee",
+    "0x51ec7100"
+  ],
+  "limits": {
+    "sequencesPerSeed": 8,
+    "stepsPerSequence": 100,
+    "maxClipFrames": 319,
+    "maxTracks": 6,
+    "maxClips": 12
+  },
+  "counts": {
+    "engineCases": 2400,
+    "accepted": 1731,
+    "expectedRejections": 669,
+    "unexpectedRejections": 0,
+    "atomicChecks": 669,
+    "stateChecks": 1731,
+    "historyRoundTrips": 136,
+    "projectRoundTrips": 104,
+    "dspCases": 600,
+    "wavRoundTrips": 1800,
+    "wavMutations": 1800,
+    "wavAcceptedMutations": 389,
+    "wavRejectedMutations": 1411
+  },
+  "failures": [
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 0,
+      "step": 5,
+      "method": "clip.split",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 0,
+      "step": 97,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_c65f8ea6-6cb4-4837-9b7c-e5642e2dc9bc'\n- 'clip_e50cd6be-c330-4664-af5d-a50d5f08904b'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 1,
+      "step": 1,
+      "method": "clip.duplicate",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 2,
+      "step": 7,
+      "method": "clip.split",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 2,
+      "step": 27,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_d18283aa-f10e-49a9-8e13-b02250323bbd'\n- 'track_bb591c95-8822-428a-9bc6-8aff695f4d8b'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 2,
+      "step": 38,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_1f33edd1-8269-40d6-b257-6b62f8c95eba'\n- 'track_7529dfae-a013-4eb7-bb31-cb6e0af09776'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 2,
+      "step": 58,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_33f93028-8f61-43d5-bfee-8878c301f381'\n- 'track_1116921d-45d7-44b0-bb19-2f32c487b5f6'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 2,
+      "step": 72,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_48a9326d-fee2-4606-9c64-0a312c43e76c'\n- 'clip_2b88d3ff-f10b-4e31-ad80-677c3f4d2586'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 2,
+      "step": 79,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_8c41a5ae-6e35-48b0-9689-2316c40bb76b'\n- 'track_4dae76c2-eac3-437d-8d34-9f486edcd114'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 3,
+      "step": 2,
+      "method": "clip.duplicate",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 3,
+      "step": 28,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_0374c8fb-7006-41c0-bfed-94ccae58b490'\n- 'clip_6466b739-ea8c-49c0-8953-ca42cfd7dec7'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 3,
+      "step": 38,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_40ae0675-2c75-482a-9d78-357f4d303969'\n- 'track_2e267bb2-4622-48f5-b5ca-01aad365c05a'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 3,
+      "step": 99,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_93487974-dfc2-4aef-aa68-0550a77b6624'\n- 'clip_26c537b5-082d-4c85-bebb-6133edb70cd9'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 4,
+      "step": 20,
+      "method": "clip.split",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 4,
+      "step": 73,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_15ef45f7-151e-49ef-ac06-da7010e87832'\n- 'clip_5f17040f-bb56-4126-b1fc-4623b791cf8a'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 4,
+      "step": 84,
+      "method": "clip.split",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 5,
+      "step": 2,
+      "method": "clip.split",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 5,
+      "step": 11,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_3964276d-b9ac-49cc-8ea4-8517ad1cc545'\n- 'clip_c7e85990-5b22-49ca-ab00-ddb9acdc8d53'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 5,
+      "step": 26,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_2e5410a3-803a-41b9-8977-4862c3c20661'\n- 'track_303ddd56-b936-4863-962b-5a987fb34ac9'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 5,
+      "step": 67,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_e62c4080-1c9e-475c-8617-89a33bfb077a'\n- 'clip_8691d4c8-9ccf-49e2-9256-d7196e25447a'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 6,
+      "step": 25,
+      "method": "clip.duplicate",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 6,
+      "step": 78,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_7f6a2b1c-4d21-407f-9968-b26439deec45'\n- 'clip_5e725016-2782-404c-99f8-534682853bbd'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 6,
+      "step": 85,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_1019e555-4a30-46b3-a049-83a687b0ae83'\n- 'clip_027ea539-e358-4297-9945-d00f357b832f'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 7,
+      "step": 25,
+      "method": "clip.duplicate",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x57455345",
+      "sequence": 7,
+      "step": 97,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_ba57ccb7-5ace-4782-ab4f-51e3ac2f751d'\n- 'track_05a0278c-b271-4147-99ab-5e5392be1d5f'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 0,
+      "step": 3,
+      "method": "clip.split",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 0,
+      "step": 21,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_f7bc6ceb-2af6-4835-8ebf-57890aa8857b'\n- 'clip_083116ec-736c-4225-8033-9490be3b4170'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 0,
+      "step": 35,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_72fbe413-8dc8-4339-9b53-158db47993df'\n- 'track_ee3fba63-b1ca-48c6-96dd-4bac594916e9'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 0,
+      "step": 78,
+      "method": "clip.split",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 0,
+      "step": 92,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_728ea248-7c5d-4583-ade2-cb88b16c00a9'\n- 'clip_8ca8ec4d-0bb3-4541-8ab7-c3dfed9cf00a'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 1,
+      "step": 3,
+      "method": "clip.duplicate",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 1,
+      "step": 23,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_45680576-2c43-47ad-8afc-0a06baaf9102'\n- 'clip_b4c01048-c1c7-40fd-8c58-f7053a1db59b'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 1,
+      "step": 45,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_73ffe016-a8d4-4902-aa03-8e83c8b229a8'\n- 'track_7c3cc14a-4f2e-4864-a468-49f092e96371'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 1,
+      "step": 71,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_793663e0-f334-4b8e-8c31-0bcb41ff1e01'\n- 'track_dc5835e8-26eb-4597-a6bc-881c0435a4a8'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 2,
+      "step": 6,
+      "method": "clip.duplicate",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 2,
+      "step": 23,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_c56854d4-e7ba-4155-8631-1b93e27e0c25'\n- 'track_bfbb7292-1df8-48c7-a31d-a1509cbb7ad2'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 2,
+      "step": 45,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_b4721603-7b32-4020-8ebb-c3cb8a4b8cdf'\n- 'clip_9612d519-cd2c-471c-8e4e-e11c74da7d05'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 2,
+      "step": 56,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_5849ed87-94a5-4298-9c16-3b1386370346'\n- 'clip_95fe7763-36ac-41a7-ba21-334e9b474ef1'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 3,
+      "step": 2,
+      "method": "clip.split",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 3,
+      "step": 58,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_43b9b9f7-b4fd-4509-8a6e-5893ffd59741'\n- 'clip_8d93986a-eaaf-4336-8c72-07f0f701d37c'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 3,
+      "step": 81,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_edb70451-5927-4a03-ab78-ac51b6f3bce5'\n- 'clip_8a3a3e29-ca17-4b8e-8eb0-7e843ac4b294'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 4,
+      "step": 31,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_ce4282d8-5bdb-4ae6-a089-ae1a66cbf43e'\n- 'clip_3f781c41-23a3-4f1f-92ed-0b37e013bf8b'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 4,
+      "step": 59,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_2796af88-fd48-465e-95f2-126386fc899a'\n- 'clip_18ca5acb-33b8-41d2-8dfb-f701a44cedb4'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 4,
+      "step": 71,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_8e58c73a-70cb-4f5f-9d16-587fc92f9916'\n- 'clip_4bb16b3f-1efc-4d5f-993d-481541c9ad09'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 4,
+      "step": 98,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_831a193b-f10c-4aa4-a070-e0bd9c7282f7'\n- 'track_47fdd938-d5fe-406c-b9ef-5a27a935929e'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 5,
+      "step": 3,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_fa9abe11-6723-4649-aac8-4bdeab8434d4'\n- 'track_0e91a604-d148-410a-ac43-993c4911be6f'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 5,
+      "step": 66,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_7079a01b-1432-4b93-b965-1b7f3ca5ac9b'\n- 'track_fbedfeb5-f6ae-4ddd-89b3-146a86d6c2b1'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 5,
+      "step": 84,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_e215edc7-d32b-4007-af8e-107670ca8a6d'\n- 'track_dd20e275-f982-4be7-97a0-6d127491d406'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 5,
+      "step": 92,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_6f71bc67-ab21-427d-9bdc-8057b142a9ca'\n- 'track_ae53b2c0-ace0-4ab8-bdcd-b4e02a6c777f'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 6,
+      "step": 14,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_a2a62e43-eec1-495c-9230-b4b89e403b13'\n- 'track_2a892a59-dbfc-45b5-a9e1-e640b49d92b2'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 6,
+      "step": 72,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_ee352269-c20e-4dfc-9101-5e4fa4933c31'\n- 'track_9b7c765c-20dc-448e-aa2d-919ede7466c2'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 7,
+      "step": 7,
+      "method": "clip.split",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 7,
+      "step": 16,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_dffcde3f-5028-4187-9b39-5545fb8973ca'\n- 'clip_b4bda1fc-95c1-4e83-83eb-edc820cc2f3f'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 7,
+      "step": 40,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_49517817-d672-42c9-8203-64f350a166c0'\n- 'track_16cacaa3-0240-4d94-9270-f6acd946c766'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 7,
+      "step": 72,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_31955cde-5e51-4d71-9153-fe18261815f7'\n- 'clip_6508de52-174d-4955-97fc-ea6e475847e2'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0xc0ffee",
+      "sequence": 7,
+      "step": 87,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_d6ff8733-5e5d-45b5-af96-1e972d7bd49c'\n- 'clip_0837c22c-907c-45b8-a191-455208fa3c65'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 0,
+      "step": 4,
+      "method": "clip.duplicate",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 0,
+      "step": 31,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_98990975-8ef9-42ef-872a-ab135f19bc33'\n- 'clip_d62857ba-1d9c-4bb4-8398-80996ec86bfa'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 0,
+      "step": 52,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_22ff89d5-3b24-43a3-8a2d-60a447847475'\n- 'clip_f381798d-c4bc-4ad7-b703-3b7bba42420c'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 1,
+      "step": 7,
+      "method": "clip.duplicate",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 1,
+      "step": 30,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_e460c42a-49ee-4ff5-b24f-142bafb8c3bd'\n- 'track_31c1e5ea-e72f-4863-967b-f749b2cd8825'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 1,
+      "step": 49,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_40f45610-7589-4d42-8d4c-2d24d6bfb8d8'\n- 'clip_7de050f4-be9f-4fc1-9df1-223bdb7c8948'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 1,
+      "step": 78,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_4c152627-0494-4a62-8c89-8549e51f8ef5'\n- 'track_ced17b4e-08e1-46d6-b4da-e4f7075187d1'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 2,
+      "step": 1,
+      "method": "clip.split",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 2,
+      "step": 42,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_d40aea60-6382-4f39-9bae-1555927e4ee2'\n- 'clip_c038eea7-2139-4262-8e41-701d03327910'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 2,
+      "step": 75,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_fe145b9b-2bcd-4503-a856-0e77d52ec262'\n- 'track_087b5599-15d8-43a3-b78a-9b2685376346'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 2,
+      "step": 91,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_15ce7a16-395a-4a56-8096-9855ceee7389'\n- 'track_fc75dfa6-5c7d-4230-8c73-d36ed75ea023'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 3,
+      "step": 12,
+      "method": "clip.duplicate",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 4,
+      "step": 1,
+      "method": "clip.duplicate",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 4,
+      "step": 22,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_de6c4c78-3c10-4bac-8cc0-ec2a86a98dab'\n- 'track_79aae49c-a56d-41f5-9917-22180b1d2f2e'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 4,
+      "step": 62,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_2ad294ae-5448-4de2-8236-330bed9b6bd9'\n- 'clip_443724af-2d34-45c1-b23f-97e8ea5fc62f'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 5,
+      "step": 11,
+      "method": "clip.duplicate",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 5,
+      "step": 36,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_0e98c0f6-9c3a-4f14-836f-97b9a95f025a'\n- 'clip_f86d4b8f-8c68-4e42-94c0-f95c99db770d'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 5,
+      "step": 41,
+      "method": "clip.duplicate",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 5,
+      "step": 60,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_d92924c5-cceb-4997-9794-6abfdd97ff5a'\n- 'clip_251551e2-5fc5-4c61-a302-5e4160da43b3'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 6,
+      "step": 4,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_883ed3c8-e7da-45a5-85d8-add23d02ed1f'\n- 'track_b1c53257-612d-4925-ad96-ad9de5508a0e'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 6,
+      "step": 27,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_eba3817d-bc65-40bd-8dd7-2a4c543865b7'\n- 'clip_de0d1d39-57bc-4346-98b2-923f9799942b'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 6,
+      "step": 58,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_2c25240e-5438-4d88-a230-dd2dd13a2c9e'\n- 'track_d4c795d3-f042-4d71-85e3-e4bfe4b99bb7'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 6,
+      "step": 92,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_3ef87ae5-a4f8-47b6-a2e4-c17f53793371'\n- 'clip_c8a57b13-2f3b-4700-b9ee-6fa428a09a06'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 7,
+      "step": 18,
+      "method": "clip.duplicate",
+      "message": "generated clip name exceeds portable limit",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 7,
+      "step": 28,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_ae95aad5-3f88-4567-8863-5dd799f2e722'\n- 'clip_3b5da977-acca-435e-a02f-b31f953a8fe6'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 7,
+      "step": 57,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_b98fbc56-1f98-4e3f-b35f-d6d5f1813aa6'\n- 'track_707458a9-5def-4416-bfa7-79b7d685a026'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 7,
+      "step": 75,
+      "method": "edit.trim",
+      "message": "selection clip and selected clip differ\n+ actual - expected\n\n+ 'clip_f1cfae14-66db-43a2-b709-30aba31b8cd5'\n- 'clip_fba18394-457d-419d-8d9b-19786474e3ab'\n",
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "area": "engine",
+      "seed": "0x51ec7100",
+      "sequence": 7,
+      "step": 88,
+      "method": "edit.trim",
+      "message": "selection track and selected track differ\n+ actual - expected\n\n+ 'track_96136247-0e0e-436e-8e52-88da52c02d65'\n- 'track_ca7a2569-97bc-4506-b933-beeb0a33579c'\n",
+      "code": "ERR_ASSERTION"
+    }
+  ]
+}

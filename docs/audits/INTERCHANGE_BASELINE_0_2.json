@@ -1,0 +1,457 @@
+{
+  "seed": 1096107097,
+  "seedHex": "0x41554459",
+  "runtime": "v24.22.3",
+  "platform": "linux",
+  "generatedAt": "2026-11-19T10:49:05.563Z",
+  "limits": {
+    "mutationCasesPerFamily": 256,
+    "largestFocusedPayloadBytes": 1048629
+  },
+  "sourceSha256": {
+    "src/audacity.js": "bf61faa24b59a0127f8a35ba93f9237aff292b0e293e5ab3dcda3325c3b7dfed",
+    "src/audacity-xml.js": "ba42c0fc8d46edb56251d7616edc80d7ccaf77250bb39a038e72c60b0ea9b123",
+    "src/engine.js": "f89c4f819147da3a2201ddaf413483e42e9507f977be7270031636994cbd9176",
+    "src/metadata.js": "620a0dc466d4f800f3c5f170fae66df4961b8b421b5810ed7bafcccdc0b8df46",
+    "package-lock.json": "8684a4dc9ea27f40808e54416c9a2d1a6f0fef8cb7a717b03e5a4fdd69278a79"
+  },
+  "families": {
+    "xml-bytes": {
+      "total": 256,
+      "accepted": 10,
+      "rejected": 246,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "ParseError: Reporting error \"unexpected end of input\" caused Error: Invalid Audacity XML: unexpected end of input": 33,
+        "TypeError: The encoded data was not valid for encoding utf-8": 94,
+        "ParseError: Reporting error \"element parse error: Error: invalid attribute:l%n\" caused Error: Invalid Audacity XML: element parse error: Error: invalid attribute:l%n": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"waveblock\" != \"wiveblock\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"waveblock\" != \"wiveblock\"": 1,
+        "ParseError: Reporting error \"element parse error: Error: attribute value must after \"=\"\" caused Error: Invalid Audacity XML: element parse error: Error: attribute value must after \"=\"": 3,
+        "ParseError: Reporting fatalError \"end tag name contains invalid characters: \"7aveclip\"\" caused Error: Invalid Audacity XML: end tag name contains invalid characters: \"7aveclip\"": 1,
+        "ParseError: Reporting fatalError \"end tag name contains invalid characters: \"waveclip?</wavetrack?</project.\"\" caused Error: Invalid Audacity XML: end tag name contains invalid characters: \"waveclip?</wavetrack?</project.\"": 1,
+        "ParseError: Reporting fatalError \"Unescaped '<' not allowed in attributes values\" caused Error: Invalid Audacity XML: Unescaped '<' not allowed in attributes values": 9,
+        "ParseError: Reporting fatalError \"end tag name contains invalid characters: \"w!veblnck\"\" caused Error: Invalid Audacity XML: end tag name contains invalid characters: \"w!veblnck\"": 1,
+        "ParseError: Reporting warning \"attribute value must after \"=\"\" caused Error: Invalid Audacity XML: attribute value must after \"=\"": 5,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"wavetracc\" != \"wavetrack\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"wavetracc\" != \"wavetrack\"": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"waveblosk\" != \"waveflock\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"waveblosk\" != \"waveflock\"": 1,
+        "ParseError: Reporting error \"Extra content at the end of the document\" caused Error: Invalid Audacity XML: Extra content at the end of the document": 8,
+        "ParseError: Reporting fatalError \"end tag name contains invalid characters: \"wav\"\" caused Error: Invalid Audacity XML: end tag name contains invalid characters: \"wav\"": 1,
+        "ParseError: Reporting error \"EntityRef: expecting ;\" caused Error: Invalid Audacity XML: EntityRef: expecting ;": 3,
+        "ParseError: Reporting error \"element parse error: Error: attribute equal must after attrName\" caused Error: Invalid Audacity XML: element parse error: Error: attribute equal must after attrName": 2,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"wavetrack\" != \"wavmtrack\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"wavetrack\" != \"wavmtrack\"": 1,
+        "ParseError: Reporting warning \"attribute \"version\" missed start quot(\")!!\" caused Error: Invalid Audacity XML: attribute \"version\" missed start quot(\")!!": 1,
+        "ParseError: Reporting error \"element parse error: Error: invalid tagName:3equence\" caused Error: Invalid Audacity XML: element parse error: Error: invalid tagName:3equence": 1,
+        "ParseError: Reporting error \"element parse error: Error: attribute value no end '\"' match\" caused Error: Invalid Audacity XML: element parse error: Error: attribute value no end '\"' match": 9,
+        "ParseError: Reporting warning \"attribute \"name\" missed start quot(\")!!\" caused Error: Invalid Audacity XML: attribute \"name\" missed start quot(\")!!": 5,
+        "ParseError: Reporting error \"element parse error: Error: invalid attribute:na}e\" caused Error: Invalid Audacity XML: element parse error: Error: invalid attribute:na}e": 1,
+        "ParseError: Reporting error \"element parse error: Error: invalid tagName:prject\" caused Error: Invalid Audacity XML: element parse error: Error: invalid tagName:prject": 1,
+        "ParseError: Reporting error \"element parse error: Error: invalid attribute:offse|\" caused Error: Invalid Audacity XML: element parse error: Error: invalid attribute:offse|": 1,
+        "ParseError: Reporting warning \"attribute space is required\"name\"!!\" caused Error: Invalid Audacity XML: attribute space is required\"name\"!!": 2,
+        "ParseError: Reporting fatalError \"end tag name contains invalid characters: \"waveclip\"\" caused Error: Invalid Audacity XML: end tag name contains invalid characters: \"waveclip\"": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"sequence\" != \"seqeence\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"sequence\" != \"seqeence\"": 1,
+        "ParseError: Reporting fatalError \"end tag name contains invalid characters: \"proj\"\" caused Error: Invalid Audacity XML: end tag name contains invalid characters: \"proj\"": 1,
+        "ParseError: Reporting warning \"attribute \"rate\" missed start quot(\")!!\" caused Error: Invalid Audacity XML: attribute \"rate\" missed start quot(\")!!": 1,
+        "ParseError: Reporting error \"element parse error: Error: invalid tagName:qvetrack\" caused Error: Invalid Audacity XML: element parse error: Error: invalid tagName:qvetrack": 1,
+        "Error: Invalid Audacity legacy block length.": 1,
+        "ParseError: Reporting warning \"attribute \"ratm\" missed start quot(\")!!\" caused Error: Invalid Audacity XML: attribute \"ratm\" missed start quot(\")!!": 1,
+        "ParseError: Reporting error \"element parse error: Error: elements closed character '/' and '>' must be connected to\" caused Error: Invalid Audacity XML: element parse error: Error: elements closed character '/' and '>' must be connected to": 1,
+        "ParseError: Reporting fatalError \"Invalid processing instruction starting at position 203\" caused Error: Invalid Audacity XML: Invalid processing instruction starting at position 203": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"wavuclip\" != \"waveclip\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"wavuclip\" != \"waveclip\"": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"saveclip\" != \"waveclip\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"saveclip\" != \"waveclip\"": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"projebt\" != \"project\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"projebt\" != \"project\"": 1,
+        "ParseError: Reporting warning \"attribute space is required\"channel\"!!\" caused Error: Invalid Audacity XML: attribute space is required\"channel\"!!": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"waveclip\" != \"gaveclip\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"waveclip\" != \"gaveclip\"": 1,
+        "ParseError: Reporting fatalError \"end tag name contains invalid characters: \"wave#lip\"\" caused Error: Invalid Audacity XML: end tag name contains invalid characters: \"wave#lip\"": 1,
+        "ParseError: Reporting error \"element parse error: Error: invalid tagName:wavec|ip\" caused Error: Invalid Audacity XML: element parse error: Error: invalid tagName:wavec|ip": 1,
+        "ParseError: Reporting error \"element parse error: Error: invalid attribute:2ate\" caused Error: Invalid Audacity XML: element parse error: Error: invalid attribute:2ate": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"wavetrack\" != \"wavetRack\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"wavetrack\" != \"wavetRack\"": 1,
+        "ParseError: Reporting warning \"attribute \"Trackb\" missed quot(\")!!\" caused Error: Invalid Audacity XML: attribute \"Trackb\" missed quot(\")!!": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"vaveblock\" != \"waveblock\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"vaveblock\" != \"waveblock\"": 1,
+        "ParseError: Reporting fatalError \"end tag name contains invalid characters: \"p\"\" caused Error: Invalid Audacity XML: end tag name contains invalid characters: \"p\"": 1,
+        "ParseError: Reporting fatalError \"end tag name contains invalid characters: \"wave`lock\"\" caused Error: Invalid Audacity XML: end tag name contains invalid characters: \"wave`lock\"": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"sepuence\" != \"sequence\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"sepuence\" != \"sequence\"": 1,
+        "ParseError: Reporting error \"element parse error: Error: invalid tagName:silentblockfil}\" caused Error: Invalid Audacity XML: element parse error: Error: invalid tagName:silentblockfil}": 1,
+        "Error: Invalid Audacity sequence length.": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"gaveblock\" != \"waveblock\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"gaveblock\" != \"waveblock\"": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"weveblock\" != \"waveblock\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"weveblock\" != \"waveblock\"": 1,
+        "ParseError: Reporting error \"element parse error: Error: invalid attribute:~ame\" caused Error: Invalid Audacity XML: element parse error: Error: invalid attribute:~ame": 1,
+        "ParseError: Reporting error \"element parse error: Error: invalid tagName:wav%clip\" caused Error: Invalid Audacity XML: element parse error: Error: invalid tagName:wav%clip": 1,
+        "ParseError: Reporting warning \"attribute \"channel\" missed start quot(\")!!\" caused Error: Invalid Audacity XML: attribute \"channel\" missed start quot(\")!!": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"sequence\" != \"waveclip\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"sequence\" != \"waveclip\"": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"waweblock\" != \"waveblock\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"waweblock\" != \"waveblock\"": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"projecv\" != \"project\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"projecv\" != \"project\"": 1,
+        "Error: This Audacity project format is newer than the supported 3.x schema. Export audio stems in Audacity.": 2,
+        "ParseError: Reporting warning \"attribute \"numpoints\" missed start quot(\")!!\" caused Error: Invalid Audacity XML: attribute \"numpoints\" missed start quot(\")!!": 2,
+        "ParseError: Reporting fatalError \"end tag name contains invalid characters: \"sequence\u001e<envelope numpoints=\"0\"/\"\" caused Error: Invalid Audacity XML: end tag name contains invalid characters: \"sequence\u001e<envelope numpoints=\"0\"/\"": 1,
+        "ParseError: Reporting fatalError \"end tag name contains invalid characters: \"project\"\" caused Error: Invalid Audacity XML: end tag name contains invalid characters: \"project\"": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"sequence\" != \"sequencg\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"sequence\" != \"sequencg\"": 1,
+        "ParseError: Reporting error \"element parse error: Error: invalid attribute:versi/n\" caused Error: Invalid Audacity XML: element parse error: Error: invalid attribute:versi/n": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"wavetRack\" != \"wawetrack\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"wavetRack\" != \"wawetrack\"": 1,
+        "ParseError: Reporting error \"element parse error: Error: invalid tagName:e~velope\" caused Error: Invalid Audacity XML: element parse error: Error: invalid tagName:e~velope": 1,
+        "ParseError: Reporting warning \"attribute space is required\"nama\"!!\" caused Error: Invalid Audacity XML: attribute space is required\"nama\"!!": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"wavetrack\" != \"waveclip\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"wavetrack\" != \"waveclip\"": 1,
+        "ParseError: Reporting fatalError \"end tag name contains invalid characters: \"waveb\"\" caused Error: Invalid Audacity XML: end tag name contains invalid characters: \"waveb\"": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"waveclip\" != \"wavetrack\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"waveclip\" != \"wavetrack\"": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"wave4rack\" != \"wavetrack\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"wave4rack\" != \"wavetrack\"": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"wavetrask\" != \"wavetrack\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"wavetrask\" != \"wavetrack\"": 1,
+        "ParseError: Reporting fatalError \"end tag name contains invalid characters: \"w\"\" caused Error: Invalid Audacity XML: end tag name contains invalid characters: \"w\"": 1,
+        "ParseError: Reporting fatalError \"end tag name contains invalid characters: \"pr\"\" caused Error: Invalid Audacity XML: end tag name contains invalid characters: \"pr\"": 1,
+        "ParseError: Reporting error \"element parse error: Error: invalid attribute:channe,\" caused Error: Invalid Audacity XML: element parse error: Error: invalid attribute:channe,": 1,
+        "ParseError: Reporting fatalError \"Invalid processing instruction starting at position 251\" caused Error: Invalid Audacity XML: Invalid processing instruction starting at position 251": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"projecT\" != \"project\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"projecT\" != \"project\"": 1,
+        "ParseError: Reporting error \"Unexpected content outside root element: '|projectversion=\"1.3.\u0010\"name=\"Audit\"rate=\"8000\">'\" caused Error: Invalid Audacity XML: Unexpected content outside root element: '|projectversion=\"1.3.\u0010\"name=\"Audit\"rate=\"8000\">'": 1,
+        "ParseError: Reporting fatalError \"unclosed xml tag(s): project\" caused Error: Invalid Audacity XML: unclosed xml tag(s): project": 1,
+        "ParseError: Reporting error \"element parse error: Error: invalid tagName:silentbloc{file\" caused Error: Invalid Audacity XML: element parse error: Error: invalid tagName:silentbloc{file": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"projmct\" != \"project\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"projmct\" != \"project\"": 1,
+        "ParseError: Reporting fatalError \"Opening and ending tag mismatch: \"wavetracj\" != \"project\"\" caused Error: Invalid Audacity XML: Opening and ending tag mismatch: \"wavetracj\" != \"project\"": 1
+      }
+    },
+    "binary-xml": {
+      "total": 256,
+      "accepted": 10,
+      "rejected": 246,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Truncated Audacity binary XML.": 107,
+        "Error: Unsupported Audacity binary XML field 93; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Audacity binary XML references an unknown name.": 41,
+        "Error: Unsupported Audacity binary XML field 84; use a supported Audacity 3.x project or export audio stems.": 2,
+        "Error: Unsupported Audacity binary XML field 69; use a supported Audacity 3.x project or export audio stems.": 1,
+        "TypeError: The encoded data was not valid for encoding utf-8": 5,
+        "Error: Unsupported Audacity XML character width.": 7,
+        "Error: Unsupported Audacity binary XML field 20; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 96; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Invalid Audacity dictionary stack.": 1,
+        "Error: Unsupported Audacity binary XML field 17; use a supported Audacity 3.x project or export audio stems.": 2,
+        "Error: Unsupported Audacity binary XML field 139; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 35; use a supported Audacity 3.x project or export audio stems.": 2,
+        "Error: Unsupported Audacity binary XML field 85; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 132; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Incomplete Audacity binary XML.": 6,
+        "Error: Unsupported Audacity binary XML field 107; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 198; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 67; use a supported Audacity 3.x project or export audio stems.": 2,
+        "Error: Unsupported Audacity binary XML field 226; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 130; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 70; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Mismatched Audacity XML closing tag.": 6,
+        "Error: Unsupported Audacity binary XML field 204; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 48; use a supported Audacity 3.x project or export audio stems.": 3,
+        "Error: Unsupported Audacity binary XML field 98; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 66; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 141; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 131; use a supported Audacity 3.x project or export audio stems.": 5,
+        "Error: Unsupported Audacity binary XML field 155; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 136; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 80; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 116; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 28; use a supported Audacity 3.x project or export audio stems.": 2,
+        "Error: Unsupported Audacity binary XML field 210; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 108; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 241; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 129; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 209; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 81; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 188; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 106; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 33; use a supported Audacity 3.x project or export audio stems.": 2,
+        "Error: Unsupported Audacity binary XML field 97; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 34; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 231; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 162; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Audacity XML integer is too large.": 1,
+        "Error: Unsupported Audacity binary XML field 128; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Invalid or duplicate Audacity XML attribute.": 3,
+        "Error: Unsupported Audacity binary XML field 205; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 242; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 19; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 65; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 45; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 252; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 166; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 113; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 68; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 186; use a supported Audacity 3.x project or export audio stems.": 2,
+        "Error: Unsupported Audacity binary XML field 152; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 127; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 117; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 240; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity binary XML field 230; use a supported Audacity 3.x project or export audio stems.": 1
+      }
+    },
+    "au-block": {
+      "total": 256,
+      "accepted": 151,
+      "rejected": 105,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Unsupported Audacity AU encoding or channel layout.": 50,
+        "Error: Audacity AU block length does not match its project.": 54,
+        "Error: Unsupported Audacity AU block header.": 1
+      }
+    },
+    "legacy-zip": {
+      "total": 256,
+      "accepted": 11,
+      "rejected": 245,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Invalid Audacity ZIP directory.": 114,
+        "Error: invalid distance": 34,
+        "ParseError: Reporting warning \"attribute \"ch\" missed value!! \"ch\" instead2!!\" caused Error: Invalid Audacity XML: attribute \"ch\" missed value!! \"ch\" instead2!!": 1,
+        "Error: Invalid or encrypted Audacity ZIP entry.": 7,
+        "ParseError: Reporting warning \"attribute \"offset\" missed value!! \"offset\" instead!!\" caused Error: Invalid Audacity XML: attribute \"offset\" missed value!! \"offset\" instead!!": 1,
+        "Error: Unsupported ZIP64, multipart or oversized Audacity archive.": 27,
+        "Error: Invalid Audacity ZIP payload size or compression.": 16,
+        "TypeError: The encoded data was not valid for encoding utf-8": 5,
+        "ParseError: Reporting fatalError \"end tag name contains invalid characters: \"sequencel<envelope numpoints=\"0\"/\"\" caused Error: Invalid Audacity XML: end tag name contains invalid characters: \"sequencel<envelope numpoints=\"0\"/\"": 1,
+        "ParseError: Reporting error \"element parse error: Error: attribute equal must after attrName\" caused Error: Invalid Audacity XML: element parse error: Error: attribute equal must after attrName": 3,
+        "ParseError: Reporting error \"element parse error: Error: attribute value no end '\"' match\" caused Error: Invalid Audacity XML: element parse error: Error: attribute value no end '\"' match": 3,
+        "Error: Invalid Audacity ZIP entry.": 3,
+        "Error: Audacity external/aliased blocks require a self-contained project or an audio export.": 1,
+        "ParseError: Reporting fatalError \"Unescaped '<' not allowed in attributes values\" caused Error: Invalid Audacity XML: Unescaped '<' not allowed in attributes values": 2,
+        "ParseError: Reporting warning \"attribute space is required\"name\"!!\" caused Error: Invalid Audacity XML: attribute space is required\"name\"!!": 1,
+        "Error: Choose a ZIP containing exactly one .aup project and its matching _data folder.": 2,
+        "ParseError: Reporting warning \"attribute \"numsam\" missed value!! \"numsam\" instead2!!\" caused Error: Invalid Audacity XML: attribute \"numsam\" missed value!! \"numsam\" instead2!!": 1,
+        "Error: Invalid Audacity ZIP payload.": 6,
+        "Error: Invalid Audacity sequence length.": 1,
+        "ParseError: Reporting fatalError \"missing root element\" caused Error: Invalid Audacity XML: missing root element": 2,
+        "Error: invalid length/literal": 3,
+        "ParseError: Reporting warning \"attribute \"ck\" missed value!! \"ck\" instead2!!\" caused Error: Invalid Audacity XML: attribute \"ck\" missed value!! \"ck\" instead2!!": 1,
+        "Error: This file is not an Audacity project.": 1,
+        "ParseError: Reporting error \"element parse error: Error: attribute value must after \"=\"\" caused Error: Invalid Audacity XML: element parse error: Error: attribute value must after \"=\"": 1,
+        "ParseError: Reporting warning \"attribute space is required\"mles\"!!\" caused Error: Invalid Audacity XML: attribute space is required\"mles\"!!": 1,
+        "ParseError: Reporting error \"unexpected end of input\" caused Error: Invalid Audacity XML: unexpected end of input": 1,
+        "Error: Audacity XML exceeds the 8 MiB limit.": 1,
+        "Error: unexpected EOF": 3,
+        "ParseError: Reporting fatalError \"end tag name contains invalid characters: \"oject v\"\" caused Error: Invalid Audacity XML: end tag name contains invalid characters: \"oject v\"": 1,
+        "ParseError: Reporting fatalError \"end tag name contains invalid characters: \"wave0\"\"\" caused Error: Invalid Audacity XML: end tag name contains invalid characters: \"wave0\"\"": 1
+      }
+    },
+    "aup3-sqlite": {
+      "total": 256,
+      "accepted": 186,
+      "rejected": 70,
+      "invalidAccepted": 1,
+      "inputMutations": 0,
+      "errors": {
+        "Error: database disk image is malformed": 39,
+        "Error: malformed database schema (sampleblocks) - near \"AUTOINCREMENT\": syntax error": 2,
+        "Error: Audacity binary XML references an unknown name.": 4,
+        "Error: malformed database schema (sampleblocks) - incomplete input": 1,
+        "Error: malformed database schema (autosave)": 1,
+        "Error: malformed database schema (sampleblocks) - near \"AUTOIFCREMENT\": syntax error": 1,
+        "Error: Unsupported Audacity binary XML field 130; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: malformed database schema (project)": 1,
+        "Error: Audacity block length does not match its sample data.": 1,
+        "Error: Truncated Audacity binary XML.": 5,
+        "TypeError: The encoded data was not valid for encoding utf-8": 4,
+        "Error: malformed database schema (sampleblocks)": 1,
+        "Error: Audacity saved project document is missing or too large. Close and save it in Audacity first.": 1,
+        "Error: Audacity project contains an invalid XML name.": 2,
+        "Error: malformed database schema (project) - near \"CRECTE\": syntax error": 1,
+        "Error: malformed database schema (autosave) - unrecognized token: \"[ KEY, dict BLOB, doc BLOB)\"": 1,
+        "Error: Invalid or duplicate Audacity XML attribute.": 1,
+        "Error: Unsupported Audacity binary XML field 18; use a supported Audacity 3.x project or export audio stems.": 1,
+        "Error: Unsupported Audacity XML character width.": 1,
+        "Error: Conflicting Audacity XML dictionary entry.": 1
+      }
+    },
+    "numeric-sample-rate": {
+      "total": 22,
+      "accepted": 2,
+      "rejected": 20,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Invalid Audacity sample rate.": 20
+      }
+    },
+    "numeric-sequence-length": {
+      "total": 22,
+      "accepted": 0,
+      "rejected": 22,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Invalid Audacity sequence length.": 11,
+        "Error: Invalid Audacity legacy block length.": 2,
+        "Error: Audacity sequence is missing audio blocks.": 9
+      }
+    },
+    "numeric-block-start": {
+      "total": 22,
+      "accepted": 3,
+      "rejected": 19,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Invalid Audacity block start.": 17,
+        "Error: Audacity sequence blocks contain gaps or overlaps. Repair the project in Audacity first.": 2
+      }
+    },
+    "numeric-block-length": {
+      "total": 22,
+      "accepted": 0,
+      "rejected": 22,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Invalid Audacity legacy block length.": 20,
+        "Error: Audacity sequence is missing audio blocks.": 2
+      }
+    },
+    "numeric-offset": {
+      "total": 22,
+      "accepted": 11,
+      "rejected": 11,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Invalid Audacity clip offset.": 9,
+        "Error: Audacity audio extends before zero or beyond the 10-minute timeline.": 2
+      }
+    },
+    "numeric-envelope-count": {
+      "total": 22,
+      "accepted": 4,
+      "rejected": 18,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Audacity volume envelopes need rendering in Audacity before import. Export audio stems to preserve their sound.": 18
+      }
+    },
+    "unsafe-zip-paths": {
+      "total": 7,
+      "accepted": 0,
+      "rejected": 7,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Audacity archive contains an unsafe file path.": 7
+      }
+    },
+    "xml-depth": {
+      "total": 8,
+      "accepted": 4,
+      "rejected": 4,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Audacity project XML is too complex.": 4
+      }
+    },
+    "xml-trust-boundaries": {
+      "total": 8,
+      "accepted": 3,
+      "rejected": 5,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "Error: Audacity projects with XML entities or internal DTDs are unsupported.": 1,
+        "Error: Compressed legacy Audacity projects reference external audio. Open and save a self-contained AUP3 in Audacity, or export audio stems, before importing here.": 1,
+        "Error: Audacity effect data cannot be reproduced here. Render effects or export audio stems in Audacity first.": 1,
+        "Error: Audacity notetrack data cannot be reproduced here. Render effects or export audio stems in Audacity first.": 1,
+        "Error: Audacity timetrack data cannot be reproduced here. Render effects or export audio stems in Audacity first.": 1
+      }
+    },
+    "metadata": {
+      "total": 256,
+      "accepted": 48,
+      "rejected": 208,
+      "invalidAccepted": 0,
+      "inputMutations": 0,
+      "errors": {
+        "RangeError: Unknown metadata field: constructor": 32,
+        "TypeError: Metadata comment must be text.": 8,
+        "RangeError: Metadata comment contains unsupported control characters.": 9,
+        "RangeError: Unknown metadata field: __proto__": 43,
+        "TypeError: Metadata title must be text.": 15,
+        "RangeError: Metadata artist contains unsupported control characters.": 14,
+        "RangeError: Unknown metadata field: unknown": 40,
+        "RangeError: Metadata title is too long.": 13,
+        "RangeError: Metadata title contains unsupported control characters.": 12,
+        "RangeError: Metadata artist is too long.": 12,
+        "TypeError: Metadata artist must be text.": 10
+      }
+    }
+  },
+  "focused": [
+    {
+      "id": "zip-crc-mismatch",
+      "outcome": "accepted",
+      "result": {
+        "archiveBytes": 173,
+        "declaredBytes": 53,
+        "actualInflatedBytes": 53,
+        "projectName": "Bounded"
+      },
+      "elapsedMs": 0.37
+    },
+    {
+      "id": "zip-deflate-size-understatement",
+      "outcome": "accepted",
+      "result": {
+        "archiveBytes": 1209,
+        "declaredBytes": 53,
+        "actualInflatedBytes": 1048629,
+        "projectName": "Bounded"
+      },
+      "elapsedMs": 34.834
+    },
+    {
+      "id": "xml-attribute-count",
+      "outcome": "accepted",
+      "result": {
+        "textBytes": 98900,
+        "attributesAccepted": 10000
+      },
+      "elapsedMs": 70.575
+    },
+    {
+      "id": "binary-writer-reader-depth-boundary",
+      "outcome": "rejected",
+      "error": "Error: Audacity XML is too complex.",
+      "elapsedMs": 0.909
+    },
+    {
+      "id": "sqlite-generated-column",
+      "outcome": "accepted",
+      "result": {
+        "fileBytes": 12288,
+        "projectName": "Computed schema",
+        "expressionZeroBlobBytes": 1048576,
+        "expressionHexBytes": 2097152,
+        "importedDocumentBytes": 51
+      },
+      "elapsedMs": 30.151
+    },
+    {
+      "id": "aup3-pcm-outside-editor-range",
+      "outcome": "accepted",
+      "result": {
+        "importAccepted": true,
+        "editorAccepted": false,
+        "editorError": "EditorError: PCM contains a non-finite or unreasonable sample.",
+        "sampleValue": 100000000
+      },
+      "elapsedMs": 4.944
+    }
+  ],
+  "unexpected": [
+    {
+      "family": "aup3-sqlite",
+      "id": 14,
+      "inputSha256": "c76b1274057ad563c7020058082d899a451be4a5d65acab545a58e2f9901ddc8",
+      "error": "EditorError: PCM contains a non-finite or unreasonable sample."
+    }
+  ],
+  "totalCases": 1691,
+  "focusedCases": 6,
+  "globalPrototypeIntact": true
+}
