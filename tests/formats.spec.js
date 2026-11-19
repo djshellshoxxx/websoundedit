@@ -1,82 +1,171 @@
 import { test, expect } from '@playwright/test';
 
-test('bundled single-thread codecs encode real formats and round-trip through native and forced fallback import', async ({ page }, testInfo) => {
-  test.setTimeout(360_000);
-  const errors = [], externalRequests = [];
-  page.on('pageerror', error => errors.push(error.message));
-  page.on('request', request => { const url = new URL(request.url()); if (url.protocol.startsWith('http') && url.origin !== new URL(testInfo.project.use.baseURL).origin) externalRequests.push(request.url()); });
-  await page.goto('/');
-  await page.waitForFunction(() => Boolean(window.websoundedit?.ready));
-  await page.evaluate(() => window.websoundedit.ready);
-  const results = await page.evaluate(async () => {
-    const api = websoundedit;
-    const { encodeWav, generateAudio, analyzeAudio } = await import(new URL('api.js', document.baseURI).href);
-    await api.execute('project.new', { name: 'Codec test', sampleRate: 48000 });
-    const audio = generateAudio({ type: 'tone', frequency: 440, duration: 0.5, amplitude: 0.3, channels: 2 });
-    const source = await api.importFile(new File([encodeWav(audio, { bitDepth: 32, float: true })], 'source.wav', { type: 'audio/wav' }));
-    const capability = await api.loadCodecs(), results = [];
-    window.__codecFiles = {};
-    for (const format of capability.formats) {
-      if (!format.available) { results.push({ id: format.id, available: false }); continue; }
-      try {
-        const output = await api.exportAudio({ scope: 'clip', clipId: source.clipId, format: format.id, bitDepth: 24, bitrate: 128, download: false });
-        const header = String.fromCharCode(...output.bytes.slice(0, 16384));
-        const bytes = output.bytes;
-        const signature = format.id === 'wav' ? header.startsWith('RIFF') && header.slice(8, 12) === 'WAVE'
-          : format.id === 'mp3' ? header.startsWith('ID3') || bytes[0] === 255 && (bytes[1] & 224) === 224
-          : format.id === 'flac' ? header.startsWith('fLaC')
-          : format.id === 'ogg' ? header.startsWith('OggS') && header.includes('vorbis')
-          : format.id === 'opus' ? header.startsWith('OggS') && header.includes('OpusHead')
-          : format.id === 'm4a' ? header.includes('ftyp') && header.includes('mp4a')
-          : format.id === 'alac' ? header.includes('ftyp') && header.includes('alac')
-          : format.id === 'aac' ? bytes[0] === 255 && (bytes[1] & 246) === 240
-          : format.id === 'aiff' ? header.startsWith('FORM') && ['AIFF', 'AIFC'].includes(header.slice(8, 12))
-          : format.id === 'wma' ? bytes[0] === 48 && bytes[1] === 38 && bytes[2] === 178 && bytes[3] === 117 : false;
-        const file = new File([bytes], `roundtrip-${format.id}.${output.ext}`, { type: output.mime });
-        window.__codecFiles[format.id] = file;
-        const imported = await api.importFile(file);
-        const decoded = await api.execute('clip.getAudio', { clipId: imported.clipId });
-        const stats = analyzeAudio(decoded);
-        results.push({ id: format.id, available: true, bytes: bytes.length, signature, duration: stats.duration, channels: stats.channels, sampleRate: stats.sampleRate, rmsDb: stats.rmsDb, finite: decoded.channels.every(c => c.every(Number.isFinite)) });
-      } catch (error) { results.push({ id: format.id, available: true, error: error.message }); }
-    }
-    const nativeMethod = OfflineAudioContext.prototype.decodeAudioData;
-    let calls = 0, nativeSucceeded = 0, forcedCalls = 0;
-    let nativeResult, fallbackResult;
-    if (window.__codecFiles.mp3) {
-      try {
-        OfflineAudioContext.prototype.decodeAudioData = function (...args) {
-          calls++;
-          return nativeMethod.apply(this, args).then(audio => { nativeSucceeded++; return audio; });
-        };
-        const native = await api.importFile(window.__codecFiles.mp3);
-        nativeResult = analyzeAudio(await api.execute('clip.getAudio', { clipId: native.clipId }));
-        OfflineAudioContext.prototype.decodeAudioData = function () { forcedCalls++; return Promise.reject(new Error('Test fixture: native decoder unavailable')); };
-        const fallback = await api.importFile(window.__codecFiles.mp3);
-        fallbackResult = analyzeAudio(await api.execute('clip.getAudio', { clipId: fallback.clipId }));
-      } finally { OfflineAudioContext.prototype.decodeAudioData = nativeMethod; }
-    }
-    return { formats: results, native: { calls, nativeSucceeded, forcedCalls, nativeResult, fallbackResult } };
-  });
-  await testInfo.attach('codec-roundtrip-evidence.json', { body: JSON.stringify(results, null, 2), contentType: 'application/json' });
-  expect(results.formats.map(format => format.id)).toEqual(['wav', 'mp3', 'flac', 'ogg', 'opus', 'm4a', 'aac', 'aiff', 'alac', 'wma']);
-  for (const format of results.formats.filter(format => format.available)) {
-    expect.soft(format.error, `${format.id}: encoding and decoding should succeed`).toBeUndefined();
-    expect.soft(format.signature, `${format.id}: actual container/codec signature`).toBe(true);
-    expect.soft(format.bytes, `${format.id}: nonempty encoded payload`).toBeGreaterThan(100);
-    expect.soft(format.finite, `${format.id}: finite decoded PCM`).toBe(true);
-    expect.soft(format.duration, `${format.id}: duration lower bound`).toBeGreaterThan(0.35);
-    expect.soft(format.duration, `${format.id}: padding tolerance`).toBeLessThan(0.65);
-    expect.soft(format.rmsDb, `${format.id}: audible tone`).toBeGreaterThan(-30);
-    expect.soft(format.channels, `${format.id}: stereo preserved`).toBe(2);
+const FORMAT_IDS = ['wav', 'mp3', 'flac', 'ogg', 'opus', 'm4a', 'aac', 'aiff', 'alac', 'wma'];
+
+function hasSignature(format, bytes) {
+  const header = Buffer.from(bytes).toString('latin1');
+  switch (format) {
+    case 'wav': return header.startsWith('RIFF') && header.slice(8, 12) === 'WAVE';
+    case 'mp3': return header.startsWith('ID3') || bytes[0] === 255 && (bytes[1] & 224) === 224;
+    case 'flac': return header.startsWith('fLaC');
+    case 'ogg': return header.startsWith('OggS') && header.includes('vorbis');
+    case 'opus': return header.startsWith('OggS') && header.includes('OpusHead');
+    case 'm4a': return header.includes('ftyp') && header.includes('mp4a');
+    case 'alac': return header.includes('ftyp') && header.includes('alac');
+    case 'aac': return bytes[0] === 255 && (bytes[1] & 246) === 240;
+    case 'aiff': return header.startsWith('FORM') && ['AIFF', 'AIFC'].includes(header.slice(8, 12));
+    case 'wma': return bytes[0] === 48 && bytes[1] === 38 && bytes[2] === 178 && bytes[3] === 117;
+    default: return false;
   }
-  expect(results.formats.find(format => format.id === 'mp3')?.available).toBe(true);
-  expect(results.native.calls).toBe(1);
-  expect(results.native.nativeSucceeded).toBe(1);
-  expect(results.native.forcedCalls).toBe(1);
-  expect(results.native.nativeResult.duration).toBeCloseTo(0.5, 1);
-  expect(results.native.fallbackResult.duration).toBeCloseTo(0.5, 1);
-  expect(results.native.fallbackResult.rmsDb).toBeGreaterThan(-30);
-  expect(externalRequests).toEqual([]);
-  expect(errors).toEqual([]);
+}
+
+function diagnostics(page, testInfo, label) {
+  const evidence = { label, stages: [], pageErrors: [], externalRequests: [], crashed: false };
+  const origin = new URL(testInfo.project.use.baseURL).origin;
+  page.on('pageerror', error => evidence.pageErrors.push(error.message));
+  page.on('crash', () => { evidence.crashed = true; });
+  page.on('request', request => {
+    const url = new URL(request.url());
+    if (url.protocol.startsWith('http') && url.origin !== origin) evidence.externalRequests.push(url.href);
+  });
+  return {
+    evidence,
+    async step(name, action) {
+      const stage = { name, status: 'started' };
+      evidence.stages.push(stage);
+      // Node-side output and attachments survive a renderer crash, unlike a
+      // result assembled at the end of one large page.evaluate callback.
+      console.log('[codec:' + label + '] ' + name);
+      try {
+        const result = await test.step(label + ': ' + name, action);
+        stage.status = 'passed';
+        return result;
+      } catch (error) {
+        stage.status = 'failed';
+        stage.error = error.message;
+        throw error;
+      }
+    },
+    async attach() {
+      await testInfo.attach('codec-' + label + '-evidence.json', {
+        body: JSON.stringify(evidence, null, 2), contentType: 'application/json',
+      });
+    },
+  };
+}
+
+async function fixture(page, diagnostic, channels = 2) {
+  await diagnostic.step('load editor', async () => {
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean(window.websoundedit?.ready));
+    await page.evaluate(() => window.websoundedit.ready);
+  });
+  await diagnostic.step('import ' + (channels === 1 ? 'mono' : 'stereo') + ' PCM fixture', () => page.evaluate(async channelCount => {
+    const helpers = await import(new URL('api.js', document.baseURI).href);
+    const api = window.websoundedit;
+    await api.execute('project.new', { name: 'Codec test', sampleRate: 48000 });
+    const audio = helpers.generateAudio({ type: 'tone', frequency: 440, duration: 0.5, amplitude: 0.3, channels: channelCount, sampleRate: 48000 });
+    const source = await api.importFile(new File([helpers.encodeWav(audio, { bitDepth: 32, float: true })], 'source.wav', { type: 'audio/wav' }));
+    window.__codecTest = { helpers, source };
+  }, channels));
+  const capabilities = await diagnostic.step('load and probe bundled codecs', () => page.evaluate(async () => {
+    const result = await window.websoundedit.loadCodecs();
+    return result.formats.map(({ id, available }) => ({ id, available }));
+  }));
+  diagnostic.evidence.capabilities = capabilities;
+  expect(capabilities.map(format => format.id)).toEqual(FORMAT_IDS);
+  expect(capabilities.filter(format => format.available).map(format => format.id), 'all ten advertised formats are included').toEqual(FORMAT_IDS);
+}
+
+async function encodeFixture(page, diagnostic, format) {
+  const encoded = await diagnostic.step('encode ' + format, () => page.evaluate(async id => {
+    const state = window.__codecTest;
+    const output = await window.websoundedit.exportAudio({ scope: 'clip', raw: true, clipId: state.source.clipId, format: id, bitDepth: 24, bitrate: 128, download: false });
+    state.encodedFile = new File([output.bytes], 'roundtrip-' + id + '.' + output.ext, { type: output.mime });
+    return { bytes: output.bytes.length, header: Array.from(output.bytes.subarray(0, 16384)) };
+  }, format));
+  diagnostic.evidence.encoded = { bytes: encoded.bytes, signature: hasSignature(format, encoded.header) };
+  expect(encoded.bytes).toBeGreaterThan(100);
+  expect(diagnostic.evidence.encoded.signature, format + ': actual container/codec signature').toBe(true);
+}
+
+async function importEncoded(page, diagnostic, name) {
+  await diagnostic.step(name, () => page.evaluate(async () => {
+    window.__codecTest.imported = await window.websoundedit.importFile(window.__codecTest.encodedFile);
+  }));
+  return diagnostic.step('inspect PCM after ' + name, () => page.evaluate(async () => {
+    const state = window.__codecTest;
+    const audio = await window.websoundedit.execute('clip.getAudio', { clipId: state.imported.clipId });
+    const { duration, channels, sampleRate, rmsDb } = state.helpers.analyzeAudio(audio);
+    return { duration, channels, sampleRate, rmsDb, finite: audio.channels.every(channel => channel.every(Number.isFinite)) };
+  }));
+}
+
+function expectDecoded(audio, channels) {
+  expect(audio.finite, 'finite decoded PCM').toBe(true);
+  expect(audio.duration, 'duration lower bound').toBeGreaterThan(0.35);
+  expect(audio.duration, 'encoder-padding tolerance').toBeLessThan(0.65);
+  expect(audio.rmsDb, 'audible tone').toBeGreaterThan(-30);
+  expect(audio.channels, 'source channel count preserved').toBe(channels);
+  expect(audio.sampleRate, 'working sample rate preserved').toBe(48000);
+}
+
+// Each codec gets its own page, worker, and decoder state. This identifies the
+// exact failed format/stage and avoids accumulating ten native decoder graphs.
+for (const format of FORMAT_IDS) {
+  test('bundled ' + format + ' encoder produces a real file and imports finite stereo PCM', async ({ page }, testInfo) => {
+    test.setTimeout(180_000);
+    const diagnostic = diagnostics(page, testInfo, format);
+    try {
+      await fixture(page, diagnostic);
+      await encodeFixture(page, diagnostic, format);
+      diagnostic.evidence.decoded = await importEncoded(page, diagnostic, 'import ' + format);
+      expectDecoded(diagnostic.evidence.decoded, 2);
+      expect(diagnostic.evidence.pageErrors).toEqual([]);
+      expect(diagnostic.evidence.externalRequests).toEqual([]);
+    } finally {
+      await diagnostic.attach();
+    }
+  });
+}
+
+test('mono MP3 preserves channels through native decoding and forced WASM fallback', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  const diagnostic = diagnostics(page, testInfo, 'mono-mp3-fallback');
+  try {
+    await fixture(page, diagnostic, 1);
+    await encodeFixture(page, diagnostic, 'mp3');
+    await diagnostic.step('instrument native decoder', () => page.evaluate(() => {
+      const state = window.__codecTest;
+      state.nativeMethod = OfflineAudioContext.prototype.decodeAudioData;
+      state.nativeCalls = 0; state.nativeSucceeded = 0; state.forcedCalls = 0;
+      OfflineAudioContext.prototype.decodeAudioData = function (...args) {
+        state.nativeCalls++;
+        return state.nativeMethod.apply(this, args).then(audio => { state.nativeSucceeded++; return audio; });
+      };
+    }));
+    diagnostic.evidence.native = await importEncoded(page, diagnostic, 'native mono MP3 import');
+    expectDecoded(diagnostic.evidence.native, 1);
+    await diagnostic.step('force native decoder failure', () => page.evaluate(() => {
+      OfflineAudioContext.prototype.decodeAudioData = function () {
+        window.__codecTest.forcedCalls++;
+        return Promise.reject(new Error('Test fixture: native decoder unavailable'));
+      };
+    }));
+    diagnostic.evidence.fallback = await importEncoded(page, diagnostic, 'WASM mono MP3 import');
+    expectDecoded(diagnostic.evidence.fallback, 1);
+    diagnostic.evidence.calls = await diagnostic.step('restore native decoder and inspect counters', () => page.evaluate(() => {
+      const state = window.__codecTest;
+      OfflineAudioContext.prototype.decodeAudioData = state.nativeMethod;
+      return { native: state.nativeCalls, succeeded: state.nativeSucceeded, forced: state.forcedCalls };
+    }));
+    expect(diagnostic.evidence.calls).toEqual({ native: 1, succeeded: 1, forced: 1 });
+    expect(diagnostic.evidence.native.duration).toBeCloseTo(0.5, 1);
+    expect(diagnostic.evidence.fallback.duration).toBeCloseTo(0.5, 1);
+    expect(diagnostic.evidence.pageErrors).toEqual([]);
+    expect(diagnostic.evidence.externalRequests).toEqual([]);
+  } finally {
+    // Playwright disposes this test's context even if the renderer crashed.
+    await diagnostic.attach();
+  }
 });

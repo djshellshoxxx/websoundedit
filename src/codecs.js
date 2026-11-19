@@ -15,6 +15,10 @@ export const FORMATS = [
   {id:'wma',name:'WMA v2 · legacy',ext:'wma',mime:'audio/x-ms-wma',encoder:'wmav2',args:['-c:a','wmav2']}
 ];
 let ffmpeg, loading, codecSet, serial=Promise.resolve();
+let nativeDecoder = null, nativeDecoderRate = null;
+const MAX_DECODED_BYTES = 256 * 1024 * 1024;
+const MAX_AUDIO_SECONDS = 600;
+const CODEC_TIMEOUT_MS = 120000;
 let report = ()=>{};
 export function setCodecReporter(fn) { report=fn; }
 export async function loadCodecs() {
@@ -27,32 +31,54 @@ export async function loadCodecs() {
     // Official API: https://ffmpegwasm.netlify.app/docs/getting-started/usage/
     const base=new URL('codecs/',document.baseURI);
     await ffmpeg.load({coreURL:new URL('ffmpeg-core.js',base).href,wasmURL:new URL('ffmpeg-core.wasm',base).href});
-    await ffmpeg.exec(['-encoders']);
+    const probeCode = await ffmpeg.exec(['-encoders'], 30000);
+    if (probeCode !== 0) throw new Error('Encoder capability discovery failed.');
     codecSet=new Set();
     for(const f of FORMATS) if(!f.encoder || lines.some(line=>new RegExp(`\\b${f.encoder}\\b`).test(line))) codecSet.add(f.id);
     report('Conversion engine ready · audio stays on this device');
     return {formats:FORMATS.map(f=>({...f,available:codecSet.has(f.id)}))};
-  })().catch(error=>{loading=null; ffmpeg?.terminate(); ffmpeg=null;throw new Error(`Conversion engine could not load: ${error.message}`);});
+  })().catch(error=>{loading=null; codecSet=null; ffmpeg?.terminate(); ffmpeg=null;throw new Error(`Conversion engine could not load: ${error?.message || String(error)}`);});
   return loading;
 }
 function queued(fn){ const job=serial.then(fn);serial=job.catch(()=>{});return job; }
 export function codecCapabilities(){return FORMATS.map(f=>({...f,available:f.id==='wav'?true:codecSet?codecSet.has(f.id):null}));}
 function checkSize(size){if(size>192*1024*1024)throw new Error('Conversion input exceeds the 192 MB safety limit. Export a smaller selection or use the local CLI.');}
 export async function decodeAudioFile(file,sampleRate=48000) {
+  if(!Number.isInteger(sampleRate)||sampleRate<8000||sampleRate>192000)throw new Error('Working sample rate must be an integer between 8000 and 192000 Hz.');
   checkSize(file.size); const buffer=await file.arrayBuffer();
-  try {const audio=decodeWav(buffer);return audio.sampleRate===sampleRate?audio:resampleAudio(audio,sampleRate);}catch{/* Other supported input containers use the browser then FFmpeg. */}
+  const header=new Uint8Array(buffer,0,Math.min(12,buffer.byteLength));
+  const isWave=header.length===12&&String.fromCharCode(...header.subarray(0,4))==='RIFF'&&String.fromCharCode(...header.subarray(8,12))==='WAVE';
+  if(isWave){
+    try {const audio=decodeWav(buffer);return audio.sampleRate===sampleRate?audio:resampleAudio(audio,sampleRate);}
+    catch(error){
+      // Compressed WAV needs another decoder. Structural/resource/channel errors
+      // are validation failures, not permission to silently downmix or truncate.
+      if(!/Unsupported (?:extensible )?WAV encoding/i.test(error.message))throw error;
+    }
+  }
+  let decoded=null;
   try {
-    const context=new OfflineAudioContext(2,1,sampleRate);
-    const decoded=await context.decodeAudioData(buffer.slice(0));
-    if(decoded.numberOfChannels>2)throw new Error('Use a mono or stereo source.');
+    // Reuse the decoder context for a working rate. A batch import should not
+    // leave a new native audio context/decoder graph alive for every small file.
+    if(!nativeDecoder||nativeDecoderRate!==sampleRate){
+      nativeDecoder=new OfflineAudioContext(2,1,sampleRate); nativeDecoderRate=sampleRate;
+    }
+    decoded=await nativeDecoder.decodeAudioData(buffer.slice(0));
+  }catch{/* Only actual decoder failures trigger the WASM fallback. */}
+  if(decoded){
+    if(decoded.numberOfChannels<1||decoded.numberOfChannels>2)throw new Error('Use a mono or stereo source; multichannel audio is not silently downmixed.');
+    if(decoded.duration>MAX_AUDIO_SECONDS||decoded.length*decoded.numberOfChannels*4>MAX_DECODED_BYTES)throw new Error('Audio exceeds the 10-minute / 256 MiB decoded-audio limit.');
     return {sampleRate:decoded.sampleRate,channels:Array.from({length:decoded.numberOfChannels},(_,i)=>new Float32Array(decoded.getChannelData(i)))};
-  }catch{/* Capability-based fallback, not an assumed native codec matrix. */}
+  }
   return queued(async()=>{
     await loadCodecs(); const ext=(file.name?.split('.').pop()||'bin').replace(/[^a-z0-9]/gi,'').slice(0,8);const input=`source.${ext}`;
     try{
+      report(`Decoding ${file.name||'audio'} with the local conversion engine…`);
       await ffmpeg.writeFile(input,new Uint8Array(buffer));
-      const result=await ffmpeg.exec(['-i',input,'-vn','-ar',String(sampleRate),'-ac','2','-c:a','pcm_f32le','decoded.wav']);
-      if(result!==0)throw new Error('This file could not be decoded by the available codecs.');
+      // Preserve source channels. decodeWav validates supported channel/layout
+      // and resource bounds; the tiny overrun ensures oversized audio is rejected.
+      const result=await ffmpeg.exec(['-i',input,'-map','0:a:0','-vn','-ar',String(sampleRate),'-c:a','pcm_f32le','-t',String(MAX_AUDIO_SECONDS+.001),'-fs',String(MAX_DECODED_BYTES+1048576),'decoded.wav'],CODEC_TIMEOUT_MS);
+      if(result!==0)throw new Error('This file could not be decoded by the available codecs, or decoding exceeded two minutes.');
       return decodeWav(await ffmpeg.readFile('decoded.wav'));
     } finally { for(const file of [input,'decoded.wav'])try{await ffmpeg.deleteFile(file);}catch{} }
   });
@@ -76,7 +102,7 @@ export async function encodeAudio(audio, {format='wav',sampleRate=audio.sampleRa
       if(format==='aiff'&&+bitDepth===24){args.splice(args.indexOf('pcm_s16be'),1,'pcm_s24be');}
       if(format==='m4a'||format==='alac')args.push('-movflags','+faststart');
       args.push(output);
-      const code=await ffmpeg.exec(args);
+      const code=await ffmpeg.exec(args,CODEC_TIMEOUT_MS);
       if(code!==0)throw new Error(`The ${descriptor.name} encoder rejected these settings. Try 44.1 or 48 kHz.`);
       return {bytes:await ffmpeg.readFile(output),...descriptor};
     } finally {for(const file of ['input.wav',output])try{await ffmpeg.deleteFile(file);}catch{} }

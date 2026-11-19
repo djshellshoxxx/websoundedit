@@ -143,7 +143,36 @@ test('drawn gate and actual track-sidechain processing work through the visible 
   await page.locator('[data-panel="rhythm"]').click();
   await page.locator('[data-duck-preset="gate"]').click();
   await expect(page.locator('#preview-state')).toContainText('preview ready');
+  // Click well above a point at the same x, then drag toward its neighbor.
+  // The editor must reuse the existing point and keep positions strictly ordered.
+  await page.locator('#duck-visual').scrollIntoViewIfNeeded();
+  const curve = await page.locator('#duck-visual').boundingBox();
+  const plot = { x: curve.x + 26, y: curve.y + 17, width: curve.width - 38, height: curve.height - 39 };
+  await page.mouse.move(plot.x + plot.width * 0.47, plot.y + plot.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(plot.x + plot.width * 0.48, plot.y + plot.height * 0.35, { steps: 4 });
+  await page.mouse.up();
+  await expect(page.locator('#preview-state')).toContainText('preview ready');
+  const dragged = await page.evaluate(() => websoundedit.saveSettings().effects.duck.points);
+  expect(dragged).toHaveLength(6);
+  expect(dragged.every((point, index) => !index || point.x > dragged[index - 1].x)).toBe(true);
+  expect(dragged[1].y).toBeGreaterThan(0.4);
+  await page.locator('[data-duck-preset="gate"]').click();
   await page.getByText('Keyboard envelope points', { exact: true }).click();
+  const originalPoints = await page.evaluate(() => websoundedit.saveSettings().effects.duck.points);
+  await page.getByRole('button', { name: 'Add envelope point', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-duck-position]')).toHaveCount(7);
+  const addedPoints = await page.evaluate(() => websoundedit.saveSettings().effects.duck.points);
+  const addedIndex = addedPoints.findIndex(point => !originalPoints.some(original => original.x === point.x));
+  expect(addedIndex).toBeGreaterThan(0);
+  const adjustedPosition = (addedPoints[addedIndex - 1].x + addedPoints[addedIndex].x) / 2;
+  await page.getByLabel(`Envelope point ${addedIndex + 1} position`, { exact: true }).fill(String(adjustedPosition));
+  expect(await page.evaluate(index => websoundedit.saveSettings().effects.duck.points[index].x, addedIndex)).toBe(adjustedPosition);
+  await page.getByRole('button', { name: `Remove envelope point ${addedIndex + 1}`, exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-duck-position]')).toHaveCount(6);
+  expect(await page.evaluate(() => websoundedit.saveSettings().effects.duck.points)).toEqual(originalPoints);
   await page.getByLabel('Envelope point 3 gain', { exact: true }).fill('0.6');
   await expect(page.locator('#preview-state')).toContainText('preview ready');
   const gate = await page.evaluate(() => websoundedit.saveSettings().effects.duck);
@@ -242,6 +271,120 @@ test('responsive workbench retains controls without page overflow and produces r
     expect.soft(geometry.scroll, `${name}: no horizontal page overflow`).toBeLessThanOrEqual(geometry.inner + 1);
     await expect(page.locator('#play-button')).toBeVisible();
     await expect(page.locator('#apply-effect')).toBeVisible();
+    const commands = page.getByRole('button', { name: 'Find a command', exact: true });
+    await expect(commands).toBeVisible();
+    const commandBox = await commands.boundingBox();
+    expect.soft(commandBox.x, `${name}: command entry is not clipped on the left`).toBeGreaterThanOrEqual(0);
+    expect.soft(commandBox.x + commandBox.width, `${name}: command entry fits horizontally`).toBeLessThanOrEqual(width + 1);
+    for (const action of ['analysis.bpm', 'tempo.tap', 'tempo.half', 'tempo.double']) {
+      const control = page.locator(`.tempo-actions [data-action="${action}"]`);
+      await expect(control, `${name}: ${action} stays visible`).toBeVisible();
+      const box = await control.boundingBox();
+      expect.soft(box.x, `${name}: ${action} starts inside viewport`).toBeGreaterThanOrEqual(0);
+      expect.soft(box.x + box.width, `${name}: ${action} ends inside viewport`).toBeLessThanOrEqual(width + 1);
+    }
   }
+  expect(errors).toEqual([]);
+});
+
+test('mix transport plays existing audio while an empty track is selected', async ({ page }) => {
+  const errors = await boot(page);
+  await page.locator('[data-action="track.add"]').click();
+  await expect(page.locator('.track-waveform')).toHaveCount(4);
+  const selected = await page.evaluate(() => {
+    const state = websoundedit.getState();
+    return { clips: state.tracks.find(track => track.id === state.selectedTrackId).clips.length, duration: state.duration };
+  });
+  expect(selected.clips).toBe(0);
+  expect(selected.duration).toBeGreaterThan(0);
+  await page.locator('#play-button').click();
+  await expect(page.locator('#play-button')).toHaveClass(/playing/);
+  await expect(page.locator('#status')).toContainText('Playing the mix');
+  await expect.poll(async () => Number((await page.locator('#playhead-time').textContent()).split(':')[1])).toBeGreaterThan(0.03);
+  await page.locator('[data-action="transport.stop"]').click();
+  await expect(page.locator('#play-button')).not.toHaveClass(/playing/);
+  expect(errors).toEqual([]);
+});
+
+test('loading settings clears old and pending previews, and Apply uses the restored parameters', async ({ page }) => {
+  const errors = await boot(page);
+  await page.evaluate(async () => {
+    window.__settingsBeforeAudio = await websoundedit.execute('clip.getAudio');
+    websoundedit.previewEffect('gain', { db: -12 });
+  });
+  await expect(page.locator('#preview-state')).toContainText('preview ready');
+  await page.evaluate(() => {
+    const settings = websoundedit.saveSettings();
+    settings.selectedEffect = 'gain';
+    settings.effects.gain.db = -6;
+    websoundedit.loadSettings(settings);
+  });
+  await expect(page.locator('#effect-select')).toHaveValue('gain');
+  await expect(page.locator('#effect-db')).toHaveValue('-6');
+  await expect(page.locator('#render-indicator')).toHaveText('LIVE PCM VIEW');
+  await expect(page.locator('#preview-state')).not.toContainText('preview ready');
+  await page.evaluate(() => {
+    const settings = websoundedit.saveSettings();
+    websoundedit.previewEffect('gain', { db: -18 });
+    websoundedit.loadSettings(settings);
+  });
+  // The old preview timer is 220 ms. Waiting past it verifies that loading
+  // settings invalidates pending work instead of repainting an obsolete draft.
+  await page.waitForTimeout(350);
+  await expect(page.locator('#render-indicator')).toHaveText('LIVE PCM VIEW');
+  await expect(page.locator('#effect-db')).toHaveValue('-6');
+  await page.locator('#apply-effect').click();
+  await expect(page.locator('#status')).toContainText('Gain applied');
+  const result = await page.evaluate(async () => {
+    const api = websoundedit, before = window.__settingsBeforeAudio, after = await api.execute('clip.getAudio');
+    const selection = api.getState().selection;
+    let error = 0, outsideSame = true;
+    for (let i = 0; i < before.channels[0].length; i++) {
+      if (i >= selection.start * before.sampleRate && i < selection.end * before.sampleRate) error = Math.max(error, Math.abs(after.channels[0][i] - before.channels[0][i] * 10 ** (-6 / 20)));
+      else outsideSame &&= after.channels[0][i] === before.channels[0][i];
+    }
+    const project = await api.saveProject({ download: false });
+    const alternate = api.saveSettings(); alternate.selectedEffect = 'pitch'; alternate.effects.pitch.semitones = 7;
+    api.loadSettings(alternate);
+    await api.loadProject(project);
+    return { error, outsideSame, selectedEffect: api.saveSettings().selectedEffect, gain: api.saveSettings().effects.gain.db };
+  });
+  expect(result.error).toBeLessThan(1e-7);
+  expect(result.outsideSame).toBe(true);
+  expect(result.selectedEffect).toBe('gain');
+  expect(result.gain).toBe(-6);
+  await expect(page.locator('#effect-db')).toHaveValue('-6');
+  await expect(page.locator('#render-indicator')).toHaveText('LIVE PCM VIEW');
+  expect(errors).toEqual([]);
+});
+
+test('invalid imported settings reject before changing preferences or inserting markup', async ({ page }) => {
+  const errors = await boot(page);
+  const rejected = await page.evaluate(() => {
+    const original = websoundedit.saveSettings();
+    const variants = [
+      { effects: { gain: { db: '<img src=x onerror="window.__settingsExecuted=1">' } } },
+      { effects: { pitch: { semitones: 99 } } },
+      { effects: { duck: { points: [{ x: 0, y: 0 }, { x: 0, y: 1 }] } } },
+      { effects: { eq: { bands: [] } } },
+      { effects: { beatRepeat: { pattern: [0, 1.5] } } },
+      { shortcuts: { 'transport.play': 'ctrl+z' } },
+    ];
+    return variants.map(patch => {
+      const value = { ...structuredClone(original), ...patch };
+      try { websoundedit.loadSettings(value); return { rejected: false, unchanged: false }; }
+      catch (error) { return { rejected: true, message: error.message, unchanged: JSON.stringify(websoundedit.saveSettings()) === JSON.stringify(original) }; }
+    });
+  });
+  expect(rejected.every(result => result.rejected && result.unchanged && result.message)).toBe(true);
+  const invalidFile = {
+    format: 'websoundedit-ui-settings', version: 1, selectedEffect: 'gain',
+    effects: { gain: { db: '<img src=x onerror="window.__settingsExecuted=1">' } },
+  };
+  await page.locator('#settings-input').setInputFiles({ name: 'invalid-settings.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(invalidFile)) });
+  await expect(page.locator('#status')).toContainText('Invalid gain.db setting');
+  expect(await page.evaluate(() => window.__settingsExecuted === 1)).toBe(false);
+  await expect(page.locator('#effect-controls img')).toHaveCount(0);
+  await expect(page.locator('.track-waveform')).toHaveCount(3);
   expect(errors).toEqual([]);
 });
