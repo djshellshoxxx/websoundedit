@@ -28,6 +28,22 @@ jobs:
           fi
           sudo apt-get -o Acquire::Retries=3 update -qq
           sudo apt-get install -y --no-install-recommends ffmpeg audacity xvfb xauth
+      - name: Install pinned REAPER for native interchange verification
+        run: |
+          curl --fail --location --retry 3 -o /tmp/reaper.tar.xz https://www.reaper.fm/files/7.x/reaper786_linux_x86_64.tar.xz
+          printf '%s\n' 'c2f9d8616bd1dc6175993b82451e1c6e352c6761e7ae6d72400a3f3dfb03bedb  /tmp/reaper.tar.xz' | sha256sum --check
+          mkdir -p /tmp/websoundedit-reaper
+          tar -xf /tmp/reaper.tar.xz -C /tmp/websoundedit-reaper --strip-components=1
+          echo "REAPER_BIN=/tmp/websoundedit-reaper/REAPER/reaper" >> "$GITHUB_ENV"
+      - name: Capture independent native REAPER project grammar
+        run: xvfb-run -a node scripts/probe-reaper.mjs test-results/reaper-probe
+      - name: Save native REAPER probe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-reaper-probe
+          path: test-results/reaper-probe/
+          retention-days: 14
       - run: npm test
       - run: npm run build
         id: build
