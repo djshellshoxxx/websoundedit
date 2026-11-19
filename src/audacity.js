@@ -120,20 +120,33 @@ function zipFiles(bytes) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength); let end = -1;
   for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) if (view.getUint32(i, true) === 0x06054b50 && i + 22 + view.getUint16(i + 20, true) === bytes.length) { end = i; break; }
   if (end < 0) throw new Error('Invalid Audacity ZIP directory.');
-  const entries = view.getUint16(end + 10, true), start = view.getUint32(end + 16, true), length = view.getUint32(end + 12, true);
-  if (entries > 20000 || entries === 65535 || start + length > end || view.getUint16(end + 4, true) || view.getUint16(end + 6, true)) throw new Error('Unsupported ZIP64, multipart or oversized Audacity archive.');
+  const entries = view.getUint16(end + 10, true), start = view.getUint32(end + 16, true), length = view.getUint32(end + 12, true), directoryEnd = start + length;
+  // fflate reads the per-disk entry count and can follow a ZIP64 locator.
+  // Accept exactly the same non-ZIP64 directory that we validate below.
+  if (entries !== view.getUint16(end + 8, true) || entries > 20000 || entries === 65535 || directoryEnd > end ||
+    view.getUint16(end + 4, true) || view.getUint16(end + 6, true) ||
+    (end >= 20 && view.getUint32(end - 20, true) === 0x07064b50)) throw new Error('Unsupported ZIP64, multipart or oversized Audacity archive.');
   let cursor = start, total = 0; const seen = new Set();
   for (let i = 0; i < entries; i++) {
-    if (cursor + 46 > end || view.getUint32(cursor, true) !== 0x02014b50) throw new Error('Invalid Audacity ZIP entry.');
-    const size = view.getUint32(cursor + 24, true), nameLength = view.getUint16(cursor + 28, true), extra = view.getUint16(cursor + 30, true), comment = view.getUint16(cursor + 32, true);
-    if (cursor + 46 + nameLength + extra + comment > end || view.getUint16(cursor + 8, true) & 1) throw new Error('Invalid or encrypted Audacity ZIP entry.');
+    if (cursor + 46 > directoryEnd || view.getUint32(cursor, true) !== 0x02014b50) throw new Error('Invalid Audacity ZIP entry.');
+    const size = view.getUint32(cursor + 24, true), compressed = view.getUint32(cursor + 20, true), method = view.getUint16(cursor + 10, true);
+    const nameLength = view.getUint16(cursor + 28, true), extra = view.getUint16(cursor + 30, true), comment = view.getUint16(cursor + 32, true), local = view.getUint32(cursor + 42, true);
+    if (cursor + 46 + nameLength + extra + comment > directoryEnd || view.getUint16(cursor + 8, true) & 1 || view.getUint16(cursor + 34, true)) throw new Error('Invalid or encrypted Audacity ZIP entry.');
+    if (compressed === 0xffffffff || local + 30 > start || view.getUint32(local, true) !== 0x04034b50) throw new Error('Invalid Audacity ZIP payload.');
+    const payload = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true);
+    if (payload + compressed > start || view.getUint16(local + 6, true) & 1 || view.getUint16(local + 8, true) !== method ||
+      ![0, 8].includes(method) || (method === 0 && compressed !== size)) throw new Error('Invalid Audacity ZIP payload size or compression.');
     const path = safePath(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(cursor + 46, cursor + 46 + nameLength)));
+    if (/\.aup$/i.test(path) && size > MAX_XML) throw new Error('Audacity XML exceeds the 8 MiB limit.');
     if (seen.has(path)) throw new Error('Duplicate Audacity ZIP path.'); seen.add(path);
     total += size; if (total > MAX_FILE_BYTES || size > MAX_BYTES) throw new Error('Audacity archive exceeds the decompressed size limit.');
     cursor += 46 + nameLength + extra + comment;
   }
-  if (cursor !== start + length) throw new Error('Invalid Audacity ZIP central-directory length.');
-  const output = unzipSync(bytes, { filter: file => /\.(aup|au)$/i.test(file.name) });
+  if (cursor !== directoryEnd) throw new Error('Invalid Audacity ZIP central-directory length.');
+  // The extractor scans backwards for an EOCD signature without checking its
+  // comment length. Exclude the comment so an embedded signature cannot select
+  // a different, unchecked directory or bypass the allocation limits above.
+  const output = unzipSync(bytes.subarray(0, end + 22), { filter: file => /\.(aup|au)$/i.test(file.name) });
   return new Map(Object.entries(output));
 }
 
@@ -142,6 +155,7 @@ function ensureSupported(root) {
   if (root.attrs.version && !/^1\./.test(String(root.attrs.version))) throw new Error('This Audacity project format is newer than the supported 3.x schema. Export audio stems in Audacity.');
   const walk = (current, depth = 0) => {
     if (depth > 64) throw new Error('Audacity project is too deeply nested.');
+    if (current.name === 'import') throw new Error('Compressed legacy Audacity projects reference external audio. Open and save a self-contained AUP3 in Audacity, or export audio stems, before importing here.');
     if (['effect', 'notetrack', 'timetrack', 'pcmaliasblockfile', 'odpcmaliasblockfile', 'oddecodeblockfile'].includes(current.name)) throw new Error(`Audacity ${current.name} data cannot be reproduced here. Render effects or export audio stems in Audacity first.`);
     if (current.name === 'envelope' && (current.children.length || Number(current.attrs.numpoints || 0))) throw new Error('Audacity volume envelopes need rendering in Audacity before import. Export audio stems to preserve their sound.');
     if (current.name === 'waveclip') {
@@ -170,7 +184,7 @@ function makeProject(root, { name, readBlock }) {
   const parseTrack = element => {
     const a = element.attrs, rate = number(a.rate, sampleRate, 8000, 192000, 'track sample rate', true), gain = number(a.gain, 1, 0, 10 ** (24 / 20), 'track gain');
     const track = { name: String(a.name || 'Audio').slice(0,200), gainDb: gain ? 20 * Math.log10(gain) : 0, pan: number(a.pan, 0, -1, 1, 'track pan'), mute: bool(a.mute) || gain === 0, solo: bool(a.solo), clips: [], rate };
-    let clips = childNodes(element, 'waveclip');
+    let clips = childNodes(element, 'waveclip'); const intervals = [];
     if (!clips.length && childNodes(element, 'sequence').length) clips = [node('waveclip', { offset: a.offset || 0, name: track.name }, element.children)];
     for (const clip of clips) {
       const sequences = childNodes(clip, 'sequence'); if (sequences.length !== 1) throw new Error('Audacity clip has an unsupported channel sequence layout.');
@@ -192,11 +206,17 @@ function makeProject(root, { name, readBlock }) {
       if (last <= first) throw new Error('Audacity clip trims remove its entire audio.');
       const start = number(clip.attrs.offset, 0, -600, 600, 'clip offset') + left;
       if (start < 0 || start + (last - first) / rate > 600 + 1 / rate) throw new Error('Audacity audio extends before zero or beyond the 10-minute timeline.');
+      const startFrame = Math.round(start * rate); intervals.push({ start: startFrame, end: startFrame + last - first });
       if (left || right) warnings.push('Audacity clip trims are rendered into the imported PCM; hidden trimmed audio is not retained.');
       if (Number(clip.attrs.rawAudioTempo || 0) && project.bpm !== Number(clip.attrs.rawAudioTempo)) throw new Error('Audacity tempo-stretched audio must be rendered before import.');
       let audio = { sampleRate: rate, channels: [first || last !== frames ? samples.slice(first, last) : samples] };
       if (rate !== sampleRate) { audio = resampleAudio(audio, sampleRate); warnings.push('Tracks with another sample rate were resampled to the project rate.'); }
       track.clips.push({ name: String(clip.attrs.name || track.name).slice(0,200), start, audio });
+    }
+    let end = -Infinity;
+    for (const interval of intervals.sort((a, b) => a.start - b.start)) {
+      if (interval.start < end) throw new Error('Overlapping clips in one Audacity track cannot be reproduced reliably. Separate them into tracks or export audio stems in Audacity first.');
+      end = interval.end;
     }
     return track;
   };
@@ -273,6 +293,7 @@ export async function importAudacity(input, { name = 'Audacity project', files =
     name = projects[0]; xmlBytes = available.get(name);
   }
   if (!(available instanceof Map)) throw new TypeError('Audacity companion files must be a Map of relative paths to bytes.');
+  if (xmlBytes.length > MAX_XML) throw new Error('Audacity XML exceeds the 8 MiB limit.');
   let total = 0; const byBase = new Map();
   for (const [path, raw] of available) { safePath(path); const data = bytesOf(raw); total += data.length; if (total > MAX_FILE_BYTES) throw new Error('Audacity companion files exceed 320 MiB.'); const base = baseName(path); byBase.set(base, byBase.has(base) ? null : data); }
   const root = readXML(new TextDecoder('utf-8', { fatal: true }).decode(xmlBytes));
@@ -287,6 +308,35 @@ export async function importAudacity(input, { name = 'Audacity project', files =
   } });
 }
 
+function audacityTrackLanes(project) {
+  const tracks = []; let splitLayouts = false, splitOverlaps = false;
+  for (const track of project.tracks) {
+    // An Audacity track has a fixed channel layout and plays one clip at a
+    // sample position. WebSoundEdit sums overlaps, so give simultaneous clips
+    // separate tracks with the same gains rather than losing their contribution.
+    const layouts = [...new Set(track.clips.map(clip => clip.audio.channels.length))];
+    if (!layouts.length) layouts.push(1);
+    if (layouts.length > 1) splitLayouts = true;
+    for (const count of layouts) {
+      const lanes = [], clips = track.clips.filter(clip => clip.audio.channels.length === count).sort((a, b) => a.start - b.start);
+      for (const clip of clips) {
+        const start = Math.round(clip.start * project.sampleRate), end = start + clip.audio.channels[0].length;
+        let lane = lanes.find(candidate => candidate.end <= start);
+        if (!lane) { lane = { end: 0, clips: [] }; lanes.push(lane); }
+        lane.clips.push(clip); lane.end = end;
+      }
+      if (!lanes.length) lanes.push({ clips: [] });
+      if (lanes.length > 1) splitOverlaps = true;
+      for (let i = 0; i < lanes.length; i++) {
+        const suffix = (layouts.length > 1 ? ` (${count === 1 ? 'mono' : 'stereo'})` : '') + (i ? ` — lane ${i + 1}` : '');
+        tracks.push({ ...track, name: track.name.slice(0, 200 - suffix.length) + suffix, clips: lanes[i].clips });
+      }
+    }
+  }
+  if (tracks.length > 64) throw new Error('Separating overlapping, mono and stereo clips would exceed 64 Audacity tracks. Export fewer tracks or render a mix first.');
+  return { tracks, splitLayouts, splitOverlaps };
+}
+
 function buildProjectXML(project, { legacy, addBlock }) {
   const root = node('project', { xmlns: 'http://audacity.sourceforge.net/xml/', version: '1.3.0', audacityversion: legacy ? '2.4.2' : '3.0.0', name: project.name,
     ...(legacy ? { projname: 'project_data' } : {}), rate: project.sampleRate, tempo: project.bpm,
@@ -294,16 +344,11 @@ function buildProjectXML(project, { legacy, addBlock }) {
     sel0: 0, sel1: 0, h: 0, zoom: 100, vpos: 0, snapto: 'off' });
   root.children.push(node('tags', {}, Object.entries(normalizeMetadata(project.metadata || {})).map(([key, value]) => node('tag', { name: TAG_NAMES[key], value }))));
   for (const track of project.tracks) {
-    // Audacity track channel layout is fixed; keep mono/stereo PCM unaltered by
-    // separating a mixed-layout editor track into two identically placed groups.
-    const layouts = [...new Set(track.clips.map(clip => clip.audio.channels.length))];
-    if (!layouts.length) layouts.push(1);
-    for (const count of layouts) {
-    const mix = toAudacityMix(track, count);
+    const count = track.clips[0]?.audio.channels.length || 1, mix = toAudacityMix(track, count);
     for (let channel = 0; channel < count; channel++) {
-      const xmlTrack = node('wavetrack', { name: layouts.length > 1 ? `${track.name} (${count === 1 ? 'mono' : 'stereo'})` : track.name, channel: count === 1 ? 2 : channel, linked: count === 2 && channel === 0 ? legacy ? 1 : 2 : 0,
+      const xmlTrack = node('wavetrack', { name: track.name, channel: count === 1 ? 2 : channel, linked: count === 2 && channel === 0 ? legacy ? 1 : 2 : 0,
         rate: project.sampleRate, gain: mix.gain, pan: mix.pan, mute: track.mute ? 1 : 0, solo: track.solo ? 1 : 0, sampleformat: FLOAT, height: 150, minimized: 0, isSelected: 0 });
-      for (const clip of track.clips.filter(clip => clip.audio.channels.length === count)) {
+      for (const clip of track.clips) {
         const samples = clip.audio.channels[channel], sequence = node('sequence', { maxsamples: BLOCK_FRAMES, sampleformat: FLOAT, numsamples: samples.length });
         for (let start = 0; start < samples.length; start += BLOCK_FRAMES) {
           const slice = samples.subarray(start, Math.min(samples.length, start + BLOCK_FRAMES));
@@ -313,7 +358,6 @@ function buildProjectXML(project, { legacy, addBlock }) {
         xmlTrack.children.push(node('waveclip', { offset: clip.start, name: clip.name, trimLeft: 0, trimRight: 0 }, [sequence, node('envelope', { numpoints: 0 })]));
       }
       root.children.push(xmlTrack);
-    }
     }
   }
   if (project.markers.length) root.children.push(node('labeltrack', { name: 'Labels', numlabels: project.markers.length, height: 80, minimized: 0 }, project.markers.map(marker => node('label', {
@@ -326,11 +370,10 @@ function buildProjectXML(project, { legacy, addBlock }) {
 export async function exportAudacity(portableProject, { format = 'aup3' } = {}) {
   if (!['aup3', 'aup'].includes(format)) throw new Error('Choose Audacity AUP3 or legacy AUP ZIP.');
   const editor = new AudioEditor(); await editor.execute('project.load', { project: portableProject });
-  const project = editor.getProject(); let id = 0;
+  const sourceProject = editor.getProject(), lanes = audacityTrackLanes(sourceProject), project = { ...sourceProject, tracks: lanes.tracks }; let id = 0;
   const warnings = ['Audacity saves committed audio, clip placement, track mix, labels and tags. WebSoundEdit rack drafts, key colors, themes and MIDI mappings remain in the native JSON project.'];
-  const groupCount = project.tracks.reduce((sum, track) => sum + Math.max(1, new Set(track.clips.map(clip => clip.audio.channels.length)).size), 0);
-  if (groupCount > 64) throw new Error('Separating mono and stereo clips would exceed 64 Audacity tracks. Export fewer tracks.');
-  if (groupCount > project.tracks.length) warnings.push('Tracks containing both mono and stereo clips are split by channel layout to preserve their PCM and audible mix.');
+  if (lanes.splitLayouts) warnings.push('Tracks containing both mono and stereo clips are split by channel layout to preserve their PCM and audible mix.');
+  if (lanes.splitOverlaps) warnings.push('Overlapping clips are placed on separate Audacity track lanes with the same gain, pan, mute and solo settings to preserve their audible sum.');
   warnings.push('Gain and pan controls are translated between Audacity’s linear pan law and this editor’s pan law to preserve the audible mix.');
   if (format === 'aup') {
     const files = {};

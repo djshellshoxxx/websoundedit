@@ -66,6 +66,7 @@ test('binary XML correctly decodes Unicode and rejects truncated, unknown and un
   assert.throws(() => decodeBinaryXML(encoded.dict, encoded.doc.subarray(0,encoded.doc.length-1)), /Truncated/);
   assert.throws(() => decodeBinaryXML(encoded.dict, Uint8Array.of(99)), /Unsupported/);
   assert.throws(() => readXML('<!DOCTYPE project [<!ENTITY x "bad">]><project/>'), /entities/);
+  assert.throws(() => readXML(`<project>${'<a/>'.repeat(40065)}</project>`), /markup tokens/);
   assert.equal(readXML(writeXML(root)).attrs.name, root.attrs.name);
 });
 
@@ -84,6 +85,47 @@ test('malicious ZIP paths and missing or inconsistent audio blocks fail before r
   const {engine}=await fixture(), out=await exportAudacity(await engine.execute('project.save'));
   const SQL=await loadAudacityCodec(),db=new SQL.Database(out.bytes);db.run('DELETE FROM sampleblocks WHERE blockid=1');
   await assert.rejects(importAudacity(db.export()), /missing/);db.close();
+});
+
+test('ZIP validation and extraction agree on counts, comments, sizes and ZIP64 rejection', async () => {
+  const xml = new TextEncoder().encode('<project version="1.3.0" name="Comment fixture" rate="8000"/>');
+  const archive = zipSync({ 'project.aup': xml }, { level: 0 }), end = archive.length - 22;
+  const central = new DataView(archive.buffer).getUint32(end + 16, true);
+  const mismatch = archive.slice(), mismatchView = new DataView(mismatch.buffer);
+  mismatchView.setUint16(end + 10, 0, true); mismatchView.setUint32(end + 12, 0, true);
+  await assert.rejects(importAudacity(mismatch), /multipart/);
+
+  const stored = archive.slice(); new DataView(stored.buffer).setUint32(central + 24, 1, true);
+  await assert.rejects(importAudacity(stored), /payload size/);
+  const offset = archive.slice(); new DataView(offset.buffer).setUint32(central + 42, central, true);
+  await assert.rejects(importAudacity(offset), /payload/);
+
+  // A valid archive comment can contain a fake EOCD signature. The real EOCD
+  // declares that comment; an extractor must not independently choose the fake.
+  const comment = new Uint8Array(archive.length + 22); comment.set(archive);
+  const commentView = new DataView(comment.buffer);
+  commentView.setUint16(end + 20, 22, true);
+  commentView.setUint32(archive.length, 0x06054b50, true);
+  commentView.setUint16(archive.length + 20, 1, true);
+  assert.equal((await importAudacity(comment)).project.name, 'Comment fixture');
+
+  const zip64 = new Uint8Array(archive.length + 20);
+  zip64.set(archive.subarray(0, end)); zip64.set(archive.subarray(end), end + 20);
+  new DataView(zip64.buffer).setUint32(end, 0x07064b50, true);
+  await assert.rejects(importAudacity(zip64), /ZIP64/);
+});
+
+test('compressed legacy external audio references and overlapping native clips are rejected', async () => {
+  await assert.rejects(importAudacity(new TextEncoder().encode('<project version="1.3.0" rate="44100"><import filename="external.ogg"/></project>')), /self-contained AUP3/);
+  const { engine } = await fixture(), exported = await exportAudacity(await engine.execute('project.save'));
+  const SQL = await loadAudacityCodec(), db = new SQL.Database(exported.bytes);
+  try {
+    const [dict, doc] = db.exec('SELECT dict,doc FROM project')[0].values[0], xml = decodeBinaryXML(dict, doc);
+    const track = xml.children.find(child => child.name === 'wavetrack');
+    track.children.push(structuredClone(track.children[0]));
+    const changed = encodeBinaryXML(xml); db.run('UPDATE project SET dict=?,doc=?', [changed.dict, changed.doc]);
+    await assert.rejects(importAudacity(db.export()), /Overlapping clips/);
+  } finally { db.close(); }
 });
 
 test('pan-law conversion preserves mono/stereo audible gains and separates mixed-layout tracks', async () => {
@@ -105,4 +147,42 @@ test('pan-law conversion preserves mono/stereo audible gains and separates mixed
     const p=.43,g=10**(-96/20),leftExpected=g*(i?Math.cos(p*Math.PI/2):Math.cos((p+1)*Math.PI/4)),rightExpected=g*(i?1:Math.sin((p+1)*Math.PI/4));
     assert.ok(Math.abs(leftGain-leftExpected)<1e-14);assert.ok(Math.abs(rightGain-rightExpected)<1e-14);
   }
+});
+
+test('overlapping mono and stereo clips export as disjoint lanes with unchanged PCM and summed mix', async () => {
+  const engine = new AudioEditor({ sampleRate: 8000 }), track = await engine.execute('track.add', { name: 'Stacked' });
+  await engine.execute('track.update', { trackId: track.id, gainDb: -4, pan: -.27, solo: true });
+  const specs = [['Mono A', 1, 0, 8], ['Mono B', 1, 3, 8], ['Mono adjacent', 1, 8, 3], ['Stereo A', 2, 0, 6], ['Stereo B', 2, 2, 8], ['Stereo adjacent', 2, 10, 4]];
+  for (const [name, count, start, frames] of specs) await engine.execute('clip.add', {
+    trackId: track.id, name, start: start / 8000,
+    audio: { sampleRate: 8000, channels: Array.from({ length: count }, (_, ch) => Float32Array.from({ length: frames }, (_, i) => (i % 2 ? -.2 : .3) / (ch + 1))) },
+  });
+  const originalClips = engine.getProject().tracks[0].clips, expected = await engine.execute('audio.render');
+  for (const format of ['aup3', 'aup']) {
+    const exported = await exportAudacity(await engine.execute('project.save'), { format });
+    assert.ok(exported.warnings.some(warning => warning.includes('Overlapping clips')));
+    const { project } = await importAudacity(exported.bytes), loaded = new AudioEditor();
+    await loaded.execute('project.load', { project });
+    assert.deepEqual(project.tracks.map(item => item.name), ['Stacked (mono)', 'Stacked (mono) — lane 2', 'Stacked (stereo)', 'Stacked (stereo) — lane 2']);
+    assert.equal(project.tracks.reduce((sum, item) => sum + item.clips.length, 0), originalClips.length);
+    for (const lane of loaded.getProject().tracks) {
+      assert.equal(lane.solo, true); assert.equal(lane.mute, false);
+      let end = -1;
+      for (const clip of lane.clips) {
+        const start = Math.round(clip.start * 8000);
+        assert.ok(start >= end, `${format}: clips in ${lane.name} are disjoint`);
+        end = start + clip.audio.channels[0].length;
+        const original = originalClips.find(item => item.name === clip.name);
+        assert.equal(clip.start, original.start); assert.deepEqual(clip.audio, original.audio);
+      }
+    }
+    const actual = await loaded.execute('audio.render');
+    for (let ch = 0; ch < 2; ch++) for (let i = 0; i < expected.channels[ch].length; i++) assert.ok(Math.abs(actual.channels[ch][i] - expected.channels[ch][i]) < 1e-6, `${format}: audible sum`);
+  }
+});
+
+test('overlap lane expansion respects the 64-track project limit', async () => {
+  const engine = new AudioEditor({ sampleRate: 8000 }), track = await engine.execute('track.add', { name: 'Stacked' });
+  for (let i = 0; i < 65; i++) await engine.execute('clip.add', { trackId: track.id, name: `Clip ${i}`, audio: { sampleRate: 8000, channels: [Float32Array.of(.1)] } });
+  await assert.rejects(exportAudacity(await engine.execute('project.save')), /exceed 64 Audacity tracks/);
 });

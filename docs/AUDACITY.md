@@ -21,6 +21,7 @@ Native WebSoundEdit JSON remains the complete session format. Save a JSON copy w
 | Track names, mute and solo | Preserved. A source gain of zero becomes an explicitly muted track. |
 | Gain and pan | Translated mathematically to preserve the audible mix. Audacity uses linear balance panning; WebSoundEdit uses equal-power mono panning and cosine stereo balance, so displayed control values can differ. |
 | Mixed mono/stereo clips in one track | Split into a mono and a stereo track group when exported. This preserves source PCM and playback gains because Audacity track channel layouts are fixed. |
+| Overlapping clips in one track | Split into separate Audacity track lanes. Every lane keeps the source gain, pan, mute and solo settings, so simultaneous clips still sum correctly. Adjacent clips can share a lane; the 64-track limit applies after splitting. |
 | Sample rates | Project rate is preserved. Imported tracks with another rate are resampled to the project rate and reported. |
 | Labels | Point labels become markers. Range label start markers are displayed; range ends are kept in project settings for subsequent Audacity export. |
 | Metadata | Title, artist, album, album artist, composer, genre, date, track/disc, comment, copyright, BPM and key are exchanged as Audacity project tags. Unrecognized imported tags are reported. |
@@ -30,11 +31,11 @@ The export uses Audacity's 3.0-compatible SQLite schema and the 1.3 XML format. 
 
 ## Unsupported Audacity features
 
-The importer rejects sound-changing features that the editor cannot reproduce accurately: realtime effect plugins, volume envelopes with points, non-unit realtime stretch, realtime pitch shift, tempo-stretched clips, note tracks, time-warp tracks, external/aliased audio blocks and missing blocks. Render those tracks or export audio stems in Audacity first. It also rejects cut-line edit history rather than silently discarding it.
+The importer rejects sound-changing features that the editor cannot reproduce accurately: realtime effect plugins, volume envelopes with points, non-unit realtime stretch, realtime pitch shift, tempo-stretched clips, note tracks, time-warp tracks, external/aliased audio blocks and missing blocks. Compressed legacy AUP projects containing external audio import references must first be opened and saved as a self-contained AUP3 in Audacity. Render other unsupported tracks or export audio stems in Audacity first. It also rejects cut-line edit history and malformed native tracks containing overlapping clips rather than silently changing their playback.
 
 Unaligned left/right stereo clips or independently mixed stereo channels require a stereo audio export from Audacity. Projects with audio before time zero, beyond the ten-minute timeline, over 64 track groups, over 512 clips, or above the 256 MiB decoded PCM budget do not fit the current editor. Newer database/XML schemas, including Audacity 4.x formats, are not claimed to be supported. There is no universal round-trip guarantee for every Audacity version or plugin.
 
-The reader checks container size, XML nesting and dictionary references, finite numbers, sequence/block lengths, decompressed ZIP totals, and archive paths. Internal XML entities and external audio aliases are not resolved. A failed import does not replace the open editor project.
+The reader checks container size, XML nesting and dictionary references, finite numbers, sequence/block lengths, decompressed ZIP totals, and archive paths. XML markup counts are bounded before DOM allocation. ZIP checks cover matching directory counts, local payload bounds and stored sizes; ZIP64 is rejected and archive comments cannot change the validated directory. Internal XML entities and external audio aliases are not resolved. A failed import does not replace the open editor project.
 
 ## Metadata in exported audio
 
@@ -52,7 +53,7 @@ Tag values are bounded text and are passed as structured argument values, never 
 
 ## Verification
 
-`tests/audacity.test.js` checks real SQLite structure, modern and legacy project round trips, stereo PCM, timing, tags, mix state, labels, binary XML, AU decoding, recovery rejection and malformed input. `tests/metadata.test.js` verifies metadata round trips and independent native FFprobe reads. Native application verification and the exact Audacity version are recorded in the release verification notes when available.
+`tests/audacity.test.js` checks real SQLite structure, modern and legacy project round trips, stereo PCM, timing, tags, mix state, labels, overlap lane splitting, binary XML, AU decoding, recovery rejection and malformed input. `tests/metadata.test.js` verifies metadata round trips and independent native FFprobe reads. The native application gate also checks that overlapping exported clips contribute to Audacity's rendered mix. Native verification results and the exact Audacity version are recorded in the release verification notes when available.
 
 ## Primary format references
 

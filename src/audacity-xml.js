@@ -17,8 +17,16 @@ export function writeXML(node) {
   return '<?xml version="1.0" standalone="no" ?>\n' + write(node, 0) + '\n';
 }
 export function readXML(text) {
-  if (typeof text !== 'string' || new TextEncoder().encode(text).length > LIMIT) throw new Error('Audacity XML exceeds the 8 MiB limit.');
+  if (typeof text !== 'string' || text.length > LIMIT || new TextEncoder().encode(text).length > LIMIT) throw new Error('Audacity XML exceeds the 8 MiB limit.');
   if (/<!ENTITY\b|<!DOCTYPE[^>]*\[/i.test(text)) throw new Error('Audacity projects with XML entities or internal DTDs are unsupported.');
+  // Bound DOM allocation before parsing. A document within the byte budget can
+  // otherwise contain millions of tiny nodes. Two markup tokens per permitted
+  // element plus a small prolog/comment allowance also covers non-self-closing
+  // tags; the exact element/depth limits are checked while converting below.
+  let markup = 0;
+  for (let at = text.indexOf('<'); at !== -1; at = text.indexOf('<', at + 1)) {
+    if (++markup > MAX_NODES * 2 + 64) throw new Error('Audacity XML has too many markup tokens to parse safely.');
+  }
   // Audacity's normal external DOCTYPE is documentary; never fetch external data.
   const source = text.replace(/<!DOCTYPE[^>]*>/gi, '');
   const document = new DOMParser({ onError(level, message) { throw new Error(`Invalid Audacity XML: ${message}`); } }).parseFromString(source, 'text/xml');

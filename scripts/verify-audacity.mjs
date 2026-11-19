@@ -32,6 +32,7 @@ function pcm(frequencies, seconds = 1) {
 async function fixture() {
   const editor = new AudioEditor({ name: 'Native interchange', sampleRate });
   const mono = await editor.execute('clip.add', { name: 'Mono clip', trackName: 'Mono track', start: .25, audio: pcm([440]) });
+  await editor.execute('clip.add', { trackId: mono.trackId, name: 'Mono overlap', start: .75, audio: pcm([220], .5) });
   await editor.execute('track.update', { trackId: mono.trackId, gainDb: -2, pan: -.4 });
   const stereo = await editor.execute('clip.add', { name: 'Stereo clip', trackName: 'Stereo track', start: .5, audio: pcm([660, 880]) });
   await editor.execute('track.update', { trackId: stereo.trackId, gainDb: -1, pan: .3 });
@@ -129,7 +130,13 @@ async function nativeSession(label, action) {
     const result = await action(command, base);
     // Closing a saved project checkpoints its SQLite WAL before the JS reader opens it.
     await command('Close:');
-    try { await command('Exit:', 5000); } catch (error) { if (child.exitCode === null && child.signalCode === null) throw error; }
+    // Native shutdown may close the scripting FIFO before the child-process
+    // close event arrives. Accept that order only when Audacity then exits 0.
+    let exitError;
+    try { await command('Exit:', 5000); } catch (error) { exitError = error; }
+    const nativeExit = await Promise.race([childDone, pause(5000).then(() => null)]);
+    if (!nativeExit) throw exitError || new Error('Audacity did not exit after the Exit command.');
+    assert.equal(nativeExit.code, 0, `Audacity exited unsuccessfully (${nativeExit.signal || nativeExit.code})`);
     return result;
   } finally {
     failPending(new Error('Native session ended.'));
@@ -181,9 +188,11 @@ try {
       const clips = parseInfo(await command('GetInfo: Type=Clips Format=JSON'));
       const labels = parseInfo(await command('GetInfo: Type=Labels Format=JSON'));
       assert.ok(tracks.some(track => track.name === 'Mono track'), 'Native mono track name');
+      assert.ok(tracks.some(track => track.name === 'Mono track — lane 2'), 'Native overlap has a separate audible lane');
       assert.ok(tracks.some(track => track.name === 'Stereo track'), 'Native stereo track name');
       assert.ok(clips.some(clip => Math.abs(clip.start - .25) < 1e-7), 'Native mono clip placement');
       assert.ok(clips.some(clip => Math.abs(clip.start - .5) < 1e-7), 'Native stereo clip placement');
+      assert.ok(clips.some(clip => Math.abs(clip.start - .75) < 1e-7), 'Native overlapping clip placement');
       assert.ok(JSON.stringify(labels).includes('Verification label'), 'Native label text');
       const wav = path.join(folder, 'native-mix.wav'), saved = path.join(folder, 'saved-by-audacity.aup3');
       await nativeExport(command, wav, source.getState().duration);
@@ -195,15 +204,19 @@ try {
     const nativeMix = comparePCM(nativePCM, expected, .0002, `${format} native mix`);
     const roundtrip = await reimportNative(artifacts.saved), actual = await roundtrip.editor.execute('audio.render');
     const returnedMix = comparePCM(actual, expected, 2e-6, `${format} native save/reimport`);
+    assert.equal(roundtrip.editor.getProject().tracks.length, source.getProject().tracks.length + 1, `${format} one extra overlap lane`);
     for (const [key, value] of Object.entries(source.getState().metadata)) assert.equal(roundtrip.editor.getState().metadata[key], value, `${format} metadata ${key}`);
     for (const sourceTrack of source.getProject().tracks) {
-      const actualTrack = roundtrip.editor.getProject().tracks.find(track => track.name === sourceTrack.name);
-      assert.ok(actualTrack, `${format} returned track ${sourceTrack.name}`);
-      assert.equal(actualTrack.clips.length, sourceTrack.clips.length);
-      for (let i = 0; i < sourceTrack.clips.length; i++) {
-        assert.equal(actualTrack.clips[i].start, sourceTrack.clips[i].start);
-        assert.equal(actualTrack.clips[i].name, sourceTrack.clips[i].name);
-        comparePCM(actualTrack.clips[i].audio, sourceTrack.clips[i].audio, 1e-7, `${format} stored clip PCM`);
+      const actualTracks = roundtrip.editor.getProject().tracks.filter(track => track.name === sourceTrack.name || track.name.startsWith(`${sourceTrack.name} — lane `));
+      assert.ok(actualTracks.some(track => track.name === sourceTrack.name), `${format} returned track ${sourceTrack.name}`);
+      const actualClips = actualTracks.flatMap(track => track.clips);
+      assert.equal(actualClips.length, sourceTrack.clips.length);
+      for (const sourceClip of sourceTrack.clips) {
+        const matches = actualClips.filter(clip => clip.name === sourceClip.name);
+        assert.equal(matches.length, 1, `${format} returned exactly one ${sourceClip.name}`);
+        const actualClip = matches[0];
+        assert.equal(actualClip.start, sourceClip.start);
+        comparePCM(actualClip.audio, sourceClip.audio, 1e-7, `${format} stored clip PCM`);
       }
     }
     report.cases.push({ format, nativeMix, returnedMix, warnings: roundtrip.warnings });
