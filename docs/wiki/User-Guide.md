@@ -4,6 +4,8 @@ This guide describes the **1.0.0-beta.1 candidate**. Check the [verification rec
 
 [Home](Home) · [Developer Guide](Developer-Guide) · [Complete repository user guide](https://github.com/djshellshoxxx/websoundedit/blob/main/docs/USER_GUIDE.md)
 
+Focused guides: [Macros and Batch](Macros-and-Batch) · [Project Interoperability](Project-Interoperability) · [Troubleshooting](Troubleshooting).
+
 ## Start with a sample
 
 Open the demo or choose **Import audio**. You can also drop supplied audio files into the editor. Each imported sound becomes editable PCM at the project's working sample rate. Compressed source files can therefore occupy considerably more memory after decoding.

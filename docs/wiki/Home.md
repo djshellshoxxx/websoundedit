@@ -29,6 +29,8 @@ WebSoundEdit is a local audio workbench by Circuit Drift Labs: edit samples, arr
 | Record actions, edit visual steps or process a batch | [Macros and batches](User-Guide#macros-visual-steps-and-batches) |
 | Embed the engine, use the CLI or call the local HTTP API | [Developer Guide](Developer-Guide) |
 
+For focused workflows, continue with [Macros and Batch](Macros-and-Batch), [Project Interoperability](Project-Interoperability), or [Troubleshooting](Troubleshooting). These companion pages expand the user guide without changing its preservation and capability limits.
+
 The rack includes echo, delay, reverb, chorus, flanger, phaser, distortion, tremolo, filter, tape, stutter and bitcrusher. Each instance has its own wet/dry control, and its stable identity keeps parameter bindings attached when it moves. Selection mode commits edits to samples; Live mode controls a track or master rack during playback.
 
 ## Understand what is saved

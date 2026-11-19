@@ -4,6 +4,8 @@ This page targets the **1.0.0-beta.1 source candidate**. It describes implemente
 
 [Home](Home) · [User Guide](User-Guide) · [API reference](https://github.com/djshellshoxxx/websoundedit/blob/main/docs/API.md) · [Engine contract](https://github.com/djshellshoxxx/websoundedit/blob/main/docs/ENGINE_CONTRACT.md)
 
+Related workflows: [Macros and Batch](Macros-and-Batch) · [Project Interoperability](Project-Interoperability) · [Troubleshooting](Troubleshooting).
+
 ## Get the matching source
 
 Use the source revision associated with the intended release or candidate. While beta validation is pending, the repository's default branch and published editor may describe an earlier release.
