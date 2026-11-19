@@ -96,7 +96,7 @@ async function nativeSession(label, action) {
   let spawnError; child.once('error', error => { spawnError = error; });
   const childDone = new Promise(resolve => child.once('close', (code, signal) => resolve({ code, signal })));
   let writer, reader, pending = null, buffer = '';
-  const transcript = [];
+  const transcript = [], pipeEvents = [];
   const failPending = error => { if (pending) { clearTimeout(pending.timer); pending.reject(error); pending = null; } };
   try {
     for (let i = 0; i < 300 && !(existsSync(toPipe) && existsSync(fromPipe)); i++) {
@@ -108,7 +108,17 @@ async function nativeSession(label, action) {
     writer = await open(toPipe, constants.O_WRONLY);
     reader = createReadStream(fromPipe, { encoding: 'utf8' });
     reader.on('data', chunk => {
+      pipeEvents.push({ at: new Date().toISOString(), received: chunk });
       buffer += chunk;
+      // ModuleInitialize starts the pipe before an active project exists.
+      // ScriptCommandRelay returns an empty response in that state and
+      // ScripterCallback sends exactly one newline. Only the readiness probe
+      // accepts it; normal commands still require an explicit successful result.
+      if (pending?.allowEmpty && buffer === '\n') {
+        const request = pending; pending = null; buffer = ''; clearTimeout(request.timer);
+        transcript.push({ command: request.command, response: '', startupNotReady: true });
+        request.resolve(''); return;
+      }
       const match = /BatchCommand finished: (OK|Failed!?)\s*\r?\n/.exec(buffer);
       if (!match || !pending) return;
       const response = buffer.slice(0, match.index + match[0].length).trim();
@@ -120,13 +130,25 @@ async function nativeSession(label, action) {
     });
     reader.on('error', failPending);
     reader.on('end', () => failPending(new Error('Audacity closed the scripting pipe before replying.')));
-    const command = (text, timeout = 30000) => new Promise((resolve, reject) => {
+    const command = (text, timeout = 30000, allowEmpty = false) => new Promise((resolve, reject) => {
       if (pending) { reject(new Error('Native commands must be serialized.')); return; }
-      const timer = setTimeout(() => { pending = null; reject(new Error(`Audacity command timed out: ${text}`)); }, timeout);
-      pending = { command: text, resolve, reject, timer };
+      if (!buffer.trim()) buffer = '';
+      pipeEvents.push({ at: new Date().toISOString(), sent: text });
+      const timer = setTimeout(() => {
+        pipeEvents.push({ at: new Date().toISOString(), timedOut: text, unparsedResponse: buffer });
+        pending = null; reject(new Error(`Audacity command timed out: ${text}`));
+      }, timeout);
+      pending = { command: text, resolve, reject, timer, allowEmpty };
       writer.write(`${text}\n`).catch(error => failPending(error));
     });
-    await command('Message: Text="WebSoundEdit native interoperability"');
+    const readyUntil = Date.now() + 30000;
+    let ready = false;
+    while (Date.now() < readyUntil) {
+      const response = await command('Message: Text="WebSoundEdit native interoperability"', Math.max(1, readyUntil - Date.now()), true);
+      if (response) { assert.match(response, /WebSoundEdit native interoperability/); ready = true; break; }
+      await pause(100);
+    }
+    assert.ok(ready, 'Audacity created an active project and completed the readiness command');
     const result = await action(command, base);
     // Closing a saved project checkpoints its SQLite WAL before the JS reader opens it.
     await command('Close:');
@@ -146,6 +168,7 @@ async function nativeSession(label, action) {
     if (!stopped) { child.kill('SIGKILL'); await childDone; }
     log.end();
     await writeFile(path.join(base, 'transcript.json'), JSON.stringify(transcript, null, 2));
+    await writeFile(path.join(base, 'pipe-events.json'), JSON.stringify(pipeEvents, null, 2));
     // Native shutdown removes these FIFOs. Never delete someone else's pipe.
     for (let i = 0; i < 30 && (existsSync(toPipe) || existsSync(fromPipe)); i++) await pause(100);
   }
