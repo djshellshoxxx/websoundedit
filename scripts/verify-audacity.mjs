@@ -9,6 +9,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { createReadStream, createWriteStream, constants, existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile, open, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { homedir } from 'node:os';
 import { setTimeout as pause } from 'node:timers/promises';
 import { unzipSync } from 'fflate';
 import { AudioEditor } from '../src/engine.js';
@@ -63,13 +64,31 @@ function parseInfo(response) {
 /** One native process per fixture keeps project selection and save paths isolated. */
 async function nativeSession(label, action) {
   if (existsSync(toPipe) || existsSync(fromPipe)) throw new Error('An existing Audacity scripting pipe is present. Run this gate on a clean, dedicated runner.');
+  // Audacity 3.4.2 prefers an existing legacy data directory over XDG paths.
+  // Refuse that situation instead of touching the runner user's preferences.
+  assert.ok(!existsSync(path.join(homedir(), '.audacity-data')), 'Native gate needs a clean runner without legacy Audacity preferences');
   const base = path.join(output, label), config = path.join(base, 'config', 'audacity');
   await mkdir(config, { recursive: true });
   const temp = path.join(base, 'temporary'); await mkdir(temp, { recursive: true });
-  await writeFile(path.join(config, 'audacity.cfg'), `[Version]\nMajor=3\nMinor=4\nMicro=2\n[GUI]\nShowSplashScreen=0\n[Module]\nmod-script-pipe=1\n[Directories]\nTempDir=${temp}\n[AudioIO]\nPlaybackDevice=\nRecordingDevice=\n[Warnings]\nFirstProjectSave=0\n[Export]\nFormat=WAV\n[FileFormats]\nExportFormat_SF1=65542\n`, 'utf8');
+  // ModuleSettings::GetModuleStatus requires matching path AND modification
+  // time, otherwise an enabled module is reset to New and silently skipped.
+  // https://github.com/audacity/audacity/blob/Audacity-3.4.2/libraries/lib-module-manager/ModuleSettings.cpp
+  const modules = process.env.AUDACITY_SCRIPT_MODULE ? [process.env.AUDACITY_SCRIPT_MODULE] :
+    execFileSync('dpkg-query', ['-L', 'audacity'], { encoding: 'utf8' }).split('\n').filter(file => file.endsWith('/mod-script-pipe.so'));
+  assert.equal(modules.length, 1, 'Locate exactly one installed Audacity scripting module');
+  const moduleFile = modules[0], moduleTime = (await stat(moduleFile)).mtime.toISOString().slice(0, 19);
+  // The typed WAV exporter introduced in 3.4 reads a subtype (6 = float),
+  // not the older combined header/subtype preference (65542).
+  // https://github.com/audacity/audacity/blob/Audacity-3.4.2/modules/mod-pcm/ExportPCM.cpp
+  const configText = `[Version]\nMajor=3\nMinor=4\nMicro=2\n[GUI]\nShowSplashScreen=0\n` +
+    `[Module]\nmod-script-pipe=1\n[ModulePath]\nmod-script-pipe=${moduleFile}\n[ModuleDateTime]\nmod-script-pipe=${moduleTime}\n` +
+    `[Directories]\nTempDir=${temp}\n[AudioIO]\nPlaybackDevice=\nRecordingDevice=\n[Warnings]\nFirstProjectSave=0\n` +
+    `[Update]\nUpdateNoticeShown=1\nDefaultUpdatesChecking=0\n[Export]\nFormat=WAV\n` +
+    `[FileFormats]\nExportFormat_SF1=65542\n[FileFormats/ExportFormat_SF1_Type]\nWAV_10000=6\n`;
+  await writeFile(path.join(config, 'audacity.cfg'), configText, 'utf8');
   const log = createWriteStream(path.join(base, 'audacity.log'));
   const child = spawn(executable, [], {
-    env: { ...process.env, XDG_CONFIG_HOME: path.join(base, 'config'), XDG_DATA_HOME: path.join(base, 'data'), XDG_CACHE_HOME: path.join(base, 'cache') },
+    env: { ...process.env, TZ: 'UTC', XDG_CONFIG_HOME: path.join(base, 'config'), XDG_DATA_HOME: path.join(base, 'data'), XDG_CACHE_HOME: path.join(base, 'cache'), XDG_STATE_HOME: path.join(base, 'state') },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stdout.pipe(log, { end: false }); child.stderr.pipe(log, { end: false });

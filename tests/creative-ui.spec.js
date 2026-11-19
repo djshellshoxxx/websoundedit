@@ -127,6 +127,45 @@ test('MIDI mock devices connect on request, learn CC mapping, preserve the other
   });
   expect(connection.detached).toBe(true);
   expect(connection.mappings).toEqual(values.midi.mappings);
+  const recipes = await page.evaluate(async () => {
+    const project = await websoundedit.saveProject({ download: false });
+    const finalSettings = structuredClone(project.settings);
+    finalSettings.ui.theme = 'daylight';
+    await websoundedit.midi.connect();
+    await websoundedit.execute('recipe.run', { commands: [
+      { method: 'project.new', params: { name: 'Temporary recipe session' } },
+      { method: 'project.load', params: { project } },
+      { method: 'settings.load', params: { settings: finalSettings } },
+    ] });
+    const replaced = { detached: window.__midiInput.onmidimessage === null,
+      theme: websoundedit.saveSettings().theme, mappings: websoundedit.saveSettings().midi.mappings,
+      rack: websoundedit.saveSettings().rack };
+
+    await websoundedit.midi.connect();
+    const beforeState = websoundedit.getState(), beforeSettings = websoundedit.saveSettings();
+    const invalid = structuredClone(project);
+    invalid.settings.ui.rack.chain[0].wet = 9;
+    let rejected = false;
+    try { await websoundedit.execute('recipe.run', { steps: [
+      { method: 'project.new', params: { name: 'Must not replace current work' } },
+      { method: 'project.load', params: { project: invalid } },
+    ] }); } catch { rejected = true; }
+    const preserved = { rejected, connected: typeof window.__midiInput.onmidimessage === 'function',
+      state: JSON.stringify(websoundedit.getState()) === JSON.stringify(beforeState),
+      settings: JSON.stringify(websoundedit.saveSettings()) === JSON.stringify(beforeSettings) };
+
+    await websoundedit.execute('recipe.run', { recipe: { commands: [{ method: 'project.new', params: { name: 'Empty recipe session' } }] } });
+    const empty = { detached: window.__midiInput.onmidimessage === null, tracks: websoundedit.getState().tracks.length,
+      stages: websoundedit.saveSettings().rack.chain.length, mappings: websoundedit.saveSettings().midi.mappings.length };
+    await websoundedit.midi.connect();
+    await websoundedit.execute('ui.demo');
+    const demo = { detached: window.__midiInput.onmidimessage === null, tracks: websoundedit.getState().tracks.length };
+    return { replaced, preserved, empty, demo };
+  });
+  expect(recipes.replaced).toEqual({ detached: true, theme: 'daylight', mappings: values.midi.mappings, rack: values.rack });
+  expect(recipes.preserved).toEqual({ rejected: true, connected: true, state: true, settings: true });
+  expect(recipes.empty).toEqual({ detached: true, tracks: 0, stages: 0, mappings: 0 });
+  expect(recipes.demo).toEqual({ detached: true, tracks: 3 });
   expect(errors).toEqual([]);
 });
 
