@@ -10,7 +10,7 @@ for (const [folder, name] of [['@ffmpeg/ffmpeg','ffmpeg-wrapper'],['@ffmpeg/core
 await copyFile('node_modules/libopus-wasm/THIRD_PARTY_NOTICES.md', 'public/licenses/libopus-notices.md');
 await copyFile('docs/licenses/opus.txt', 'public/licenses/opus.txt');
 await copyFile('docs/THIRD_PARTY.md', 'public/licenses/THIRD_PARTY.md');
-for (const name of ['PRODUCT_SPEC','RESEARCH','API','PROJECT_FORMAT','ACCEPTANCE']) {
+for (const name of ['PRODUCT_SPEC','RESEARCH','API','PROJECT_FORMAT','ACCEPTANCE','ENGINE_CONTRACT','THIRD_PARTY','VERIFICATION']) {
   try { await mkdir('public/docs',{recursive:true}); await copyFile(`docs/${name}.md`,`public/docs/${name}.md`); } catch { /* Not present during initial development builds. */ }
 }
 await writeFile('public/.nojekyll','');

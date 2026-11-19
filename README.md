@@ -2,7 +2,7 @@
 
 **A visual multitrack audio workbench by [Circuit Drift Labs](https://djshellshoxxx.github.io/circuitdriftlabs/).**
 
-[Open the editor](https://djshellshoxxx.github.io/websoundedit/) · [Product specification](docs/PRODUCT_SPEC.md) · [API reference](docs/API.md) · [Workflow research](docs/RESEARCH.md)
+[Open the editor](https://djshellshoxxx.github.io/websoundedit/) · [Product specification](docs/PRODUCT_SPEC.md) · [API reference](docs/API.md) · [Workflow research](docs/RESEARCH.md) · [Release verification](docs/VERIFICATION.md)
 
 WebSoundEdit is a client-side audio editor and a shared JavaScript audio engine. The website runs on GitHub Pages. Its optional CLI and authenticated loopback HTTP companion let scripts edit local audio with the same implementation. Audio is processed on the user's device.
 
@@ -53,7 +53,7 @@ node scripts/cli.mjs \
   --input input.wav \
   --recipe examples/cleanup.json \
   --output edited.flac \
-  --project session.json
+  --save-project session.json
 ```
 
 Install native FFmpeg separately for formats other than WAV. The CLI never imports the browser-only `ffmpeg.wasm` package.
