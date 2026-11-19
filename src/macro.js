@@ -314,6 +314,25 @@ export function formatMacro(ast) {
   };
   const output=emit(ast);if(output.length>MACRO_LIMITS.sourceBytes||new TextEncoder().encode(output).length>MACRO_LIMITS.sourceBytes)throw new MacroError('Formatted macro exceeds 128 KiB.',null,'RESOURCE_LIMIT');return output;
 }
+// Inspect semantic edges only, after parseMacro/assertProgram has bounded and
+// validated the AST. Text scripts may compose commands; one visual step may not.
+function hasNestedCommands(expression) {
+  const pending = [expression];
+  while (pending.length) {
+    const node = pending.pop();
+    switch (node.type) {
+      case 'CallExpression': return true;
+      case 'ArrayExpression': for (const item of node.elements) pending.push(item); break;
+      case 'ObjectExpression': for (const property of node.properties) pending.push(property.value); break;
+      case 'UnaryExpression': pending.push(node.argument); break;
+      case 'BinaryExpression': pending.push(node.left, node.right); break;
+      case 'MemberExpression': pending.push(node.object, node.property); break;
+      case 'Literal': case 'Identifier': break;
+      default: throw new MacroError('Expected an expression in a visual step.', node);
+    }
+  }
+  return false;
+}
 export function stepsToMacro(steps) {
   if (!Array.isArray(steps) || steps.length > MACRO_LIMITS.commands) throw new MacroError('Too many recorded steps.');
   let bytes=0;
@@ -323,13 +342,14 @@ export function stepsToMacro(steps) {
     if((bytes+=new TextEncoder().encode(text).length+1)>MACRO_LIMITS.sourceBytes)throw new MacroError('Recorded steps exceed 128 KiB.',null,'RESOURCE_LIMIT');
     const ast=parseMacro(text);
     if(ast.body.length!==1||ast.body[0].type!=='ExpressionStatement'||ast.body[0].expression.type!=='CallExpression'||ast.body[0].expression.method!==step.method) throw new MacroError('A visual step must contain exactly one command.');
+    if(hasNestedCommands(ast.body[0].expression.argument)) throw new MacroError('A visual step cannot hide a nested command; use the text editor for command composition.');
     return text;
   }).join('\n')));
 }
 export function macroToSteps(source) {
   const ast=typeof source==='string'?parseMacro(source):source;
   assertProgram(ast);
-  if(ast?.type!=='Program'||ast.body.some(n=>n.type!=='ExpressionStatement'||n.expression.type!=='CallExpression'))return null;
+  if(ast?.type!=='Program'||ast.body.some(n=>n.type!=='ExpressionStatement'||n.expression.type!=='CallExpression'||hasNestedCommands(n.expression.argument)))return null;
   return ast.body.map(n=>{let value;try{value=constant(n.expression.argument);}catch{value={known:false};}return {method:n.expression.method,...(value.known?{params:value.value}:{}),paramsSource:expressionText(n.expression.argument)};});
 }
 function safeValue(value, limits=MACRO_LIMITS, silentDecibels=false) {

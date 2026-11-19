@@ -10,7 +10,7 @@ Beta implementation was split between audio/runtime, interface/guidance, project
 
 ## Executed candidate checks
 
-At the first integrated feature checkpoint, **271 Node tests passed with zero failures or skips**. The later integrated local rerun passed **299/299 tests, zero skips**, including SDK composition, batch ownership across snapshot/execution/restore, import-layout declarations, integer query parsing, conversion resource limits and paused-transport manual ramps. All seven fuzz gates and the full production bundle gate passed again. [Latest local evidence](BETA_1_0_LOCAL_FINAL.json) retains report paths and log hashes; final CI counts remain separate.
+At the first integrated feature checkpoint, **271 Node tests passed with zero failures or skips**. The post-review rerun passed **299/299 tests, zero skips**, including SDK composition, batch ownership across snapshot/execution/restore, import-layout declarations, integer query parsing, conversion resource limits and paused-transport manual ramps. Two additional independent findings were then reproduced and corrected: nested commands concealed by flat visual macro steps, and worker-message admission undercounting/getter execution. The consolidated local suite passed **316/316 tests with zero skips**, and all seven deterministic fuzz gates passed again. [Latest local evidence](BETA_1_0_LOCAL_FINAL.json) retains report paths and log hashes; final CI counts remain separate.
 
 The production Vite build and DOM-free `api.js` validation executed a real PCM edit, WAV round trip and interpreted typed macro. The first native REAPER 7.86 grammar probe passed in Actions run `44514197389`, leading to explicit parser corrections for track pan-law and item auto-fade fields. Full native open/render/save/reimport remains a separate gate.
 
@@ -38,6 +38,7 @@ Detailed lane reports contain reproductions, severity reasoning, exact tests and
 - [Companion/security audit](COMPANION_BETA_1_0_REVIEW.md): pending stream cancellation, encoder flush failure reporting, HTTP abort propagation, stale browser responses and competing macro status ownership. All five original reproductions passed after correction.
 - [Audio/runtime audit](AUDIO_BETA_1_0.md): multichannel identity, explicit mixing, graph/voice/event budgets, scheduled automation, input/capture independence, recording lifecycle, storage accounting and performance evidence.
 - [UI and batch ownership review](UI_BETA_1_0.md): concurrent edits/exports, delayed file operations, private ownership, recovery persistence and interactive macro behavior.
+- [Worker message budget review](WORKER_MESSAGE_BUDGET_REVIEW.md): sparse arrays, descriptor-only inspection, intrinsic binary sizes, hidden Map/Set contents, pending traversal capacity, and rejected-message queue cleanup.
 - [REAPER audit](REAPER_BETA_1_0.md): genuine file grammar, bounded supplied-media aliases, inactive/native record handling and supported interchange boundaries.
 
 Additional integration checks cover preserved original project state during failed file replacement, recorded action portability, explicit clicked-track export, exact same-pitch MIDI timing, tooltip opt-out, batch cancellation/restore and disposal blocking new work. Conversion output uses preflight/frame/output limits and bounded temporary files so an extreme rate/layout request cannot grow without bounds.

@@ -27,13 +27,13 @@
     "ambientNetworkCalls": 0,
     "prototypeMutations": 0
   },
-  "elapsedMs": 3372,
+  "elapsedMs": 3131,
   "phaseTimes": {
-    "parserMs": 1600,
-    "oracleMs": 1642,
-    "schemaMs": 88,
-    "boundsMs": 23,
-    "hostileDataMs": 15
+    "parserMs": 1266,
+    "oracleMs": 1716,
+    "schemaMs": 98,
+    "boundsMs": 22,
+    "hostileDataMs": 23
   },
   "limits": {
     "sourceBytes": 131072,
@@ -49,7 +49,7 @@
     "wallMs": 14400000
   },
   "sourceFilesSha256": {
-    "src/macro.js": "6ebb6d76e8b1e9e0513917416e2c0674f4fe15986ceadf3399dbc1a4987168af",
+    "src/macro.js": "12246790205585a5bd7c476ee21592ea39bce9b6355114799acf5be4cde7ef68",
     "src/command-schema.js": "a4542adc483f861ba30d95fe4630d34e7cb25d6d7f1ded90c700739a523e9f62",
     "src/command-runtime.js": "b91db6cef47e5e41ae1524c41506f3cbe52292379b480b95deb9b5a051fb86ed",
     "tests/fuzz/macros.mjs": "84f1d0770c6e5d02833ba66e0ebf0da37aad6589bd19a0f41b0fed8bbe37f1b8"
