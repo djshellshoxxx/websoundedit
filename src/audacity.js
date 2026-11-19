@@ -385,7 +385,9 @@ export async function exportAudacity(portableProject, { format = 'aup3' } = {}) 
       return { filename, len: samples.length, min: summary.min, max: summary.max, rms: summary.rms };
     } });
     files['project.aup'] = new TextEncoder().encode(writeXML(root));
+    files['README.txt'] = new TextEncoder().encode(`WebSoundEdit legacy Audacity project\n\nSample rate: ${project.sampleRate} Hz\n\nExtract this ZIP and keep project.aup beside the project_data folder.\nOpen project.aup in Audacity.\n\nAudacity 3.4.2 has a legacy import issue when its current project sample\nrate differs: clip offsets can move. Before opening this AUP, set the\nblank Audacity project's sample rate to ${project.sampleRate} Hz.\nThe single-file AUP3 export avoids this legacy import issue.\n`);
     warnings.push('Extract the ZIP, then open project.aup in Audacity. Keep project_data beside it.');
+    warnings.push(`Before opening legacy AUP in Audacity 3.4.2, set its project sample rate to ${project.sampleRate} Hz to preserve clip offsets. AUP3 avoids this legacy import issue.`);
     return { bytes: zipSync(files, { level: 0 }), mime: 'application/zip', ext: 'zip', warnings };
   }
   const SQL = await loadAudacityCodec(), db = new SQL.Database();

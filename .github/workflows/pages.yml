@@ -37,6 +37,13 @@ jobs:
       - name: Verify native Audacity project exchange
         id: native
         run: xvfb-run -a node scripts/verify-audacity.mjs
+      - name: Save native interchange evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-audacity-evidence
+          path: test-results/native-audacity/
+          retention-days: 14
       - name: Test browser editing and real codec conversion
         # Collect browser results even if native interoperability fails. Either
         # failure still fails this job and prevents the Pages artifact/deploy.
@@ -50,13 +57,6 @@ jobs:
           path: |
             playwright-report/
             test-results/browser/
-          retention-days: 14
-      - name: Save native interchange evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-audacity-evidence
-          path: test-results/native-audacity/
           retention-days: 14
       - uses: actions/upload-pages-artifact@v3
         with:

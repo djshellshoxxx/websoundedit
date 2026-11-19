@@ -230,7 +230,15 @@ try {
       input = path.join(folder, 'project.aup');
     }
     const artifacts = await nativeSession(`native-${format}`, async (command, folder) => {
-      await command(`OpenProject2: Filename=${quoted(input)} AddToHistory=0`);
+      // AUP is an import into a temporary project in Audacity 3.x.
+      // OpenProject2 guesses success from a changed database filename, so it
+      // reports failure even after a successful legacy import. Import2 returns
+      // the actual importer result and is the appropriate scripting entry point.
+      // Audacity 3.4.2's legacy importer creates clips at the current project
+      // rate before applying the XML rate. Set the documented prerequisite so
+      // its deferred SetRate does not scale clip offsets from 44100 to 48000.
+      if (format === 'aup') await command(`SetProject: Rate=${sampleRate}`);
+      await command(format === 'aup' ? `Import2: Filename=${quoted(input)}` : `OpenProject2: Filename=${quoted(input)} AddToHistory=0`);
       const tracks = parseInfo(await command('GetInfo: Type=Tracks Format=JSON'));
       const clips = parseInfo(await command('GetInfo: Type=Clips Format=JSON'));
       const labels = parseInfo(await command('GetInfo: Type=Labels Format=JSON'));

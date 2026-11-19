@@ -489,7 +489,7 @@ export function drawDetail(canvas, audio, original = null, options = {}) {
   spectrumPath(ctx, data, plot, COLORS.teal, options.compareOriginal && before ? 0.3 : 1, true);
   ctx.font = `8px ${MONO}`;
   const label = data.peakDb > -100 ? `${Math.round(data.peakHz)} Hz · ${data.peakDb.toFixed(1)} dBFS` : 'Silence';
-  text(ctx, label, plot.x + plot.width - 4, plot.y + 5, '#a8ccd2', 'right');
+  text(ctx, label, plot.x + plot.width - 4, plot.y + 5, COLORS.text, 'right');
   return { ...plot, mode: 'spectrum', spectrum: data };
 }
 

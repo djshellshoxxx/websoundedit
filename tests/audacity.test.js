@@ -42,6 +42,8 @@ test('legacy ZIP contains real AUP XML and companion AU files, round-trips both 
   const { engine } = await fixture(), project = await engine.execute('project.save'), exported = await exportAudacity(project, { format: 'aup' });
   const files = unzipSync(exported.bytes);
   assert.match(new TextDecoder().decode(files['project.aup']), /^<\?xml/);
+  assert.match(new TextDecoder().decode(files['README.txt']), /sample rate to 8000 Hz/);
+  assert.ok(exported.warnings.some(warning => warning.includes('8000 Hz')));
   assert.equal(Object.keys(files).filter(name => name.endsWith('.au')).length, 3);
   assert.deepEqual(comparable((await importAudacity(exported.bytes)).project), comparable(project));
   assert.deepEqual(comparable((await importAudacity(files['project.aup'], { files: new Map(Object.entries(files)) })).project), comparable(project));

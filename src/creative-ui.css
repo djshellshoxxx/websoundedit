@@ -67,6 +67,7 @@
 :root[data-theme="daylight"] .status-row.error #status,
 :root[data-theme="daylight"] #modal-error { color:var(--red)!important; }
 :root[data-theme="daylight"] #modal-content code { color:#126a77; }
+:root[data-theme="daylight"] #signal-stats { color:var(--text); }
 :root[data-theme="daylight"] .track-name button,
 :root[data-theme="daylight"] .track-fader output,
 :root[data-theme="daylight"] .transport-clock output { color:var(--text); }

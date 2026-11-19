@@ -6,6 +6,7 @@ WebSoundEdit loads and saves real Audacity **3.x `.aup3` projects** and legacy *
 
 - Use **Save project**, then choose **Audacity AUP3** for one self-contained project file.
 - Choose **Audacity AUP ZIP** for legacy interchange. Extract the downloaded ZIP before opening `project.aup` in Audacity. Keep `project_data` beside that file.
+- **Audacity 3.4.2 legacy import:** set the blank Audacity project's sample rate to the rate listed in the ZIP's `README.txt` before opening an AUP. That version creates imported clips at the current project rate before applying the file's rate, which can move clip offsets when the rates differ. AUP3 avoids this legacy import issue.
 - Use **Open project** for AUP3 or a ZIP containing exactly one legacy `.aup` and its matching `_data` folder.
 - For a loose legacy project, select its containing folder so the browser can provide both the `.aup` and every referenced audio block. A standalone `.aup` contains instructions, not its audio.
 - Save and close an AUP3 in Audacity before importing it. Files with pending recovery/autosave data are rejected; importing a stale saved state would be misleading.
@@ -66,6 +67,8 @@ Tag values are bounded text and are passed as structured argument values, never 
 - [Audacity 3.7.9 clip serialization](https://github.com/audacity/audacity/blob/Audacity-3.7.9/libraries/lib-wave-track/WaveClip.cpp)
 - [Audacity 2.4.2 AU block layout](https://github.com/audacity/audacity/blob/Audacity-2.4.2/src/blockfile/SimpleBlockFile.cpp)
 - [Audacity 2.4.2 waveform summary layout](https://github.com/audacity/audacity/blob/Audacity-2.4.2/src/BlockFile.cpp)
+- [Audacity 3.4.2 legacy AUP importer and project-rate ordering](https://github.com/audacity/audacity/blob/Audacity-3.4.2/modules/mod-aup/ImportAUP.cpp)
+- [Audacity 3.4.2 deferred track-rate application](https://github.com/audacity/audacity/blob/Audacity-3.4.2/libraries/lib-wave-track/WaveTrack.cpp)
 - [RIFF/WAVE chunk layout](https://www.mmsp.ece.mcgill.ca/Documents/AudioFormats/WAVE/WAVE.html)
 - [RFC 7845: Ogg Opus and OpusTags](https://www.rfc-editor.org/rfc/rfc7845.html)
 
