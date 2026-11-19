@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { createReadStream, createWriteStream, constants, existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile, open, stat } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, open, stat, lstat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { homedir } from 'node:os';
 import { setTimeout as pause } from 'node:timers/promises';
@@ -87,16 +87,25 @@ async function nativeSession(label, action) {
     `[Update]\nUpdateNoticeShown=1\nDefaultUpdatesChecking=0\n[Export]\nFormat=WAV\n` +
     `[FileFormats]\nExportFormat_SF1=65542\n[FileFormats/ExportFormat_SF1_Type]\nWAV_10000=6\n`;
   await writeFile(path.join(config, 'audacity.cfg'), configText, 'utf8');
+  const transcript = [], pipeEvents = [];
   const log = createWriteStream(path.join(base, 'audacity.log'));
+  const launchedAt = Date.now();
   const child = spawn(executable, [], {
     env: { ...process.env, TZ: 'UTC', XDG_CONFIG_HOME: path.join(base, 'config'), XDG_DATA_HOME: path.join(base, 'data'), XDG_CACHE_HOME: path.join(base, 'cache'), XDG_STATE_HOME: path.join(base, 'state') },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stdout.pipe(log, { end: false }); child.stderr.pipe(log, { end: false });
   let spawnError; child.once('error', error => { spawnError = error; });
-  const childDone = new Promise(resolve => child.once('close', (code, signal) => resolve({ code, signal })));
+  // 'exit' identifies the native process ending. 'close' additionally waits for
+  // inherited stdout/stderr handles, which a desktop helper can keep open.
+  const childDone = new Promise(resolve => {
+    child.once('exit', (code, signal) => {
+      pipeEvents.push({ at: new Date().toISOString(), nativeExit: { code, signal } });
+      resolve({ code, signal });
+    });
+    child.once('error', error => resolve({ code: null, signal: null, error: error.message }));
+  });
   let writer, reader, pending = null, buffer = '';
-  const transcript = [], pipeEvents = [];
   const failPending = error => { if (pending) { clearTimeout(pending.timer); pending.reject(error); pending = null; } };
   try {
     for (let i = 0; i < 300 && !(existsSync(toPipe) && existsSync(fromPipe)); i++) {
@@ -153,11 +162,14 @@ async function nativeSession(label, action) {
     // Closing a saved project checkpoints its SQLite WAL before the JS reader opens it.
     await command('Close:');
     // Native shutdown may close the scripting FIFO before the child-process
-    // close event arrives. Accept that order only when Audacity then exits 0.
+    // exit event arrives. Accept that order only when Audacity then exits 0.
     let exitError;
     try { await command('Exit:', 5000); } catch (error) { exitError = error; }
+    // The final command is complete. Release the scripting transport before
+    // waiting, so no server read is held open by this test client at shutdown.
+    reader?.destroy(); await writer?.close().catch(() => {}); writer = null;
     const nativeExit = await Promise.race([childDone, pause(5000).then(() => null)]);
-    if (!nativeExit) throw exitError || new Error('Audacity did not exit after the Exit command.');
+    if (!nativeExit) throw exitError || new Error(`Audacity did not exit after the Exit command (exitCode=${child.exitCode}, signal=${child.signalCode}).`);
     assert.equal(nativeExit.code, 0, `Audacity exited unsuccessfully (${nativeExit.signal || nativeExit.code})`);
     return result;
   } finally {
@@ -166,17 +178,29 @@ async function nativeSession(label, action) {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
     const stopped = await Promise.race([childDone, pause(5000).then(() => null)]);
     if (!stopped) { child.kill('SIGKILL'); await childDone; }
+    child.stdout.unpipe(log); child.stderr.unpipe(log);
+    child.stdout.destroy(); child.stderr.destroy();
     log.end();
     await writeFile(path.join(base, 'transcript.json'), JSON.stringify(transcript, null, 2));
     await writeFile(path.join(base, 'pipe-events.json'), JSON.stringify(pipeEvents, null, 2));
-    // Native shutdown removes these FIFOs. Never delete someone else's pipe.
-    for (let i = 0; i < 30 && (existsSync(toPipe) || existsSync(fromPipe)); i++) await pause(100);
+    // Audacity's detached pipe server unlinks on client EOF, then can recreate
+    // its FIFOs before process exit. These exact paths were absent at launch on
+    // this dedicated runner. Clean up only our UID's newly created FIFOs after
+    // the process is confirmed stopped; never remove a preexisting or other file.
+    for (const file of [toPipe, fromPipe]) {
+      const info = await lstat(file).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+      if (!info) continue;
+      assert.ok(info.isFIFO() && info.uid === uid && info.ctimeMs >= launchedAt, `Refuse cleanup of a scripting pipe not created by this native session: ${file}`);
+      await unlink(file);
+    }
   }
 }
 
 async function nativeExport(command, destination, duration) {
   await command('SelectAll:');
-  await command(`Select: Start=0 End=${duration}`);
+  // Select also resets track selection to its default first track. SelectTime
+  // changes only the range and keeps every track/lane in the exported mix.
+  await command(`SelectTime: Start=0 End=${duration}`);
   await command(`Export2: Filename=${quoted(destination)} NumChannels=2`);
   assert.ok((await stat(destination)).size > 44, 'Native WAV export exists');
 }

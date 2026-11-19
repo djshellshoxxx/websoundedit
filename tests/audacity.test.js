@@ -48,6 +48,17 @@ test('legacy ZIP contains real AUP XML and companion AU files, round-trips both 
   await assert.rejects(importAudacity(files['project.aup']), /Missing or ambiguous/);
 });
 
+test('native Audacity aligned stereo link value 3 imports both channels', async () => {
+  const { engine } = await fixture(), original = await engine.execute('project.save');
+  const exported = await exportAudacity(original), SQL = await loadAudacityCodec(), db = new SQL.Database(exported.bytes);
+  try {
+    const [dict, doc] = db.exec('SELECT dict,doc FROM project')[0].values[0], root = decodeBinaryXML(dict, doc);
+    root.children.find(item => item.name === 'wavetrack' && Number(item.attrs.linked) > 0).attrs.linked = 3;
+    const native = encodeBinaryXML(root); db.run('UPDATE project SET dict=?,doc=?', [native.dict, native.doc]);
+    assert.deepEqual(comparable((await importAudacity(db.export())).project), comparable(original));
+  } finally { db.close(); }
+});
+
 test('AU writer includes real summaries and reader handles little and big endian float blocks', () => {
   const input = Float32Array.of(-2, .5, 1, -.25), bytes = encodeAudacityAU(input, 48000);
   assert.deepEqual(decodeAudacityAU(bytes, 4), input);

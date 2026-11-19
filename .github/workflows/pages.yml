@@ -12,7 +12,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,19 +20,27 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - name: Install native codec test dependency
+      - name: Install audio verification dependencies
         run: |
           # The regional runner mirror can stall large audio-library downloads.
           if [ -f /etc/apt/apt-mirrors.txt ]; then
             printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
           fi
           sudo apt-get -o Acquire::Retries=3 update -qq
-          sudo apt-get install -y --no-install-recommends ffmpeg
+          sudo apt-get install -y --no-install-recommends ffmpeg audacity xvfb xauth
       - run: npm test
       - run: npm run build
+        id: build
       - name: Install Chromium
+        id: chromium
         run: npx playwright install --with-deps chromium
+      - name: Verify native Audacity project exchange
+        id: native
+        run: xvfb-run -a node scripts/verify-audacity.mjs
       - name: Test browser editing and real codec conversion
+        # Collect browser results even if native interoperability fails. Either
+        # failure still fails this job and prevents the Pages artifact/deploy.
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.chromium.outcome == 'success' }}
         run: npm run test:e2e
       - name: Save browser evidence
         if: always()
@@ -41,30 +49,8 @@ jobs:
           name: browser-evidence
           path: |
             playwright-report/
-            test-results/
+            test-results/browser/
           retention-days: 14
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-  native-interop:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci --no-audit --no-fund
-      - name: Install Audacity and virtual display
-        run: |
-          if [ -f /etc/apt/apt-mirrors.txt ]; then
-            printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
-          fi
-          sudo apt-get -o Acquire::Retries=3 update -qq
-          sudo apt-get install -y --no-install-recommends audacity xvfb xauth
-      - name: Verify native Audacity project exchange
-        run: xvfb-run -a node scripts/verify-audacity.mjs
       - name: Save native interchange evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -72,10 +58,13 @@ jobs:
           name: native-audacity-evidence
           path: test-results/native-audacity/
           retention-days: 14
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [verify, native-interop]
-    runs-on: ubuntu-latest
+    needs: verify
+    runs-on: ubuntu-24.04
     permissions:
       pages: write
       id-token: write

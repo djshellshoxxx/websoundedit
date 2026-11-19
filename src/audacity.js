@@ -223,7 +223,8 @@ function makeProject(root, { name, readBlock }) {
   for (let i = 0; i < waveTracks.length; i++) {
     const track = parseTrack(waveTracks[i]);
     let channelCount = 1;
-    if (number(waveTracks[i].attrs.linked, 0, 0, 2, 'stereo link', true)) {
+    // Audacity 3.4+ upgrades aligned stereo pairs to LinkType::Aligned (3).
+    if (number(waveTracks[i].attrs.linked, 0, 0, 3, 'stereo link', true)) {
       channelCount = 2;
       if (!waveTracks[i + 1]) throw new Error('Audacity stereo track is missing its right channel.');
       const right = parseTrack(waveTracks[++i]);

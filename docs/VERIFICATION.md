@@ -4,13 +4,13 @@ Recorded 18 November 2026 (Pacific time).
 
 ## Current verification status
 
-The v0.2 feature worktree has passed **124 local unit/integration tests** and the **production build**. Browser workflow verification, native Audacity application verification, and publication of the v0.2 artifact are still pending. The earlier v0.1 deployment does not establish that these new changes have been published or verified in a browser.
+The v0.2 feature worktree has passed **125 local unit/integration tests** and the **production build**. Browser workflow verification, native Audacity application verification, and publication of the v0.2 artifact are still pending. The earlier v0.1 deployment does not establish that these new changes have been published or verified in a browser.
 
 The implementation specification was written before feature implementation in commit [3e04bcb](https://github.com/djshellshoxxx/websoundedit/commit/3e04bcbbeb72f1c106002545be074cc27579fbf3). See [Creative workbench v2](specs/CREATIVE_WORKBENCH_V2.md) for the scope and acceptance criteria.
 
 | Check | Current result | What this establishes |
 | --- | --- | --- |
-| Local `npm test` | **124 passed** | Existing engine/API behavior and the new automated DSP, rack configuration, musical-key, MIDI, metadata and project-format cases described below. |
+| Local `npm test` | **125 passed** | Existing engine/API behavior and the new automated DSP, rack configuration, musical-key, MIDI, metadata and project-format cases described below. |
 | Local `npm run build` | **Passed** | The static distribution builds with self-hosted workers/WASM dependencies, notices, public API exports, and the existing bundle verification. |
 | Chromium browser workflows | **Pending CI** | Tests are implemented; interaction, layout and browser codec results for v0.2 have not yet been confirmed. |
 | Native Audacity application exchange | **Pending CI** | A native application harness is implemented; generated-project unit round trips alone do not establish interoperability with Audacity. |
@@ -82,7 +82,7 @@ The suite retains desktop/tablet/mobile layout checks and adds screenshots for t
 
 ## Native Audacity verification gate
 
-The `native-interop` job installs Audacity, Xvfb and xauth, then runs:
+The `verify` job installs Audacity, Xvfb, xauth and the codec test dependencies, then runs the native exchange gate:
 
 ```sh
 xvfb-run -a node scripts/verify-audacity.mjs
@@ -99,7 +99,7 @@ Its evidence is uploaded as `native-audacity-evidence` from `test-results/native
 
 Target: <https://djshellshoxxx.github.io/websoundedit/>.
 
-The Pages deployment job depends on both `verify` and `native-interop`. A successful build artifact or pull-request run alone is not a production deployment.
+The Pages deployment job depends on `verify`, which requires both the browser and native Audacity gates to pass on the same runner. A successful build artifact or pull-request run alone is not a production deployment. Browser tests still execute after a native-test failure to collect useful evidence; either failure prevents publication.
 
 - [ ] Record the final release commit and successful Pages deployment run URL.
 - [ ] Confirm that the deployed artifact belongs to the verified release commit.
