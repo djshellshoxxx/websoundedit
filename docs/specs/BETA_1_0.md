@@ -22,7 +22,7 @@ The browser remains local-first: files and recordings stay on the device unless 
 
 ### Unified options
 
-Provide a dedicated Options surface with clear sections for general behavior, input, output, channel layout, MIDI, shortcuts/macros, streaming and help. It must expose:
+Provide an addressable in-app Options view (`#options` and section routes), with Back/Close and browser-history behavior that preserves the active project. Give help stable chapter routes. Options has clear sections for general behavior, input, output, channel layout, MIDI, shortcuts/macros, streaming and help. It must expose:
 
 - Tooltip enable/disable, current theme, and existing keyboard shortcuts.
 - Available microphone/audio-interface inputs, channel selection, browser capture-processing constraints, input monitoring and input gain.
@@ -50,6 +50,8 @@ Create searchable, linked chapters covering navigation, tracks/selections/zoom, 
 - Provide direct track save/export controls targeting the clicked track, without accidentally exporting another selected track.
 - Save one track as a native editable session, all tracks as the full session, export one track/selection/mix, or export all tracks as a ZIP of individually named stems. Use collision-free safe filenames and explicit dry/committed versus live-render behavior.
 - Preserve existing whole-project and Audacity workflows. Never label JSON as a native DAW file.
+
+Concrete I/O uses `file.import`, `file.export` and `file.exportStems`; modal navigation uses `ui.*` names. `project.saveTrack({trackId})` returns a sanitized single-track native session, retaining valid selections and filtering clip-keyed MIDI/live references. Independent track renders can explicitly set `respectMute:false` and `respectSolo:false`; their gain/pan and selected output layout still apply. Existing render defaults stay compatible. Expose `view.zoomSelection`, `view.zoom` and `view.fit` as semantic commands.
 
 ## 3. Unified command API
 
@@ -97,6 +99,8 @@ Preflight syntax, command names, capabilities and statically known arguments bef
 
 Record successful semantic actions into the same canonical text format used by typed scripts. Show ordered editable steps for simple call sequences, with parameter editing, add/remove/reorder, and text view. Preserve structured logic programs as scripts; never silently flatten loops/conditions into a different program. Save/load/export scripts, validate before running, expose progress, errors and Stop.
 
+An optional **Record timing** mode inserts explicit waits between semantic actions. Ordinary editing-mode recording omits thinking time. Name the control **Record actions** to distinguish it from audio recording. Smooth repeatable effect sweeps use audio-clock automation points rather than relying on UI-event timing.
+
 Support explicit local shortcut assignments and an optional locally armed on-import macro. Imported projects/scripts may supply definitions but cannot arm triggers. Suppress recursive on-import triggers during macro/batch imports. Batch jobs process supplied inputs sequentially in isolated/cleared editor state, report per-file results, and support cancel and a deliberate continue-on-error setting. Output collection has a size limit or streaming destination.
 
 ### Musical automation
@@ -126,6 +130,8 @@ Keep mono equal-power front L/R panning. For multichannel pan, adjust the front 
 
 Implement persistent stateful DSP in an AudioWorklet: delay/reverb memory, modulation phase, filters, tape/stutter/bit reduction and wet/bypass/order must continue across blocks. Validate parameters using the rack catalogue. Use audio-clock automation and avoid blocking or unbounded allocation in processing callbacks.
 
+Initial runtime-wide limits are 64 MiB DSP state/scratch, 65 rack graphs including master, 128 total stages with at most 12 per rack, 128 active program/loop/MIDI voices and 8,192 queued automation events. Validate actual sample-rate/channel memory estimates before allocating a candidate graph. Excessive graph requests fail atomically, preserving active playback; unchanged stable effect IDs retain state when reordered. Publish the actual limits in capabilities and test CPU behavior without promising hardware-independent latency.
+
 `audio.playbackPlan` supplies independent track sources. Runtime-owned loops are excluded from the ordinary plan, preventing duplicate voices. Project replacement/dispose stops input, loops, notes and stale callbacks; track removal releases only the affected voices. MIDI sampler output joins the shared master.
 
 ### Live command groups
@@ -135,6 +141,8 @@ Implement persistent stateful DSP in an AudioWorklet: delay/reverb memory, modul
 - Effects: `live.rack.set`, `live.param.set`, `automation.set/clear` for master or a track.
 - Capture: `loop.capture.start/stop/cancel` and a semantic capture toggle.
 - Layers: `loop.track.list/play/stop/mute/remove`.
+
+`live.render` snapshots live racks and automation and uses the same DSP kernel offline for an explicit scope/range/layout. Automation retains timeline-relative timing; delay/filter history starts empty at the requested range start, and there is no implicit tail extension. The recorder is the way to capture current running feedback/tails. Export labels distinguish committed audio from this live-settings render. Stem exports can use a common project-length range for alignment.
 
 Input supports a microphone/audio interface or display-provided system audio. Acquisition and audio unlock require explicit user gestures when the browser requires them. Monitoring defaults off. Loop capture uses sample-clock beat/bar quantization or immediate boundaries, bounded PCM and clear armed/recording/playing state. Every completed loop creates a new editable track; one loop voice starts at the correct boundary. Users can layer guitar input with a button or MIDI pedal and independently mute, stop or delete each layer.
 
@@ -163,6 +171,8 @@ Provide capability-advertised stream profiles for supported PCM/compressed forma
 `importReaper(bytes, { name, files, decodeMedia })` and `exportReaper(portableProject, { format: 'zip' })` return the existing `{ project,warnings }` or `{ bytes,mime,ext,warnings }` shapes. Export a genuine `.rpp` plus relative `media/*.wav`, instructions and supported metadata. Loose RPP import requires explicitly supplied media; never read a referenced host path or URL implicitly.
 
 Use Cockos/WDL token quoting and nested block grammar, with preparse text/line/token/depth/record limits. Preserve supported PCM, names, positions, visible trims, one active take, constant mix, overlap sums, markers and fixed tempo. Support canonical multichannel media. Reject unsupported active plugins, automation, complex routing/folders, comping, source modes or time/pitch transforms instead of changing their sound silently. Explain stem rendering as a compatible route.
+
+Treat RPP source references separately from archive entry paths. An exact alias in the caller's explicitly supplied media map may satisfy an absolute source reference without accessing that path. A unique uploaded basename may be remapped with a clear notice; ambiguous names fail. ZIP entry paths remain relative and bounded, and no project reference initiates host-filesystem or network access.
 
 Keep Audacity's genuine mono/stereo exchange. Surround defaults to a clear rejection, with explicit `multichannel: 'split-mono'` channel-stem export. This preserves individual channel PCM/identity; it is not an Audacity surround mixer. Retain the legacy Audacity 3.4.2 project-rate instruction and all existing recovery/schema/ZIP/XML guards.
 
