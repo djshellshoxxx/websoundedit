@@ -17,7 +17,7 @@ function random() { randomState ^= randomState << 13; randomState ^= randomState
 const encoder = new TextEncoder(), decoder = new TextDecoder('utf-8', { fatal: true });
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const report = { seed: SEED, seedHex: `0x${SEED.toString(16)}`, runtime: process.version, platform: process.platform, generatedAt: new Date().toISOString(), limits: { mutationCasesPerFamily: 256, largestFocusedPayloadBytes: 1048629 }, sourceSha256: {}, families: {}, focused: [], unexpected: [] };
-for (const file of ['src/audacity.js', 'src/audacity-xml.js', 'src/engine.js', 'src/metadata.js', 'package-lock.json']) report.sourceSha256[file] = digest(await readFile(new URL(`../../${file}`, import.meta.url)));
+for (const file of ['src/audacity.js', 'src/audacity-xml.js', 'src/project-archive.js', 'src/bounded-inflate.js', 'src/engine.js', 'src/metadata.js', 'package-lock.json']) report.sourceSha256[file] = digest(await readFile(new URL(`../../${file}`, import.meta.url)));
 
 function mutate(input, index) {
   const result = input.slice();

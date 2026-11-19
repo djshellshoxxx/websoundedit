@@ -3,11 +3,12 @@
  * Supported fields and source references: docs/AUDACITY.md.
  */
 import initSqlJs from 'sql.js';
-import { zipSync, unzipSync } from 'fflate';
+import { zipSync } from 'fflate';
 import { AudioEditor } from './engine.js';
 import { resampleAudio } from './dsp.js';
 import { normalizeMetadata } from './metadata.js';
 import { xmlNode as node, readXML, writeXML, encodeBinaryXML, decodeBinaryXML } from './audacity-xml.js';
+import { readProjectZip, safeArchivePath } from './project-archive.js';
 
 const MAX_BYTES = 256 * 1024 * 1024, MAX_FILE_BYTES = 320 * 1024 * 1024, MAX_XML = 8 * 1024 * 1024;
 const FLOAT = 0x0004000f, INT16 = 0x00020001, INT24 = 0x00040001, BLOCK_FRAMES = 262144;
@@ -60,10 +61,7 @@ function floatBytes(samples) {
   return bytes;
 }
 function portablePCM(audio) { return { encoding: 'f32le-base64', sampleRate: audio.sampleRate, frames: audio.channels[0].length, channels: audio.channels.map(channel => b64(floatBytes(channel))) }; }
-function safePath(value) {
-  if (typeof value !== 'string' || !value || value.length > 1024 || value.includes('\\') || value.includes('\0') || value.startsWith('/') || /^[A-Za-z]:/.test(value) || value.split('/').some(part => part === '..' || part === '.')) throw new Error('Audacity archive contains an unsafe file path.');
-  return value;
-}
+const safePath = safeArchivePath;
 function baseName(path) { return path.split('/').at(-1); }
 
 /** Correct waveform summary triples for Audacity's 256/65536-sample levels. */
@@ -109,45 +107,14 @@ export function decodeAudacityAU(input, expectedFrames) {
     else if (encoding === 4) { let raw = little ? bytes[at] | bytes[at + 1] << 8 | bytes[at + 2] << 16 : bytes[at + 2] | bytes[at + 1] << 8 | bytes[at] << 16; if (raw & 0x800000) raw |= 0xff000000; value = raw / 8388608; }
     else if (encoding === 5) value = view.getInt32(at, little) / 2147483648;
     else value = encoding === 6 ? view.getFloat32(at, little) : view.getFloat64(at, little);
-    if (!Number.isFinite(value) || Math.abs(value) > 3.4028234663852886e38) throw new Error('Audacity block contains non-finite audio.');
+    if (!Number.isFinite(value) || Math.abs(value) > 1e6) throw new Error('Audacity block contains non-finite or unreasonable audio samples.');
     output[i] = value;
   }
   return output;
 }
 
 function zipFiles(bytes) {
-  // Check central-directory sizes before fflate allocates any decompressed file.
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength); let end = -1;
-  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) if (view.getUint32(i, true) === 0x06054b50 && i + 22 + view.getUint16(i + 20, true) === bytes.length) { end = i; break; }
-  if (end < 0) throw new Error('Invalid Audacity ZIP directory.');
-  const entries = view.getUint16(end + 10, true), start = view.getUint32(end + 16, true), length = view.getUint32(end + 12, true), directoryEnd = start + length;
-  // fflate reads the per-disk entry count and can follow a ZIP64 locator.
-  // Accept exactly the same non-ZIP64 directory that we validate below.
-  if (entries !== view.getUint16(end + 8, true) || entries > 20000 || entries === 65535 || directoryEnd > end ||
-    view.getUint16(end + 4, true) || view.getUint16(end + 6, true) ||
-    (end >= 20 && view.getUint32(end - 20, true) === 0x07064b50)) throw new Error('Unsupported ZIP64, multipart or oversized Audacity archive.');
-  let cursor = start, total = 0; const seen = new Set();
-  for (let i = 0; i < entries; i++) {
-    if (cursor + 46 > directoryEnd || view.getUint32(cursor, true) !== 0x02014b50) throw new Error('Invalid Audacity ZIP entry.');
-    const size = view.getUint32(cursor + 24, true), compressed = view.getUint32(cursor + 20, true), method = view.getUint16(cursor + 10, true);
-    const nameLength = view.getUint16(cursor + 28, true), extra = view.getUint16(cursor + 30, true), comment = view.getUint16(cursor + 32, true), local = view.getUint32(cursor + 42, true);
-    if (cursor + 46 + nameLength + extra + comment > directoryEnd || view.getUint16(cursor + 8, true) & 1 || view.getUint16(cursor + 34, true)) throw new Error('Invalid or encrypted Audacity ZIP entry.');
-    if (compressed === 0xffffffff || local + 30 > start || view.getUint32(local, true) !== 0x04034b50) throw new Error('Invalid Audacity ZIP payload.');
-    const payload = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true);
-    if (payload + compressed > start || view.getUint16(local + 6, true) & 1 || view.getUint16(local + 8, true) !== method ||
-      ![0, 8].includes(method) || (method === 0 && compressed !== size)) throw new Error('Invalid Audacity ZIP payload size or compression.');
-    const path = safePath(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(cursor + 46, cursor + 46 + nameLength)));
-    if (/\.aup$/i.test(path) && size > MAX_XML) throw new Error('Audacity XML exceeds the 8 MiB limit.');
-    if (seen.has(path)) throw new Error('Duplicate Audacity ZIP path.'); seen.add(path);
-    total += size; if (total > MAX_FILE_BYTES || size > MAX_BYTES) throw new Error('Audacity archive exceeds the decompressed size limit.');
-    cursor += 46 + nameLength + extra + comment;
-  }
-  if (cursor !== directoryEnd) throw new Error('Invalid Audacity ZIP central-directory length.');
-  // The extractor scans backwards for an EOCD signature without checking its
-  // comment length. Exclude the comment so an embedded signature cannot select
-  // a different, unchecked directory or bypass the allocation limits above.
-  const output = unzipSync(bytes.subarray(0, end + 22), { filter: file => /\.(aup|au)$/i.test(file.name) });
-  return new Map(Object.entries(output));
+  return readProjectZip(bytes, { accept: path => /\.(aup|au)$/i.test(path), maxTotalBytes: MAX_FILE_BYTES, maxEntryBytes: path => /\.aup$/i.test(path) ? MAX_XML : MAX_BYTES });
 }
 
 function ensureSupported(root) {
@@ -256,6 +223,30 @@ function queryOne(db, sql, args = []) {
   const stmt = db.prepare(sql);
   try { stmt.bind(args); if (!stmt.step()) return null; const row = stmt.getAsObject(); if (stmt.step()) throw new Error('Audacity project contains duplicate data records.'); return row; } finally { stmt.free(); }
 }
+function validateAup3Schema(db) {
+  const schemas = {
+    project: [['id','INTEGER',1],['dict','BLOB',0],['doc','BLOB',0]],
+    autosave: [['id','INTEGER',1],['dict','BLOB',0],['doc','BLOB',0]],
+    sampleblocks: [['blockid','INTEGER',1],['sampleformat','INTEGER',0],['summin','REAL',0],['summax','REAL',0],['sumrms','REAL',0],['summary256','BLOB',0],['summary64k','BLOB',0],['samples','BLOB',0]],
+  };
+  let autosave = false;
+  for (const [table, expected] of Object.entries(schemas)) {
+    const definition = queryOne(db, 'SELECT type,sql FROM sqlite_master WHERE name=?', [table]);
+    if (!definition && table === 'autosave') continue;
+    if (definition?.type !== 'table' || !/^CREATE\s+TABLE\b/i.test(definition.sql || '')) throw new Error('Audacity project tables are missing or invalid.');
+    const statement = db.prepare('SELECT name,type,pk,hidden FROM pragma_table_xinfo(?)');
+    try {
+      statement.bind([table]); let count = 0;
+      while (statement.step()) {
+        const column = statement.getAsObject(), want = expected[count++];
+        if (!want || column.hidden !== 0 || column.name !== want[0] || column.type.toUpperCase() !== want[1] || column.pk !== want[2]) throw new Error('Unsupported Audacity table schema, generated column or column type.');
+      }
+      if (count !== expected.length) throw new Error('Unsupported Audacity table schema or missing columns.');
+    } finally { statement.free(); }
+    if (table === 'autosave') autosave = true;
+  }
+  return autosave;
+}
 async function importAup3(bytes, name) {
   const SQL = await loadAudacityCodec(); let db;
   try {
@@ -263,20 +254,20 @@ async function importAup3(bytes, name) {
     if (db.exec('PRAGMA application_id')[0]?.values[0][0] !== APP_ID) throw new Error('This SQLite file is not an Audacity AUP3 project.');
     const version = db.exec('PRAGMA user_version')[0]?.values[0][0];
     if (version < SCHEMA_VERSION || version >= 0x04000000) throw new Error('Only Audacity 3.x AUP3 schemas are supported. Export audio stems from this Audacity version.');
-    for (const table of ['project', 'sampleblocks']) if (queryOne(db, 'SELECT type FROM sqlite_master WHERE name = ?', [table])?.type !== 'table') throw new Error('Audacity project tables are missing or invalid.');
-    const lengths = queryOne(db, 'SELECT length(dict) AS dictionary, length(doc) AS document FROM project WHERE id=1');
-    if (!lengths || lengths.dictionary + lengths.document > MAX_XML) throw new Error('Audacity saved project document is missing or too large. Close and save it in Audacity first.');
-    if (queryOne(db, 'SELECT type FROM sqlite_master WHERE name = ?', ['autosave'])?.type === 'table' && queryOne(db, 'SELECT id FROM autosave WHERE id=1')) throw new Error('This Audacity project has recovery/autosave state. Open, save and close it in Audacity before importing.');
+    const autosave = validateAup3Schema(db);
+    const lengths = queryOne(db, 'SELECT typeof(dict) AS dictionaryType,typeof(doc) AS documentType,length(dict) AS dictionary,length(doc) AS document FROM project WHERE id=1');
+    if (!lengths || lengths.dictionaryType !== 'blob' || lengths.documentType !== 'blob' || !Number.isSafeInteger(lengths.dictionary) || !Number.isSafeInteger(lengths.document) || lengths.dictionary < 1 || lengths.document < 1 || lengths.dictionary + lengths.document > MAX_XML) throw new Error('Audacity saved project document is missing or too large. Close and save it in Audacity first.');
+    if (autosave && queryOne(db, 'SELECT id FROM autosave WHERE id=1')) throw new Error('This Audacity project has recovery/autosave state. Open, save and close it in Audacity before importing.');
     const data = queryOne(db, 'SELECT dict,doc FROM project WHERE id=1'), root = decodeBinaryXML(data.dict, data.doc);
     return makeProject(root, { name, readBlock(block, remaining) {
       const id = number(block.attrs.blockid, undefined, -remaining, Number.MAX_SAFE_INTEGER, 'block id', true);
       if (id <= 0) return new Float32Array(-id);
-      const info = queryOne(db, 'SELECT sampleformat,length(samples) AS bytes FROM sampleblocks WHERE blockid=?', [id]);
+      const info = queryOne(db, 'SELECT sampleformat,typeof(samples) AS storage,length(samples) AS bytes FROM sampleblocks WHERE blockid=?', [id]);
       if (!info) throw new Error(`Audacity audio block ${id} is missing.`);
       const width = info.sampleformat === INT16 ? 2 : [FLOAT, INT24].includes(info.sampleformat) ? 4 : 0;
-      if (!width || info.bytes <= 0 || info.bytes > remaining * width || info.bytes % width) throw new Error('Unsupported or oversized Audacity sample block.');
+      if (!width || info.storage !== 'blob' || info.bytes <= 0 || info.bytes > remaining * width || info.bytes % width) throw new Error('Unsupported or oversized Audacity sample block.');
       const data = queryOne(db, 'SELECT samples FROM sampleblocks WHERE blockid=?', [id]).samples, view = new DataView(data.buffer, data.byteOffset, data.byteLength), samples = new Float32Array(data.length / width);
-      for (let i = 0; i < samples.length; i++) { const value = info.sampleformat === FLOAT ? view.getFloat32(i * width, true) : info.sampleformat === INT16 ? view.getInt16(i * width, true) / 32768 : view.getInt32(i * width, true) / 8388608; if (!Number.isFinite(value)) throw new Error('Audacity block contains non-finite audio.'); samples[i] = value; }
+      for (let i = 0; i < samples.length; i++) { const value = info.sampleformat === FLOAT ? view.getFloat32(i * width, true) : info.sampleformat === INT16 ? view.getInt16(i * width, true) / 32768 : view.getInt32(i * width, true) / 8388608; if (!Number.isFinite(value) || Math.abs(value) > 1e6) throw new Error('Audacity block contains non-finite or unreasonable audio samples.'); samples[i] = value; }
       if (block.attrs.len !== undefined && Number(block.attrs.len) !== samples.length) throw new Error('Audacity block length does not match its sample data.');
       return samples;
     } });

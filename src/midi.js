@@ -126,7 +126,8 @@ export function validateMidiSequence(sequence) {
     check(Number.isInteger(note.velocity) && note.velocity >= 1 && note.velocity <= 127, 'Invalid MIDI velocity.');
     check(Number.isFinite(note.start) && Number.isFinite(note.duration) && note.start >= 0 && note.duration > 0 && note.start + note.duration <= MAX_SECONDS, 'Invalid MIDI note timing.');
     const channel = note.channel ?? 0; check(Number.isInteger(channel) && channel >= 0 && channel <= 15, 'Invalid MIDI channel.');
-    return { note: note.note, velocity: note.velocity, channel, start: note.start, duration: note.duration };
+    const track = note.track ?? 0; check(Number.isInteger(track) && track >= 0 && track < 64, 'Invalid MIDI source track.');
+    return { note: note.note, velocity: note.velocity, channel, track, start: note.start, duration: note.duration };
   });
   return { version: 1, notes, duration: notes.reduce((max, n) => Math.max(max, n.start + n.duration), 0) };
 }
@@ -134,17 +135,35 @@ export function validateMidiSequence(sequence) {
 /** Export note timings at a fixed 120 BPM, preserving seconds from the original tempo map. */
 export function encodeMidiFile(input) {
   const sequence = validateMidiSequence(input), ppq = 960;
-  const events = sequence.notes.flatMap(n => [
-    { tick: Math.round(n.start * ppq * 2), data: [0x90 | n.channel, n.note, n.velocity] },
-    { tick: Math.max(Math.round(n.start * ppq * 2) + 1, Math.round((n.start + n.duration) * ppq * 2)), data: [0x80 | n.channel, n.note, 0] }
-  ]).sort((a, b) => a.tick - b.tick || a.data[0] - b.data[0]);
-  const body = [0, 0xff, 0x51, 3, 7, 0xa1, 0x20]; let tick = 0;
+  const trackCount = Math.max(...sequence.notes.map(note => note.track)) + 1;
   const vlq = n => { const out = [n & 127]; while ((n = Math.floor(n / 128))) out.unshift((n & 127) | 128); return out; };
-  for (const event of events) { body.push(...vlq(event.tick - tick), ...event.data); tick = event.tick; }
-  body.push(0, 0xff, 0x2f, 0);
-  const bytes = new Uint8Array(22 + body.length), view = new DataView(bytes.buffer);
-  bytes.set([77,84,104,100,0,0,0,6,0,0,0,1]); view.setUint16(12, ppq);
-  bytes.set([77,84,114,107], 14); view.setUint32(18, body.length); bytes.set(body, 22); return bytes;
+  const tracks = Array.from({ length: trackCount }, (_, track) => {
+    const notes = sequence.notes.filter(note => note.track === track).map(note => ({
+      ...note, on: Math.round(note.start * ppq * 2),
+      off: Math.max(Math.round(note.start * ppq * 2) + 1, Math.round((note.start + note.duration) * ppq * 2)),
+    })).sort((a, b) => a.on - b.on || a.off - b.off);
+    const lastOff = new Map();
+    for (const note of notes) {
+      const key = `${note.channel}:${note.note}`;
+      check(!lastOff.has(key) || note.off >= lastOff.get(key), 'MIDI export cannot preserve nested overlapping notes of the same pitch, channel and track. Use separate source tracks.');
+      lastOff.set(key, note.off);
+    }
+    const events = notes.flatMap(note => [
+      { tick: note.on, data: [0x90 | note.channel, note.note, note.velocity] },
+      { tick: note.off, data: [0x80 | note.channel, note.note, 0] }
+    ]).sort((a, b) => a.tick - b.tick || a.data[0] - b.data[0]);
+    const body = track === 0 ? [0, 0xff, 0x51, 3, 7, 0xa1, 0x20] : [];
+    let tick = 0;
+    for (const event of events) { body.push(...vlq(event.tick - tick), ...event.data); tick = event.tick; }
+    body.push(0, 0xff, 0x2f, 0);
+    return body;
+  });
+  const bytes = new Uint8Array(14 + tracks.reduce((size, track) => size + 8 + track.length, 0)), view = new DataView(bytes.buffer);
+  bytes.set([77,84,104,100,0,0,0,6]);
+  view.setUint16(8, trackCount > 1 ? 1 : 0); view.setUint16(10, trackCount); view.setUint16(12, ppq);
+  let offset = 14;
+  for (const body of tracks) { bytes.set([77,84,114,107], offset); view.setUint32(offset + 4, body.length); bytes.set(body, offset + 8); offset += 8 + body.length; }
+  return bytes;
 }
 
 export function renderMidiSequence(input, sampleRate = 48000) {

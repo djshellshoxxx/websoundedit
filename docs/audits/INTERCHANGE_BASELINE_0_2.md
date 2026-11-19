@@ -108,3 +108,29 @@ Add an attribute/token/depth preflight before DOM allocation, or a bounded strea
 Runtime files were deliberately left unchanged pending collection of the baseline audit lanes. Prioritize INT-01, then combine INT-02/03 in a bounded archive extractor with CRC verification. Apply INT-04/05 and INT-H01 with focused regression tests. Re-run the unchanged audit seed and the native Audacity gate after fixes, preserving this JSON as historical baseline evidence and saving fixed-stage evidence separately.
 
 The independently reported engine base64 stack overflow also affects `exportAudacity`, which validates portable projects through `project.load`. The core-audio audit owns that root-cause fix. Passing the listed corpus is not proof that all parser bugs, all Audacity versions or worst-case resources are safe.
+
+## Authorized fix-stage results — 19 November 2026
+
+The baseline report and `INTERCHANGE_BASELINE_0_2.json` above remain historical evidence. After the parent authorized the combined baseline fix stage, INT-01 through INT-05 and INT-H01 were corrected:
+
+| Finding | Implemented correction | Regression evidence |
+| --- | --- | --- |
+| INT-01 | Validate `project`, optional `autosave`, and `sampleblocks` as ordinary tables with the exact supported columns, declared types and primary keys; `pragma_table_xinfo` rejects hidden/generated columns before any value query. Verify actual document/sample storage is BLOB. | Both virtual and stored generated columns, extra project columns, generated autosave/sample columns and non-BLOB values are rejected. Existing genuine AUP3 round trips pass. |
+| INT-02 | `bounded-inflate.js` reads RFC 1951 symbols and counts output without expanding it, rejecting a literal/run that would exceed the declared length. Only a stream proven to have the exact length reaches `fflate` with a fixed output buffer. | Original understatement fixture is rejected. 48 inputs × six compression paths = 288 valid independently generated/fixed/dynamic/stored cases; 512 seeded malformed streams cross-checked against Node zlib for every accepted preflight result. |
+| INT-03 | `project-archive.js` validates and extracts one entry list, checks CRC-32, local/central names/flags/sizes, optional signed/unsigned data descriptors, extra fields and nonoverlapping payloads. | Corrupted project CRC, changed AU PCM, filename/size disagreement and descriptor corruption are rejected; valid stored/deflated/streaming archives pass. All earlier ZIP guards still pass. |
+| INT-04 | AU/AUP3 sample decode rejects nonfinite values and magnitudes over `1e6`, matching core PCM validation. | Both signs at the accepted limit load; larger finite values, infinity and NaN fail during interchange decode. |
+| INT-05 | Define root depth zero and allow descendants through depth 64 consistently in text and binary readers/writers. | Root plus 64 descendants round-trips; the next depth fails. |
+| INT-H01 | Preflight quoted XML attributes, element count and depth before DOM construction. Bound attributes to 128 per element and 100,000 total; apply the same limits to binary XML and writers. | Per-element and aggregate excess fail; legitimate quoted markup, comments, processing instructions, CDATA whitespace and boundary-size attributes pass. |
+
+Executed after the corrections:
+
+```sh
+node --test tests/audacity.test.js tests/metadata.test.js tests/interchange-security.test.js
+node tests/fuzz/interchange-baseline.mjs --out docs/audits/INTERCHANGE_BASELINE_0_2_FIXED.json
+```
+
+**25 tests passed, zero failed/skipped.** The unchanged seed and corpus executed **1,691 cases plus six focused reproductions**, with **zero invalid accepted results, zero caller-byte mutations, and no observed prototype modification**. All original focused rejection findings now fail with specific validation errors; the depth-boundary fixture now succeeds. [Fixed-stage JSON](INTERCHANGE_BASELINE_0_2_FIXED.json) records the new exact source hashes, including the two extracted parser modules, counters and observed timings. The DEFLATE malformed-stream regression uses seed `0x1951f00d` and bounds independent zlib output to 2,048 bytes.
+
+Independent review identified a remaining compressed-work case: many empty DEFLATE blocks can consume parsing work without adding output bytes. The fix adds a **20,000-block limit shared across all extracted files in one archive**, also used by standalone preflight. A bounded 100,005-byte fixture proves that 20,000 empty stored blocks pass and the 20,001st fails; two separate 10,000-block streams exhaust the same shared budget and the next block fails. This ceiling also bounds repeated dynamic-Huffman reconstruction and comfortably covers roughly 4,097 maximum-size stored DEFLATE blocks for a 256 MiB entry. The supported limit is published in the compatibility documentation.
+
+The new preflight is an original implementation of the [RFC 1951](https://www.rfc-editor.org/rfc/rfc1951) format's length accounting; it does not expand audio or duplicate an unbounded output buffer. These are local code/fuzz results. Native Audacity verification is still required in the upcoming combined CI gate; it was not rerun locally.

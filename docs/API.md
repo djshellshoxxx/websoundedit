@@ -380,4 +380,6 @@ const audacity = await websoundedit.exportAudacity('aup3', {download: false});
 
 The pure `api.js` bundle additionally exports `processRack`, `processRackEffect`, `createRackEffect`, `normalizeRackChain`, `detectKey`, `manualKey`, `keyColor`, `normalizeMetadata`, `metadataSupport`, `parseMidiFile`, `encodeMidiFile`, and `renderMidiSequence`. MIDI note-file functions work without hardware permissions. The browser sampler and controller have no automatic device access.
 
+`encodeMidiFile(sequence)` preserves source track indices 0–63, using format 1 when separate tracks are needed. Timings are quantized to 960 PPQ at 120 BPM. Nested overlapping notes with the same pitch and channel within one track are rejected because their note-offs cannot preserve voice identity under FIFO pairing; put those notes on separate source tracks. Ordinary FIFO overlaps and simultaneous starts remain supported.
+
 For native project conversion from source modules, `exportAudacity(portableProject,{format:'aup3'|'aup'})` returns `{bytes,mime,ext,warnings}`. `importAudacity(bytes,{name,files})` returns `{project,warnings}`, where `files` optionally maps relative filenames to legacy AU block bytes. The legacy export is a ZIP with a real `.aup` and its `_data` folder. See [interoperability boundaries](AUDACITY.md) before claiming arbitrary Audacity project compatibility.

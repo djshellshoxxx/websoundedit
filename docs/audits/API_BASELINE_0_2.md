@@ -35,3 +35,18 @@ The public browser's follow-up project-export interaction encountered CDP timeou
 Run `node scripts/audit-api-baseline.mjs` from the repository. It writes `test-results/audits/api-baseline.json` and prints the seed, case count and observations. The script uses synthetic tiny inputs, random per-run credentials and local loopback requests; credentials are never recorded. After the fixes, the same probe should no longer report the finding IDs, and dedicated regression tests must enforce the corrected behavior.
 
 Status: baseline audit complete; corrections pending the combined baseline fix stage.
+
+## Correction verification
+
+The original observations above are preserved. The correction stage added aggregate HTTP admission (8 jobs, 512 MiB retained bodies/responses), bounded JSON traversal/expansion, one cached native capability probe, and cancellation of abandoned queued jobs. Admission remains held until both processing and the response finish, including slow readers. Byte/job options are validated. If an operation completes but its response cannot fit, the error explicitly includes `operationCompleted:true`; clients must inspect state before retrying rather than assuming a rollback.
+
+Worker sends now release failed entries, terminal errors reject queued/future commands, and disposal terminates the owned worker. Both client and worker cap pending jobs at 32 and estimate queued message data before sending/accepting. This is an admission estimate, not a claim about total browser heap use. Provided non-object parameters are rejected consistently instead of being replaced with an empty object.
+
+Executed correction evidence:
+
+- Existing API/CLI/native codec tests: **7 passed**.
+- New worker/admission/cancellation/JSON tests: **8 passed**.
+- Original seeded API audit: **1,210 cases passed, no finding IDs reported**. The 25-request blocked-job probe accepted 8 and rejected 17 immediately; failed worker sends left zero entries; post-failure commands rejected promptly.
+- `git diff --check`: passed.
+
+Raw correction output is retained in `evidence/api-baseline-fixed.json`. Full integration and browser verification remain release gates.

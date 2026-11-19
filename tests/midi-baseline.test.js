@@ -12,6 +12,23 @@ test('MIDI export preserves overlapping same-pitch notes on independent source t
   const actual = parseMidiFile(encodeMidiFile({ version: 1, notes })).notes;
   const order = entries => [...entries].sort((a, b) => a.start - b.start || b.velocity - a.velocity);
   assert.deepEqual(order(actual), order(notes));
+  const sparse = parseMidiFile(encodeMidiFile({ version: 1, notes: [{ ...notes[0], track: 63 }] }));
+  assert.equal(sparse.notes[0].track, 63);
+  assert.throws(() => encodeMidiFile({ version: 1, notes: [{ ...notes[0], track: 64 }] }), /source track/);
+  assert.throws(() => encodeMidiFile({ version: 1, notes: [{ ...notes[0], track: -1 }] }), /source track/);
+});
+
+test('MIDI export rejects ambiguous same-track nested notes while retaining FIFO and simultaneous starts', () => {
+  const first = { note: 60, velocity: 100, channel: 0, track: 0, start: 0, duration: 2 };
+  const nested = { ...first, velocity: 80, start: 1, duration: .5 };
+  assert.throws(() => encodeMidiFile({ version: 1, notes: [first, nested] }), /nested overlapping/);
+  const fifo = { version: 1, notes: [{ ...first, duration: 1.5 }, { ...nested, duration: 1 }] };
+  const parsed = parseMidiFile(encodeMidiFile(fifo));
+  assert.deepEqual(parsed.notes, fifo.notes);
+  assert.deepEqual(parseMidiFile(encodeMidiFile(parsed)).notes, parsed.notes);
+  const simultaneous = { version: 1, notes: [first, { ...nested, start: 0 }] };
+  const byVelocity = notes => [...notes].sort((a, b) => a.velocity - b.velocity);
+  assert.deepEqual(byVelocity(parseMidiFile(encodeMidiFile(simultaneous)).notes), byVelocity(simultaneous.notes));
 });
 
 function random(seed) {

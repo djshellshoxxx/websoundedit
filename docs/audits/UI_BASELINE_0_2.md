@@ -2,7 +2,7 @@
 
 Date: 19 November 2026. Runtime under review: published `0.2.0`, release commit `5906ba639d5c56e6d64a6c0eb64a8f469fc09d72`. The root agent confirmed the live BETA 0.2 badge, three demo tracks and exact `app-75ZGK-o6.js` asset before this audit began. The local planning checkout was `cbf5175119f61c34beed0fd06bb713bc2396c994`; beta runtime implementation had not started.
 
-Status: baseline observations recorded; **runtime fixes are pending the coordinated fix stage**. New failing regressions remain active. This report does not claim that all UI behavior has been exercised after publication.
+Status: baseline observations and original failure counts are preserved below. **Coordinated fix-stage results are appended at the end.** This report does not claim that all UI behavior has been exercised after publication.
 
 ## Executed evidence
 
@@ -91,3 +91,24 @@ No physical MIDI device, actual microphone capture, surround hardware or long-du
 1. Repair UI-MIDI-001 and UI-REC-002 with their active assertions intact.
 2. Execute the new browser regressions and the existing UI suite in CI; confirm or dismiss the two review candidates using those results.
 3. Record fix commits, final counts and any remaining limitations in the final beta verification record.
+
+## Coordinated fix-stage results
+
+The root agent authorized fixes after collecting every baseline lane. The changes below are implementation fixes to the published behavior; no beta feature was introduced in this stage.
+
+- **UI-MIDI-001 repaired:** `validateMidiSequence()` preserves and bounds source track IDs to 0–63. `encodeMidiFile()` retains track separation, uses format 1 when more than one track is needed and keeps existing format-0 output for single-track sequences. Note timing still uses the existing fixed-tempo seconds conversion. The regression preserves both overlapping durations and track IDs; additional assertions cover sparse track 63 and invalid IDs. Independent review also identified nested same-pitch/channel notes within one track: MIDI note-offs cannot distinguish those voices under the parser's FIFO pairing. Export now rejects that ambiguous case with a clear instruction to use separate source tracks. FIFO overlaps and simultaneous-start notes retain their timing and velocity, with a dedicated regression.
+- **UI-REC-002 repaired:** microphone capture now keeps a session object for each pending/active/finishing take. Cancellation stops late streams, rejects stale finalization, and does not release a newer recording's stream. Project replacement, demo replacement and page teardown cancel pending/active/decoding sessions. A normal completed take can finish decoding while a new take records. Stop can also cancel a permission request that has not yet resolved.
+- **UI-STATE-C01 addressed from direct code evidence:** boot resets rejected cached settings to defaults, then applies/persists the validated defaults. `shortcutFor()` also returns the action's default when a cached value is not a usable string. The browser regression remains pending CI execution.
+- **UI-INPUT-C02 addressed from direct code evidence:** original Tools inputs restore the authoritative accepted value on change/blur. An ignored out-of-range number cannot remain displayed while Apply uses a different value. The browser regression remains pending CI execution.
+
+Executed after the fixes:
+
+```sh
+node --check src/app.js
+node --check src/effects-ui.js
+node --test tests/midi.test.js tests/midi-baseline.test.js tests/rack-config.test.js tests/ui-baseline.test.js
+```
+
+**20 tests passed, 0 failed, 0 skipped, 0 todo.** The unchanged 8,192-case deterministic campaign passed again with the same acceptance/rejection counts. Both original failing regression assertions remain active and now pass. One additional device-free lifecycle test verifies that a finishing take cannot stop a newer recording, while later teardown prevents a stale decoded take from being inserted. The independent-review MIDI regression additionally covers the same-track ambiguity guard, FIFO re-export and simultaneous starts.
+
+The original Tools/settings fixes have syntax verification and targeted browser tests ready; this report does not call them browser-verified until CI executes those tests. No local browser launch was attempted, no physical device test was performed, and no deployment is implied by these local fix results.

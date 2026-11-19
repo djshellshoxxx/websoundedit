@@ -1,6 +1,6 @@
 # Audio baseline audit — published 0.2
 
-Date: 2026-11-19. Phase: **post-publication baseline; no runtime fixes applied**.
+Date: 2026-11-19. Initial phase: **post-publication baseline; no runtime fixes applied during the audit**. The original evidence is preserved below; authorized fix verification appears at the end.
 
 ## Source and execution evidence
 
@@ -74,3 +74,37 @@ node scripts/fuzz-audio.mjs --out=docs/audits/audio-baseline-fuzz.json
 ```
 
 The first command exits 0 on this baseline. The second and third exit 1 for the documented findings. Runtime fixes and beta feature implementation remain gated on completion of all baseline audit lanes.
+
+## Authorized fixes and verification
+
+After all baseline lanes were preserved in local commit `7096561` / remote commit `09d2c8e927c6078010a6490cebacd865ac4b2d39`, the coordinator authorized the baseline fixes. No beta features are included in this change.
+
+- **AUDIO-01:** replaced the repeated-group base64 regex with a bounded linear alphabet scan and terminal padding handling. The existing size and decoded-frame checks remain. The 30-second roundtrip now succeeds. Added malformed alphabet, misplaced padding, and wrong-length cases; rejection preserves the project. Independent review also identified a preexisting acceptance of nonzero unused padding bits. A final sextet check now rejects these noncanonical encodings for both one and two padding characters; two additional atomic-rejection tests cover them.
+- **AUDIO-02:** introduced a shared suffix helper that keeps generated names within 200 UTF-16 code units without splitting a surrogate pair. Duplicate clip/track, split, and loop name paths use it. Explicit user names retain the existing validation. The maximum-length duplicate/split roundtrips now succeed; an additional case covers generated track/loop names and Unicode boundaries.
+- **AUDIO-03:** trim now selects its target track and clip before creating the new selection range. The explicit-other-clip regression passes its selected IDs, frame count, placement, and exact undo checks.
+
+Verification on 2026-11-19:
+
+| Check | Fixed result |
+| --- | ---: |
+| Original eight suites plus focused regressions | **85 passed, 0 failed** |
+| Engine commands using the same seeds and corpus sizes | **2,400 completed, 0 failures** |
+| Accepted commands / state checks | 1,766 passed |
+| Invalid commands / atomicity checks | 634 passed |
+| Unexpected rejections | 0 |
+| Undo/redo roundtrips | 142 passed |
+| Small portable project roundtrips | 113 passed |
+| DSP cases | 600 passed |
+| WAV roundtrips | 1,800 passed |
+| WAV mutations | 1,800 checked: 1,411 rejected and 389 valid accepted results |
+
+The initial fixed run revealed an overly strict test oracle: a selection end expressed as `0.009625000000000002` loaded as `0.009625`, representing the same sample boundary. The portable-roundtrip comparison now compares selection start/end **frame indices exactly**, with all other fields and PCM still compared exactly. This is a test correction, not an additional runtime change. No sample or selection extent changed. The fixed counts differ from the historical counts because the harness no longer resets editors after the repaired invariants fail.
+
+The baseline JSON above is unchanged. The successful fixed-run evidence is in [audio-baseline-fixed-fuzz.json](audio-baseline-fixed-fuzz.json).
+
+```sh
+node --test tests/baseline-audio-regressions.test.js tests/engine.test.js tests/creative-engine.test.js tests/dsp.test.js tests/rack-dsp.test.js tests/key-detection.test.js tests/wav.test.js tests/codecs.test.js tests/playback.test.js
+node scripts/fuzz-audio.mjs --out=docs/audits/audio-baseline-fixed-fuzz.json
+```
+
+Both commands exit 0. The four original regression assertions remain active, alongside four additional malformed-input, canonical-padding, and generated-name boundary tests. No runtime changes outside `src/engine.js` were needed for these three findings.

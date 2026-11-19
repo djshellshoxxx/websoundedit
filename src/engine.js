@@ -25,6 +25,13 @@ function name(value, fallback = 'Untitled') {
   if (typeof value !== 'string' || !value.trim() || value.length > 200) fail('Names must contain 1–200 characters.');
   return value.trim();
 }
+function suffixedName(value, suffix) {
+  let prefix = value.slice(0, 200 - suffix.length);
+  // Avoid cutting a supplementary Unicode character between its UTF-16 halves.
+  const last = prefix.charCodeAt(prefix.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) prefix = prefix.slice(0, -1);
+  return prefix + suffix;
+}
 function id(prefix) { return `${prefix}_${globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`}`; }
 function audioDuration(audio) { return audio.channels[0].length / audio.sampleRate; }
 function checkAudio(audio, clone = false, { allowEmpty = false } = {}) {
@@ -85,8 +92,19 @@ function bytesToBase64(bytes) {
   return btoa(binary);
 }
 function base64ToBytes(text) {
-  if (typeof text !== 'string' || text.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(text)) fail('Project contains invalid base64 PCM.');
+  if (typeof text !== 'string' || text.length % 4 !== 0) fail('Project contains invalid base64 PCM.');
   if (text.length > Math.ceil(LIMITS.projectBytes * 4 / 3) + 4) fail('Project PCM exceeds memory limit.', 'RESOURCE_LIMIT');
+  const padding = text.endsWith('==') ? 2 : text.endsWith('=') ? 1 : 0;
+  // A linear scan has constant stack use even for a full-length session.
+  for (let i = 0; i < text.length - padding; i++) {
+    const code = text.charCodeAt(i);
+    if (!((code >= 65 && code <= 90) || (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || code === 43 || code === 47)) fail('Project contains invalid base64 PCM.');
+  }
+  if (padding) {
+    const code = text.charCodeAt(text.length - padding - 1);
+    const sextet = code >= 65 && code <= 90 ? code - 65 : code >= 97 && code <= 122 ? code - 71 : code >= 48 && code <= 57 ? code + 4 : code === 43 ? 62 : 63;
+    if (sextet & (padding === 2 ? 15 : 3)) fail('Project contains noncanonical base64 PCM padding.');
+  }
   if (typeof Buffer !== 'undefined') return Uint8Array.from(Buffer.from(text, 'base64'));
   const raw = atob(text), bytes = new Uint8Array(raw.length); for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i); return bytes;
 }
@@ -411,8 +429,8 @@ export class AudioEditor {
       case 'clip.getAudio': { const { clip } = this._clip(params.clipId, params.trackId); return { sampleRate: clip.audio.sampleRate, channels: clip.audio.channels.map(c => c.slice()) }; }
       case 'clip.update': { const { track, clip } = this._clip(params.clipId, params.trackId); if (own(params, 'name')) clip.name = name(params.name); if (own(params, 'start')) clip.start = number(params.start, undefined, 0, LIMITS.timelineSeconds, 'Clip start'); if (params.destinationTrackId && params.destinationTrackId !== track.id) { const destination = this._track(params.destinationTrackId); track.clips = track.clips.filter(c => c.id !== clip.id); destination.clips.push(clip); this._select(destination, clip); if (p.selection?.clipId === clip.id) p.selection.trackId = destination.id; return clipInfo(clip, destination.id); } return clipInfo(clip, track.id); }
       case 'clip.remove': { const { track, clip } = this._clip(params.clipId, params.trackId); track.clips = track.clips.filter(c => c.id !== clip.id); this._repairSelection(); return true; }
-      case 'clip.duplicate': { const { track, clip } = this._clip(params.clipId, params.trackId); const dest = params.newTrack ? this._addTrack({ name: `${track.name} copy` }) : track; const duplicate = { ...clip, id: id('clip'), name: `${clip.name} copy`, start: number(params.start, clip.start + audioDuration(clip.audio), 0, LIMITS.timelineSeconds, 'Clip start') }; dest.clips.push(duplicate); this._select(dest, duplicate); return clipInfo(duplicate, dest.id); }
-      case 'clip.split': { const { track, clip } = this._clip(params.clipId, params.trackId); const at = number(params.at, p.selection?.clipId === clip.id ? p.selection.start : undefined, 0, audioDuration(clip.audio), 'Split position'); const frame = Math.round(at * clip.audio.sampleRate); if (frame <= 0 || frame >= clip.audio.channels[0].length) fail('Split position must be inside the clip.'); const cut = frame / clip.audio.sampleRate; const right = { ...clip, id: id('clip'), name: `${clip.name} · B`, start: clip.start + cut, keyAnalysis: null, audio: portion(clip.audio, cut, audioDuration(clip.audio)) }; clip.audio = portion(clip.audio, 0, cut); clip.keyAnalysis = null; track.clips.splice(track.clips.indexOf(clip) + 1, 0, right); this._select(track, right); return { left: clipInfo(clip, track.id), right: clipInfo(right, track.id) }; }
+      case 'clip.duplicate': { const { track, clip } = this._clip(params.clipId, params.trackId); const dest = params.newTrack ? this._addTrack({ name: suffixedName(track.name, ' copy') }) : track; const duplicate = { ...clip, id: id('clip'), name: suffixedName(clip.name, ' copy'), start: number(params.start, clip.start + audioDuration(clip.audio), 0, LIMITS.timelineSeconds, 'Clip start') }; dest.clips.push(duplicate); this._select(dest, duplicate); return clipInfo(duplicate, dest.id); }
+      case 'clip.split': { const { track, clip } = this._clip(params.clipId, params.trackId); const at = number(params.at, p.selection?.clipId === clip.id ? p.selection.start : undefined, 0, audioDuration(clip.audio), 'Split position'); const frame = Math.round(at * clip.audio.sampleRate); if (frame <= 0 || frame >= clip.audio.channels[0].length) fail('Split position must be inside the clip.'); const cut = frame / clip.audio.sampleRate; const right = { ...clip, id: id('clip'), name: suffixedName(clip.name, ' · B'), start: clip.start + cut, keyAnalysis: null, audio: portion(clip.audio, cut, audioDuration(clip.audio)) }; clip.audio = portion(clip.audio, 0, cut); clip.keyAnalysis = null; track.clips.splice(track.clips.indexOf(clip) + 1, 0, right); this._select(track, right); return { left: clipInfo(clip, track.id), right: clipInfo(right, track.id) }; }
       case 'selection.set': {
         const { track, clip } = this._clip(params.clipId, params.trackId); const duration = audioDuration(clip.audio);
         const start = Math.max(0, Math.min(duration, number(params.start, undefined, -LIMITS.timelineSeconds, LIMITS.timelineSeconds, 'Selection start'))), end = Math.max(0, Math.min(duration, number(params.end, undefined, -LIMITS.timelineSeconds, LIMITS.timelineSeconds, 'Selection end')));
@@ -423,7 +441,7 @@ export class AudioEditor {
       case 'edit.copy': { const target = this._target(params); this.clipboard = this._selectedAudio(target); return { duration: audioDuration(this.clipboard), channels: this.clipboard.channels.length }; }
       case 'edit.cut':
       case 'edit.delete': { const target = this._target(params, { requireSelection: true }); if (target.channels !== 'all') fail('Cut and delete require All channels; use Silence for one channel.'); if (method === 'edit.cut') this.clipboard = this._selectedAudio(target); const audio = spliceAudio(target.clip.audio, target.start, target.end, null); if (!audio.channels[0].length) { target.track.clips = target.track.clips.filter(c => c.id !== target.clip.id); } else { target.clip.audio = audio; target.clip.keyAnalysis = null; } p.selection = null; this._repairSelection(); return true; }
-      case 'edit.trim': { const target = this._target(params, { requireSelection: true }); if (target.channels !== 'all') fail('Trim requires All channels.'); target.clip.audio = this._selectedAudio(target); target.clip.keyAnalysis = null; if (params.keepTimelinePosition !== false) target.clip.start += target.start; p.selection = { trackId: target.track.id, clipId: target.clip.id, start: 0, end: audioDuration(target.clip.audio), channels: 'all' }; return clipInfo(target.clip, target.track.id); }
+      case 'edit.trim': { const target = this._target(params, { requireSelection: true }); if (target.channels !== 'all') fail('Trim requires All channels.'); target.clip.audio = this._selectedAudio(target); target.clip.keyAnalysis = null; if (params.keepTimelinePosition !== false) target.clip.start += target.start; this._select(target.track, target.clip); p.selection = { trackId: target.track.id, clipId: target.clip.id, start: 0, end: audioDuration(target.clip.audio), channels: 'all' }; return clipInfo(target.clip, target.track.id); }
       case 'edit.paste': {
         if (!this.clipboard) fail('The internal clipboard is empty.', 'EMPTY_CLIPBOARD');
         if (!p.selectedClipId && !params.clipId) return this._addClip({ audio: this.clipboard, trackId: params.trackId || p.selectedTrackId || undefined, name: 'Pasted audio', start: params.start || 0 });
@@ -450,7 +468,7 @@ export class AudioEditor {
       }
       case 'markers.add': { if (p.markers.length >= 1000) fail('Marker limit reached.'); const marker = { id: id('marker'), name: name(params.name, `Marker ${p.markers.length + 1}`), time: number(params.time, 0, 0, LIMITS.timelineSeconds, 'Marker time') }; p.markers.push(marker); p.markers.sort((a, b) => a.time - b.time); return { ...marker }; }
       case 'markers.remove': { const index = p.markers.findIndex(m => m.id === params.markerId); if (index < 0) fail('Marker not found.', 'NOT_FOUND'); p.markers.splice(index, 1); return true; }
-      case 'loop.create': { const target = this._target(params); const audio = checkAudio(await processAudio(this._selectedAudio(target), 'loop', { repeats: params.repeats ?? 4, crossfadeMs: params.crossfadeMs ?? 5 })); return this._addClip({ audio, trackId: params.newTrack === false ? target.track.id : undefined, name: params.name || `${target.clip.name} loop`, start: params.start ?? target.clip.start + target.start }); }
+      case 'loop.create': { const target = this._target(params); const audio = checkAudio(await processAudio(this._selectedAudio(target), 'loop', { repeats: params.repeats ?? 4, crossfadeMs: params.crossfadeMs ?? 5 })); return this._addClip({ audio, trackId: params.newTrack === false ? target.track.id : undefined, name: params.name || suffixedName(target.clip.name, ' loop'), start: params.start ?? target.clip.start + target.start }); }
       case 'recipe.run': {
         const steps = params.commands || params.steps || params.recipe?.commands || params.recipe?.steps || params.recipe;
         if (!Array.isArray(steps) || !steps.length || steps.length > LIMITS.recipeCommands) fail('A recipe requires 1–256 commands.');

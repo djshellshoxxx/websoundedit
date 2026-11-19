@@ -24,6 +24,15 @@ function signal(rng, channels=2, frames=128) {
   return {sampleRate:8000,channels:Array.from({length:channels},(_,c)=>Float32Array.from({length:frames},(_,i)=>
     Math.sin(i*(.09+c*.017))*.25+(rng()-.5)*.03))};
 }
+function comparableProject(project) {
+  // Loading snaps a range to sample frames. Floating-point addition can spell
+  // the same boundary differently, so compare the selected indices exactly.
+  if (!project.selection) return project;
+  const selection=project.selection;
+  const clip=project.tracks.flatMap(t=>t.clips).find(c=>c.id===selection.clipId);
+  assert.ok(clip,'saved selection refers to an existing clip');
+  return {...project,selection:{...selection,start:Math.round(selection.start*clip.audio.sampleRate),end:Math.round(selection.end*clip.audio.sampleRate)}};
+}
 function assertState(editor) {
   const state=editor.getState(), ids=new Set();
   assert.ok(state.tracks.length<=LIMITS.tracks);
@@ -116,7 +125,7 @@ for(const seed of seeds) {
           if(step%17===0) {
             const portable=await editor.execute('project.save'), restored=new AudioEditor();
             await restored.execute('project.load',{project:portable});
-            assert.deepEqual(await restored.execute('project.save'),portable,'portable roundtrip changed project');
+            assert.deepEqual(comparableProject(await restored.execute('project.save')),comparableProject(portable),'portable roundtrip changed project');
             report.counts.projectRoundTrips++;
           }
         }

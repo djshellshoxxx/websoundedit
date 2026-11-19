@@ -1,0 +1,17 @@
+{
+  "baseline": "5906ba639d5c56e6d64a6c0eb64a8f469fc09d72",
+  "seed": 1374429222,
+  "node": "v24.22.3",
+  "startedAt": "2026-11-19T10:59:29.452Z",
+  "cases": 1210,
+  "findings": [],
+  "queueProbe": {
+    "concurrentRequests": 25,
+    "accepted": 8,
+    "rejected": 17,
+    "maxProbeBodyBytes": 27000
+  },
+  "workerPendingAfterCloneFailure": 0,
+  "commandAfterWorkerFailure": "rejected",
+  "finishedAt": "2026-11-19T10:59:31.109Z"
+}
