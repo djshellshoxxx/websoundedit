@@ -7,9 +7,11 @@ runs:
       with:
         node-version: '24'
         cache: npm
-    - shell: bash
+    - id: dependencies
+      shell: bash
       run: npm ci --no-audit --no-fund
     - name: Install audio verification dependencies
+      id: audio-dependencies
       shell: bash
       run: |
         if [ -f /etc/apt/apt-mirrors.txt ]; then
@@ -18,6 +20,7 @@ runs:
         sudo apt-get -o Acquire::Retries=3 update -qq
         sudo apt-get install -y --no-install-recommends ffmpeg audacity xvfb xauth
     - name: Install pinned native REAPER
+      id: reaper-runtime
       shell: bash
       run: |
         curl --fail --location --retry 3 -o /tmp/reaper.tar.xz https://www.reaper.fm/files/7.x/reaper786_linux_x86_64.tar.xz
@@ -26,32 +29,39 @@ runs:
         tar -xf /tmp/reaper.tar.xz -C /tmp/websoundedit-reaper --strip-components=1
         echo 'REAPER_BIN=/tmp/websoundedit-reaper/REAPER/reaper' >> "$GITHUB_ENV"
     - name: Unit and integration tests
+      if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.audio-dependencies.outcome == 'success' }}
       shell: bash
       run: npm test
     - name: Dependency security audit
+      if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
       shell: bash
       run: |
         mkdir -p test-results/audits
         npm audit --audit-level=moderate --json > test-results/audits/dependencies.json
     - name: Deterministic API, macro, parser and audio fuzz gates
+      if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.audio-dependencies.outcome == 'success' }}
       shell: bash
       run: npm run test:fuzz
     - name: Record bounded DSP performance
+      if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
       shell: bash
       run: node scripts/benchmark-live-dsp.mjs --out=test-results/audits/performance.json
     - name: Build and verify the DOM-free SDK
       id: build
+      if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
       shell: bash
       run: npm run build
     - name: Install Chromium
       id: chromium
+      if: ${{ !cancelled() && steps.build.outcome == 'success' }}
       shell: bash
       run: npx playwright install --with-deps chromium
     - name: Native Audacity open, render, save and reimport
+      if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.audio-dependencies.outcome == 'success' }}
       shell: bash
       run: xvfb-run -a node scripts/verify-audacity.mjs
     - name: Native REAPER open, render, save and reimport
-      if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+      if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.audio-dependencies.outcome == 'success' && steps.reaper-runtime.outcome == 'success' }}
       shell: bash
       run: xvfb-run -a node scripts/verify-reaper.mjs test-results/reaper-native
     - name: Browser editing, worklets, capture, codecs, accessibility and help screenshots

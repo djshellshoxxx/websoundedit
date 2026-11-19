@@ -56,6 +56,8 @@ Dependency auditing runs on the exact lockfile in CI. Audio/browser/code review 
 
 The verified workflow runs native Audacity and pinned REAPER 7.86 with independent fixtures and comparisons of actual rendered samples. Chromium tests exercise the published-style bundle, actual AudioWorklets, synthetic acquired input, OPFS recording, pause/resume, range export/import, loop layers, UI editing, metadata, codecs and layout choices. Help images are captured from the actual UI with callout locations measured from DOM geometry; they are visually reviewed before being added to the guide.
 
+Independent checks continue when their required dependencies are ready even if another check has failed. The failed result remains a failed job, and the Pages artifact remains success-only. This collects the available evidence without weakening the publication gate.
+
 The main publication job repeats the same required gates, deploys Pages, checks `build.json` against the exact deployed commit and completes a real browser edit. Only then does it create the 1.0 beta prerelease and attach archives/checksums. Final run IDs, counts, commit identity and screenshots are added here after verification.
 
 ## Practical limits
