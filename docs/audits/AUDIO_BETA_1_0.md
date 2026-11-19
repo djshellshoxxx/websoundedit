@@ -74,7 +74,7 @@ Step/linear automation uses the audio timeline. An explicit `live.param.set` tim
 
 Input PCM subscriptions supply bounded interleaved chunks with sequence, starting frame, sample rate, layout, channel count and explicit dropped-frame accounting. Slow subscribers cannot create an unbounded queue. Stopping input deactivates subscriptions and closes every acquired track.
 
-Loop capture uses AudioContext sample-frame boundaries with beat/bar or immediate scheduling. A bounded worklet buffer begins looping at the captured end boundary before main-thread project insertion finishes. Each completed capture creates a new editable track with independent play, stop, mute and remove controls. A late stop request cannot claim to remove frames that were already captured; the acknowledged boundary is the actual captured frame boundary.
+Loop capture uses AudioContext sample-frame boundaries with beat/bar or immediate scheduling. Input/track capture has a direct worklet transition at the captured end boundary. Master-source capture detaches its input before connecting the loop back to the master, avoiding a feedback graph cycle; this handoff can introduce a short main-thread-dependent transition gap while the loop retains its scheduled audio-clock phase. Loop state reports the transition type and observed handoff delay in frames/seconds. Each completed capture creates a new editable track with independent play, stop, mute and remove controls. A late stop request cannot claim to remove frames that were already captured; the acknowledged boundary is the actual captured frame boundary.
 
 Project replacement/reset stops transport, input, loops, notes and capture resources. Generation checks also cover delayed worklet initialization and delayed recording taps. A late initialization cannot revive a previous project or dispose a newer graph. `resetProject({preserveSettings:true})` supports output-layout changes: playback stops, graph channel counts rebuild lazily, and rack definitions remain available. Loading live settings replaces stale stopped graphs and never restores active device permission or recording state.
 
@@ -176,3 +176,26 @@ node --test tests/codec-budget.test.js tests/realtime-dsp.test.js \
 ```
 
 This includes the capability-limit regression added after the 21-test codec run. No additional hardware or browser execution is implied by these Node results.
+
+## Browser CI 44534120888: concrete corrections
+
+The first combined production-browser run reported **39 passed, 16 failed, one skipped**, after the unit/fuzz/build and native Audacity/REAPER gates passed. The failure log is preserved in `test-results/audits/ci-44534120888.log`; browser traces were downloaded under the matching audit directory. The source fixes below retain the meaningful browser assertions. Their next complete browser execution remains a CI release gate.
+
+| Reproduced cause | Correction and regression |
+| --- | --- |
+| Recording worker called `.map` on a manifest's numeric `channels`, failing start/pause/stop replies. | Transfer PCM buffers only when `channels` is an actual array. A harness imports the actual worker module, applies structured-clone transfers and completes start/append/pause/resume/stop/range/recover/list/delete with exact stereo PCM. |
+| Pinned FFmpeg core 0.12.10 leaves `ret` at `-1` for successful `ffprobe`, despite producing a valid size report. | Accept only `0`/`-1` with a freshly truncated, strictly numeric report and the existing size threshold. Actual pinned WASM tests cover success, oversized output, missing input and failed probe status. A real read-only stale-report fixture proves a failed truncation stops before probing or reading the source file. |
+| Loop boundaries were chosen before asynchronous graph/worklet preparation. A late worklet lost 64 samples from the requested 6,000-frame capture. | Arm after preparation. If the processor still receives a late boundary, shift the full requested period to the current frame or next quantized grid point and acknowledge its actual bounds. The actual processor harness reproduces a 64-frame-late start, checks all 6,000 captured samples and verifies repeat phase. |
+| Master capture output was routed back to its own source while that source remained attached. | Keep master capture output off the live master until completion; detach the capture source before connecting playback. Actual `CaptureTap` connectivity is checked before and after handoff. Input capture preserves its direct audio-clock transition. |
+
+The cycle correction follows the [Web Audio rendering algorithm](https://www.w3.org/TR/webaudio/#rendering-loop): cycles remaining after delay-node processing are muted. The chosen master handoff adds no hidden delay effect and does not restart or shift the loop anchor. Its narrow limit is that the audible master-capture transition waits for main-thread delivery/connection; the delay is not a hardware-independent constant. Completed loop state exposes `transition`, `transitionDelayFrames` and `transitionDelaySeconds`, and armed capture state exposes `transition`. Input/track captures use `audio-clock`; master capture uses `main-thread`.
+
+Focused verification after these corrections: **35 passed, zero failed, zero skipped**:
+
+```sh
+node --test tests/codec-budget.test.js tests/capture-worklet.test.js \
+  tests/recording-worker.test.js tests/recording-store.test.js \
+  tests/live-audio.test.js
+```
+
+These are direct module/WASM executions with explicit synthetic I/O. The production-browser loop test additionally retains its precise duration assertion and now checks exactly 6,000 frames, non-silent captured audio and the reported master transition. No local browser or physical-device run is represented by the Node results.

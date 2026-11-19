@@ -133,4 +133,24 @@ node tests/fuzz/interchange-baseline.mjs --out docs/audits/INTERCHANGE_BASELINE_
 
 Independent review identified a remaining compressed-work case: many empty DEFLATE blocks can consume parsing work without adding output bytes. The fix adds a **20,000-block limit shared across all extracted files in one archive**, also used by standalone preflight. A bounded 100,005-byte fixture proves that 20,000 empty stored blocks pass and the 20,001st fails; two separate 10,000-block streams exhaust the same shared budget and the next block fails. This ceiling also bounds repeated dynamic-Huffman reconstruction and comfortably covers roughly 4,097 maximum-size stored DEFLATE blocks for a 256 MiB entry. The supported limit is published in the compatibility documentation.
 
-The new preflight is an original implementation of the [RFC 1951](https://www.rfc-editor.org/rfc/rfc1951) format's length accounting; it does not expand audio or duplicate an unbounded output buffer. These are local code/fuzz results. Native Audacity verification is still required in the upcoming combined CI gate; it was not rerun locally.
+The new preflight is an original implementation of the [RFC 1951](https://www.rfc-editor.org/rfc/rfc1951) format's length accounting; it does not expand audio or duplicate an unbounded output buffer. At this fix-stage checkpoint these were local code/fuzz results; native Audacity still required a subsequent combined CI gate. It was not rerun locally.
+
+## Native correction verification — 19 November 2026
+
+The expanded beta checkout passed the native Audacity gate in [Actions run 44534120888](https://github.com/djshellshoxxx/websoundedit/actions/runs/44534120888), job `135594938041`. Candidate head `517f7d33547dfa6fa3b2c83bd223bdca1b11fd4d` was tested as GitHub synthetic merge `887497fe5aada524565d24b5948dd4a872624227` into published baseline `5906ba639d5c56e6d64a6c0eb64a8f469fc09d72`. The merge and candidate trees were confirmed identical: `62f52485acf68a5efe0d763059f55d426991c5f7`.
+
+The runner used Ubuntu **24.04.5**, Node **v24.22.3** and packaged **Audacity 3.4.2+dfsg-1build4**. `test-results/native-audacity/report.json` reports `passed: true`; each of the three pipe-event logs records a clean native process exit, code **0**, no signal. No physical audio interface was used: native disk renders were compared sample by sample.
+
+| Case | Native render maximum difference | Native save/reimport maximum difference | Compared audio |
+| --- | ---: | ---: | --- |
+| Web AUP3 → native Audacity → Web | `2.9802322387695312e-8` | `2.9802322387695312e-8` | 72,000 stereo frames at 48 kHz |
+| Web legacy AUP/data → native Audacity AUP3 → Web | `2.9802322387695312e-8` | `2.9802322387695312e-8` | 72,000 stereo frames at 48 kHz |
+| Independent native project created from WAV → AUP3 → Web | Native render is the reference | `0` — exact | 48,000 stereo frames at 48 kHz |
+
+The fixtures retain overlapping clips split into native track lanes, native track/clip/label inspection, clip placement and original PCM checks, metadata checks, native saving and reimport. Tolerances remain `0.0002` for native WAV comparison and `0.000002` for modern/legacy reimport. The legacy case explicitly sets the blank native project to the matching **48 kHz** before `Import2`; that documented native-version prerequisite is not removed by the pass. All three import warning arrays were empty.
+
+The [evidence artifact](https://github.com/djshellshoxxx/websoundedit/actions/runs/44534120888/artifacts/14537633215) includes native projects, WAV renders, transcripts and pipe/process events. The native Audacity report SHA-256 is `154c486fb357270b244fcfbf911e2866149826dd8a77f0219197000aa360a441`; the complete artifact archive SHA-256 is `e4058ce4db0e0fc5d1fe82d8b750d5a05561e96ffbe95eb79ff21e6949d5e448`.
+
+The same checkout reran the **1,691-case** Audacity/archive/XML/SQLite corpus and its **six focused historical reproductions**, recording an empty `unexpected` array and an intact global prototype. All seven fuzz families, **316 unit/integration tests**, dependency auditing and the production/API build passed. The [REAPER native report](REAPER_BETA_1_0.md#full-native-gate--19-november-2026) records the separate successful eight-case, four-layout application gate.
+
+These results verify the corrected interchange implementation against the supported synthetic Audacity fixtures and tested application version. They do not claim native Audacity surround routing: 5.1/7.1 remains an explicit split-mono export with the documented limitations. The overall run subsequently failed browser checks (39 passed, 16 failed, one skipped), so it did not establish a passing beta release or deployment. Original baseline defects and initial/fixed corpus reports above remain preserved historical evidence.

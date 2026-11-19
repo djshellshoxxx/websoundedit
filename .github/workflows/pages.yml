@@ -50,4 +50,22 @@ jobs:
       - name: Publish 1.0 beta prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/publish-release.mjs
+        run: |
+          node scripts/publish-release.mjs
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/v1.0.0-beta.1" > artifacts/release.json
+      - name: Publish and verify the GitHub wiki
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/publish-wiki.mjs > artifacts/wiki-publication.json
+      - name: Save publication evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: publication-evidence
+          path: |
+            test-results/browser/published-*/
+            artifacts/release.json
+            artifacts/wiki-publication.json
+            artifacts/SHA256SUMS.txt
+            dist/build.json
+          retention-days: 30

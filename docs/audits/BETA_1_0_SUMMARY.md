@@ -1,6 +1,6 @@
 # WebSoundEdit 1.0 beta — verification and audit record
 
-Status: release candidate; final native/browser, screenshot and publication evidence is recorded below when those gates finish. The specification was written before implementation in [BETA_1_0.md](../specs/BETA_1_0.md).
+Status: release candidate. Native round trips, dependency auditing and the first full browser run have executed; concrete browser failures and screenshot annotation defects are being corrected before the final gate and publication. The specification was written before implementation in [BETA_1_0.md](../specs/BETA_1_0.md).
 
 ## Sequence and scope
 
@@ -12,7 +12,15 @@ Beta implementation was split between audio/runtime, interface/guidance, project
 
 At the first integrated feature checkpoint, **271 Node tests passed with zero failures or skips**. The post-review rerun passed **299/299 tests, zero skips**, including SDK composition, batch ownership across snapshot/execution/restore, import-layout declarations, integer query parsing, conversion resource limits and paused-transport manual ramps. Two additional independent findings were then reproduced and corrected: nested commands concealed by flat visual macro steps, and worker-message admission undercounting/getter execution. The consolidated local suite passed **316/316 tests with zero skips**, and all seven deterministic fuzz gates passed again. [Latest local evidence](BETA_1_0_LOCAL_FINAL.json) retains report paths and log hashes; final CI counts remain separate.
 
-The production Vite build and DOM-free `api.js` validation executed a real PCM edit, WAV round trip and interpreted typed macro. The first native REAPER 7.86 grammar probe passed in Actions run `44514197389`, leading to explicit parser corrections for track pan-law and item auto-fade fields. Full native open/render/save/reimport remains a separate gate.
+The production Vite build and DOM-free `api.js` validation executed a real PCM edit, WAV round trip and interpreted typed macro. The first native REAPER 7.86 grammar probe passed in Actions run `44514197389`, leading to explicit parser corrections for track pan-law and item auto-fade fields. The full native open/render/save/reimport gate subsequently passed in run `44534120888`, including mono, stereo, 5.1 and 7.1 cases.
+
+### First complete CI checkpoint
+
+[Run 44534120888](https://github.com/djshellshoxxx/websoundedit/actions/runs/44534120888) executed on 19 November 2026 against candidate `517f7d33547dfa6fa3b2c83bd223bdca1b11fd4d`. Its pull-request merge checkout `887497fe5aada524565d24b5948dd4a872624227` has the same tree, `62f52485acf68a5efe0d763059f55d426991c5f7`. All 316 Node tests, seven fuzz families, production build/SDK, dependency audit and both native DAW gates passed. The dependency report contains zero advisories at every severity. Native REAPER's worst rendered-sample difference across eight cases was `6.05359673500061e-8`; native Audacity's modern/legacy difference was at most `2.9802322387695312e-8`, and its independent fixture was exact.
+
+The browser result was **39 passed, 16 failed, one intentionally skipped live-deployment check**. The failed job remains failed. Failures identified a browser codec size-probe issue, a recording-worker manifest/PCM distinction, late-armed loop boundaries, live rack integration and an ambiguous test selector. All 22 annotated UI images were captured, but visual review found overflowing callout text and a mobile Options checkbox layout defect. These findings require correction and a fresh browser/capture run before release. [The machine-readable checkpoint](BETA_1_0_CI_CHECKPOINT.json) preserves exact results and artifact identity, including the failures.
+
+The corrections were implemented and independently reviewed. Review reproduced two additional error paths: a read-only stale size report could authorize a premature file read, and the real master-capture wiring formed a circular graph omitted by the synthetic tap fixture. Strict report truncation and an acyclic capture/playback handoff address them. Master capture reports its observed initial handoff delay while retaining loop phase; input/track capture retains its direct audio-clock transition. The consolidated correction checkpoint passed **333 Node tests with zero skips**, all seven fuzz suites and the production build/SDK. Eleven publisher tests use local Git and fake public responses; 35 focused audio tests include the actual pinned WASM, recording worker, capture processor and routing topology. [Local correction evidence](BETA_1_0_CI_CORRECTIONS_LOCAL.json) records source and log hashes. These local results do not replace the required fresh browser/native run and screenshot review.
 
 ### Deterministic fuzz families
 
@@ -51,7 +59,7 @@ The companion requires a Bearer token, exact loopback Host and an explicitly all
 
 DAW importers validate archive paths, entry overlap, sizes, CRCs, expansion budgets, XML depth/attributes, SQLite table schemas, PCM ranges and media aliases. They do not fetch missing media from network addresses or arbitrary local paths. Unsupported semantic constructs are rejected or explained; file extensions do not masquerade JSON as native projects.
 
-Dependency auditing runs on the exact lockfile in CI. Audio/browser/code review is a bounded audit, not a proof that no defect can exist.
+Dependency auditing runs on the exact lockfile in CI; the first complete beta run reported zero vulnerabilities. Audio/browser/code review is a bounded audit, not a proof that no defect can exist.
 
 ## Native and browser release gates
 
@@ -59,7 +67,7 @@ The verified workflow runs native Audacity and pinned REAPER 7.86 with independe
 
 Independent checks continue when their required dependencies are ready even if another check has failed. The failed result remains a failed job, and the Pages artifact remains success-only. This collects the available evidence without weakening the publication gate.
 
-The main publication job repeats the same required gates, deploys Pages, checks `build.json` against the exact deployed commit and completes a real browser edit. Only then does it create the 1.0 beta prerelease and attach archives/checksums. Final run IDs, counts, commit identity and screenshots are added here after verification.
+The main publication job repeats the same required gates, deploys Pages, checks `build.json` against the exact deployed commit and completes a real browser edit. Only then does it create the 1.0 beta prerelease and attach archives/checksums. A subsequent guarded step publishes the seven wiki guides and verifies their remote commit, exact anonymous raw bytes and public page URLs. Wiki publication remains separately unverified until that step succeeds. Final run IDs, counts, commit identity and screenshots are added here after verification.
 
 ## Practical limits
 

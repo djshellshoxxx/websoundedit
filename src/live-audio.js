@@ -18,7 +18,7 @@ const abort=signal=>{if(signal?.aborted)fail('Audio operation cancelled.','ABORT
 const copy=value=>structuredClone(value),disconnect=node=>{try{node?.disconnect();}catch{}},gain=db=>10**(db/20);
 const id=()=>globalThis.crypto?.randomUUID?.()||`${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 const task=()=>new Promise(resolve=>setTimeout(resolve,0));
-const emptyCapture=()=>({phase:'idle',captureId:null,source:null,beats:null,startFrame:null,endFrame:null,frames:0});
+const emptyCapture=()=>({phase:'idle',captureId:null,source:null,beats:null,startFrame:null,endFrame:null,frames:0,transition:null});
 const emptyRecorder=()=>({status:'idle',recordingId:null,name:null,source:null,frames:0,seconds:0,bytesWritten:0,queuedBytes:0,maxBytes:null,error:null});
 
 /** Browser facade. Constructing it neither unlocks audio nor requests a device. */
@@ -42,7 +42,7 @@ export class LiveAudioRuntime extends EventTarget {
   _error(error){this._emit('error',{code:error.code||'AUDIO_ERROR',message:error.message||String(error),recordingId:this.recorder.recordingId,recoverable:!!this.recorder.recordingId});}
   getState(){
     const input=this.devices.getState();input.active=input.status==='active';input.sampleRate=this.context?.sampleRate||null;
-    return{capabilities:this.capabilities(),context:{state:this.context?.state||'not-started',sampleRate:this.context?.sampleRate||null,projectLayout:this._project().outputLayout||'stereo'},input:{...input,monitor:this.monitor.enabled},output:copy(this.output),transport:{playing:this.playback.playing,position:this.playback.position,rate:this.playback.rate,loop:this.playback.loop,loopStart:this.playback._timelineOffset+this.playback._loopStart,loopEnd:this.playback._timelineOffset+this.playback._loopEnd,bpm:this._project().bpm,metronome:this.playback.metronome},racks:[...this.racks].map(([key,value])=>({target:key==='master'?'master':{trackId:key},...copy(value)})),capture:copy(this.capture),loops:[...this.loops.values()].map(loop=>({trackId:loop.trackId,clipId:loop.clipId,name:loop.name,playing:loop.playing,muted:loop.muted,duration:loop.duration})),recorder:{...copy(this.recorder),queuedBytes:this.storage.queuedBytes||0},recordings:copy(this.recordings),storage:copy(this.storageState)};
+    return{capabilities:this.capabilities(),context:{state:this.context?.state||'not-started',sampleRate:this.context?.sampleRate||null,projectLayout:this._project().outputLayout||'stereo'},input:{...input,monitor:this.monitor.enabled},output:copy(this.output),transport:{playing:this.playback.playing,position:this.playback.position,rate:this.playback.rate,loop:this.playback.loop,loopStart:this.playback._timelineOffset+this.playback._loopStart,loopEnd:this.playback._timelineOffset+this.playback._loopEnd,bpm:this._project().bpm,metronome:this.playback.metronome},racks:[...this.racks].map(([key,value])=>({target:key==='master'?'master':{trackId:key},...copy(value)})),capture:copy(this.capture),loops:[...this.loops.values()].map(loop=>({trackId:loop.trackId,clipId:loop.clipId,name:loop.name,playing:loop.playing,muted:loop.muted,duration:loop.duration,transition:loop.transition||'audio-clock',transitionDelayFrames:loop.transitionDelayFrames||0,transitionDelaySeconds:loop.transitionDelaySeconds||0})),recorder:{...copy(this.recorder),queuedBytes:this.storage.queuedBytes||0},recordings:copy(this.recordings),storage:copy(this.storageState)};
   }
   execute(method,params={},options={}){
     if(this.disposed)return Promise.reject(Object.assign(new Error('Live audio has been disposed.'),{code:'DISPOSED'}));
@@ -147,23 +147,37 @@ export class LiveAudioRuntime extends EventTarget {
     if(this.capture.phase!=='idle')fail('A loop capture is already active.','BUSY');this.captureCancelled=false;const source=params.source||'input',route=await this._source(source);abort(options.signal);if(options.generation!==undefined&&options.generation!==this.generation)fail('Loop capture start was cancelled.','ABORTED');
     const context=this.context,beats=params.beats??4,frames=Math.max(1,Math.round(beats*60/this._project().bpm/(this.playback.playing?this.playback.rate:1)*context.sampleRate));
     if(frames*route.channels*4*2>LIVE_LIMITS.captureBytes)fail('This loop exceeds the bounded capture memory; choose fewer beats or channels.','RESOURCE_LIMIT');
-    const startFrame=this._boundary(params.quantize||'beat'),endFrame=startFrame+frames,captureId=id(),generation=this.generation,release=this.graphs.reserveVoice(frames*route.channels*4),audio={sampleRate:context.sampleRate,layout:route.layout,channels:Array.from({length:route.channels},()=>new Float32Array(frames))};
-    this.capture={phase:'armed',captureId,source,beats,startFrame,endFrame,frames:0};const pending={captureId,generation,audio,release,offset:0,name:params.name||`Loop ${this.loops.size+1}`,graphId:`capture-${captureId}`,route:null,tap:null,committing:null};this.pendingCapture=pending;
+    const captureId=id(),generation=this.generation,release=this.graphs.reserveVoice(frames*route.channels*4),audio={sampleRate:context.sampleRate,layout:route.layout,channels:Array.from({length:route.channels},()=>new Float32Array(frames))};
+    const transition=source==='master'?'main-thread':'audio-clock';this.capture={phase:'armed',captureId,source,beats,startFrame:null,endFrame:null,frames:0,transition};const pending={captureId,generation,audio,release,offset:0,name:params.name||`Loop ${this.loops.size+1}`,graphId:`capture-${captureId}`,route:null,tap:null,committing:null,transition,transitionDelayFrames:0};this.pendingCapture=pending;
     try{
       const node=await this.graphs.setChain(pending.graphId,[]);node.connect(this.masterInput);
       abort(options.signal);if(this.captureCancelled||generation!==this.generation)fail('Loop capture cancelled.','ABORTED');
-      pending.tap=await this.captureFactory(context,route.node,{channels:route.channels,loopFrames:frames,onChunk:packet=>{if(this.pendingCapture!==pending||generation!==this.generation)return packet.data.buffer;const available=Math.min(packet.frames,frames-pending.offset);for(let i=0;i<available;i++)for(let c=0;c<route.channels;c++)audio.channels[c][pending.offset+i]=packet.data[i*route.channels+c];pending.offset+=available;this.capture.frames=pending.offset;this.capture.phase='recording';this._emit('progress',{captureId,frames:pending.offset,totalFrames:frames});return packet.data.buffer;},onEnd:()=>{if(this.pendingCapture===pending&&!this.captureCancelled&&generation===this.generation)this._commitCapture(pending).catch(error=>{this._error(error);this._cancelCapture().catch(()=>{});});},onError:error=>{this._error(error);this._cancelCapture().catch(()=>{});}});
-      pending.route=connectMatrix(context,pending.tap.node,route.layout,this.layout,node);abort(options.signal);if(this.captureCancelled||generation!==this.generation)fail('Loop capture cancelled.','ABORTED');pending.tap.start({startFrame,endFrame});this._emit('capture',copy(this.capture));return copy(this.capture);
+      pending.tap=await this.captureFactory(context,route.node,{channels:route.channels,loopFrames:frames,onStart:bounds=>{if(this.pendingCapture!==pending||generation!==this.generation)return;this.capture.startFrame=bounds.startFrame;this.capture.endFrame=bounds.endFrame;this._emit('capture',copy(this.capture));},onChunk:packet=>{if(this.pendingCapture!==pending||generation!==this.generation)return packet.data.buffer;const available=Math.min(packet.frames,frames-pending.offset);for(let i=0;i<available;i++)for(let c=0;c<route.channels;c++)audio.channels[c][pending.offset+i]=packet.data[i*route.channels+c];pending.offset+=available;this.capture.frames=pending.offset;this.capture.phase='recording';this._emit('progress',{captureId,frames:pending.offset,totalFrames:frames});return packet.data.buffer;},onEnd:result=>{if(this.pendingCapture===pending&&!this.captureCancelled&&generation===this.generation){pending.endFrame=result.endFrame;this._commitCapture(pending).catch(error=>{this._error(error);this._cancelCapture().catch(()=>{});});}},onError:error=>{this._error(error);this._cancelCapture().catch(()=>{});}});
+      // A master tap cannot feed its captured loop back into the same master
+      // while its input is attached: Web Audio would mute that graph cycle.
+      if(transition==='audio-clock')pending.route=connectMatrix(context,pending.tap.node,route.layout,this.layout,node);
+      abort(options.signal);if(this.captureCancelled||generation!==this.generation)fail('Loop capture cancelled.','ABORTED');
+      // Loading a graph/worklet can outlast the scheduling lead. Choose the
+      // boundary only once preparation is complete, and let the processor move
+      // a late start to the next grid boundary while retaining every loop frame.
+      const quantize=params.quantize||'beat',project=this._project(),startFrame=this._boundary(quantize),endFrame=startFrame+frames,quantumFrames=quantize==='off'?0:60/project.bpm*(quantize==='bar'?project.beatsPerBar:1)/(this.playback.playing?this.playback.rate:1)*context.sampleRate;
+      this.capture.startFrame=startFrame;this.capture.endFrame=endFrame;pending.tap.start({startFrame,endFrame,quantumFrames});this._emit('capture',copy(this.capture));return copy(this.capture);
     }catch(error){pending.tap?.dispose();pending.route?.dispose();pending.release();this.graphs?.remove(pending.graphId);if(this.pendingCapture===pending)await this._cancelCapture();throw error;}
   }
   _commitCapture(pending){
     if(pending.committing)return pending.committing;
     pending.committing=(async()=>{if(this.captureCancelled||pending.generation!==this.generation)return null;if(!pending.offset)fail('Capture did not contain audio.','EMPTY_AUDIO');this.capture.phase='committing';this._state('loop.capture.commit');
+      pending.tap.detachSource?.();
+      if(!pending.route){
+        const graph=this.graphs?.graphs.get(pending.graphId);if(!graph)fail('Capture graph is no longer available.','ABORTED');
+        pending.route=connectMatrix(this.context,pending.tap.node,pending.audio.layout,this.layout,graph.node);
+        pending.transitionDelayFrames=Math.max(0,Math.ceil(this.context.currentTime*pending.audio.sampleRate)-(pending.endFrame??this.capture.endFrame));
+      }
       const audio={...pending.audio,channels:pending.audio.channels.map(channel=>channel.slice(0,pending.offset))};
       if(this.captureCancelled||pending.generation!==this.generation)return null;const clip=await this.engine.execute('clip.add',{name:pending.name,audio,start:0});
       if(pending.generation!==this.generation||this.captureCancelled||this.pendingCapture!==pending){pending.tap.dispose();pending.route.dispose();pending.release();if(this._project().tracks.some(track=>track.id===clip.trackId&&track.clips.some(item=>item.id===clip.clipId)))await this.engine.execute('track.remove',{trackId:clip.trackId});return null;}
-      const graph=this.graphs.graphs.get(pending.graphId);if(graph){this.graphs.graphs.delete(pending.graphId);graph.id=clip.trackId;this.graphs.graphs.set(clip.trackId,graph);}pending.tap.detachSource?.();
-      this.loops.set(clip.trackId,{trackId:clip.trackId,clipId:clip.clipId,name:clip.name,duration:pending.offset/audio.sampleRate,playing:true,muted:false,tap:pending.tap,route:pending.route,release:pending.release,layout:audio.layout});
+      const graph=this.graphs.graphs.get(pending.graphId);if(graph){this.graphs.graphs.delete(pending.graphId);graph.id=clip.trackId;this.graphs.graphs.set(clip.trackId,graph);}
+      this.loops.set(clip.trackId,{trackId:clip.trackId,clipId:clip.clipId,name:clip.name,duration:pending.offset/audio.sampleRate,playing:true,muted:false,tap:pending.tap,route:pending.route,release:pending.release,layout:audio.layout,transition:pending.transition,transitionDelayFrames:pending.transitionDelayFrames,transitionDelaySeconds:pending.transitionDelayFrames/audio.sampleRate});
       this.pendingCapture=null;this.capture=emptyCapture();this._emit('capture',{phase:'playing',trackId:clip.trackId,clipId:clip.clipId});this._state('loop.capture.complete');return clip;
     })();return pending.committing;
   }

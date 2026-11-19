@@ -1,0 +1,72 @@
+{
+  "status": "local corrections verified; fresh CI/browser/capture required",
+  "checkedAt": "2026-11-19T14:35:39.287587+00:00",
+  "priorRemoteCandidate": "517f7d33547dfa6fa3b2c83bd223bdca1b11fd4d",
+  "localParent": "b16d081cb1f9339eed9bd90a0293e4fb98e9ff42",
+  "unit": {
+    "passed": 333,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 7416.410341
+  },
+  "fuzz": {
+    "familiesPassed": 7,
+    "invariantFailures": 0
+  },
+  "productionBuildAndDOMFreeSDK": "passed",
+  "focusedWikiPublisher": {
+    "passed": 11,
+    "failed": 0,
+    "skipped": 0,
+    "externalPublication": false
+  },
+  "focusedAudio": {
+    "passed": 35,
+    "failed": 0,
+    "skipped": 0,
+    "independentlyRerun": true
+  },
+  "reports": {
+    "unit": {
+      "path": "test-results/audits/ci-corrections-unit.log",
+      "sha256": "7c6d4ca937280284fe29383e23628b4be18b22f5161fb360651867ca4a67cc33"
+    },
+    "fuzz": {
+      "path": "test-results/audits/ci-corrections-fuzz.log",
+      "sha256": "cc08a33cba547f590f12a6c96f8eb6e860318425b21e01a34906e8cf4edf9174"
+    },
+    "build": {
+      "path": "test-results/audits/ci-corrections-build.log",
+      "sha256": "6f3ef80fc5f9994655bfd7dfd1bcce0df6f6338f9848dcf675053cb3cb7dcf1f"
+    }
+  },
+  "sourceSha256": {
+    "src/codec-budget.js": "ea806fc42c4597312e693600a2ccb76074cd6b659d729eb691fd07f772ae3f34",
+    "src/recording-worker.js": "5b9884e827ef18624e4789ea41fc040c8ae1e18cec94d1725d270ae11e4f5d75",
+    "src/capture-kernel.js": "df33e06544a4f18568b49008981880ab72d4e5edaf37abe7fb9662b59eb58c2f",
+    "src/capture-tap.js": "95fbe789ded44503692e6e6f1327cb1e09930fe8e0e9b691818fcb21d9d545e4",
+    "src/capture-worklet.js": "d2e1d77935adf45212c52d4497e91b9bca19485615a8ed7782fe9414f2b6ea20",
+    "src/live-audio.js": "92cddbc33b8e0c9aa8297abf2a499a83b1d9eaba240838e6d955a8a9ed169d4f",
+    "src/app.js": "1d8a3f73d817dc25d16853ec275915da35c7c20063584cbe499a9899a98e847f",
+    "src/creative-ui.css": "caeeedc1a82eb1c2f39fe8b1b65df0c75fe444416e2b1cdf313f4ee336fa33de",
+    "src/help-content.js": "1c9a4acb0fbf22851827d013c5745b5e2e0775529c043cc32a9d011c64c27ee2",
+    "src/performance-ui.js": "409079a493df7623a89a1afc3d1410a9c228051b11db8bbc8ef43c7bd9c6a1af",
+    "scripts/publish-wiki.mjs": "11b030b63114628af40956a1cba31f104dd764e91e90ff4907f33cbd5ed9d5b1",
+    ".github/actions/verify/action.yml": "38adbd0cc2b594a25a1aad0595f11d47710a626b1b2e2a50a01800c8a807600e",
+    ".github/workflows/pages.yml": "71417cce1431e62e21f70835096d9b9e89d6198122a7e94dc9127571ebb9fd22",
+    "tests/help-capture.spec.js": "4af27b353d00825ae2e19f5e51515306519c49833f08c0d4e373875baab4c4df",
+    "tests/live-audio.spec.js": "af60513e2d47aad0dca8da68eb9256f928501eed1062629703555442b1f263b3",
+    "tests/beta-ui.spec.js": "1e2159130e138ed96d4c4d808a268b6038fd3c9ab5eec076e00a6b1bb2da629e",
+    "tests/published.spec.js": "16bffc0991f27cac68ae59ffe2abcdf0f4b9df162060f5b07e249fb9ae32ca0c"
+  },
+  "fixes": [
+    "Numeric recording manifest channels no longer treated as transferable PCM arrays",
+    "Pinned WASM ffprobe sentinel accepted only with freshly truncated numeric size proof; stale permission-denied report rejects before probe/read",
+    "Capture scheduled after worklet preparation and late starts retain the full period",
+    "Master capture input detached before playback routing; actual topology regression and observed handoff-delay fields",
+    "Versioned live rack settings on all four UI load paths",
+    "Compact mobile Options checkbox and scoped guide link test",
+    "Actual SVG text metrics wrap and verify numbered help annotations",
+    "Guarded wiki publication and retained deployed-page/release/wiki evidence"
+  ]
+}

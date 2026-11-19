@@ -75,6 +75,7 @@ runs:
         name: beta-verification-evidence
         path: |
           test-results/
+          !test-results/reaper-native/**/profile/**
           playwright-report/
         retention-days: 14
     - uses: actions/upload-pages-artifact@v3

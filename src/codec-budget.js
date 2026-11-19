@@ -29,8 +29,12 @@ export function assertEncodedSize(size,policy){
 export async function readBoundedFFmpegOutput(ffmpeg,path,policy,{timeout=120000}={}){
   const probe='websoundedit-output-size.txt';
   try{
+    // Core 0.12.10 leaves ret at -1 after successful ffprobe calls. Never infer
+    // success from that sentinel: require a fresh, strictly numeric report.
+    // A failed unlink could retain a stale report, so truncation must succeed.
+    await ffmpeg.writeFile(probe,new Uint8Array());
     const code=await ffmpeg.ffprobe(['-v','error','-show_entries','format=size','-of','default=noprint_wrappers=1:nokey=1',path,'-o',probe],timeout);
-    if(code!==0)throw new Error('Could not verify the encoded output size before loading it.');
+    if(code!==0&&code!==-1)throw new Error('Could not verify the encoded output size before loading it.');
     const report=await ffmpeg.readFile(probe),text=typeof report==='string'?report:new TextDecoder().decode(report);
     if(text.length>32||!/^\s*\d{1,16}\s*$/.test(text))throw new Error('Invalid encoded output size report.');
     const size=assertEncodedSize(Number(text.trim()),policy),bytes=await ffmpeg.readFile(path);

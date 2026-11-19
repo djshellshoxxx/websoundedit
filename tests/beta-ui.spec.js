@@ -16,9 +16,14 @@ test('Options and help routes retain the project, theme and global guidance opt-
   await page.locator('#options-theme').selectOption('daylight'); await expect(page.locator('html')).toHaveAttribute('data-theme','daylight');
   await page.locator('#options-tooltips').uncheck(); await page.locator('#options-save').focus(); await expect(page.locator('#feature-guidance')).not.toBeVisible();
   await expect(page.locator('#options-save')).toHaveAccessibleName('Save settings JSON');
+  await page.setViewportSize({width:390,height:844});
+  const guidanceLayout=await page.locator('#options-tooltips').evaluate(input=>{const box=input.getBoundingClientRect(),label=input.closest('label').getBoundingClientRect();return{width:box.width,height:box.height,labelHeight:label.height,labelRight:label.right,viewport:innerWidth};});
+  expect(guidanceLayout.width).toBeLessThanOrEqual(24);expect(guidanceLayout.height).toBeLessThanOrEqual(24);expect(guidanceLayout.labelHeight).toBeLessThan(90);expect(guidanceLayout.labelRight).toBeLessThanOrEqual(guidanceLayout.viewport);
+  await page.setViewportSize({width:1440,height:1000});
   await page.locator('a[href="#options/layout"]').click(); await expect(page).toHaveURL(/#options\/layout$/);
   await page.goBack(); await expect(page.locator('#options-theme')).toBeVisible();
-  await page.locator('a[href="#help/navigation"]').click(); await page.locator('#help-search').fill('debounce'); await expect(page.locator('#help-search-results')).toContainText('Pedal');
+  await page.locator('#options-content').getByRole('link', { name: 'Open the illustrated guide ↗', exact: true }).click(); await expect(page).toHaveURL(/#help\/navigation$/);
+  await page.locator('#help-search').fill('debounce'); await expect(page.locator('#help-search-results')).toContainText('Pedal');
   await page.locator('[data-view-close]').click(); await expect(page.locator('#workbench-view')).not.toBeVisible();
   const after = await page.evaluate(() => ({ name:websoundedit.getState().name,selection:websoundedit.getState().selection,ids:websoundedit.getState().tracks.map(track=>track.id) }));
   expect(after).toEqual(before); expect(await page.locator('#theme-select').inputValue()).toBe('daylight');
@@ -145,7 +150,8 @@ test('MIDI pedal UI fires on the press edge once and project loading disarms its
 });
 test('live rack knobs and drag order keep transport running and settings restore without input permission', async ({ page }) => {
   const errors=await boot(page);await page.locator('[data-panel="effects"]').click();await page.locator('#processing-mode').selectOption('live');
-  const ids=await page.evaluate(()=>{const first=websoundedit.rack.add('delay'),second=websoundedit.rack.add('tremolo');return[first.id,second.id];});
+  await expect(page.locator('#processing-mode')).toHaveValue('live');await expect(page.locator('#processing-mode-note')).toContainText('playback continues');
+  const ids=await page.evaluate(()=>[websoundedit.rack.add('delay'),websoundedit.rack.add('tremolo')]);expect(ids.every(id=>typeof id==='string'&&id.length>0)).toBe(true);
   await expect.poll(()=>page.evaluate(()=>websoundedit.live.getState().racks.find(rack=>rack.target==='master').chain.length)).toBe(2);
   await page.locator('#play-button').click();await expect(page.locator('#play-button')).toHaveClass(/playing/);
   const clock=await page.locator('#playhead-time').textContent();

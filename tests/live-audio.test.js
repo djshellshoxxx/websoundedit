@@ -7,6 +7,7 @@ import {RealtimeRackManager} from '../src/realtime-rack.js';
 import {RealtimeRackDSP} from '../src/realtime-dsp.js';
 import {RecordingStore} from '../src/recording-store.js';
 import {CaptureKernel} from '../src/capture-kernel.js';
+import {CaptureTap} from '../src/capture-tap.js';
 import {MidiSampler} from '../src/midi.js';
 import {AudioContextMock,AudioNodeMock,MemoryDirectory,mediaTrack,mediaStream} from './audio-test-support.js';
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
@@ -54,6 +55,37 @@ test('sample-clock loop capture creates a new editable track and one independent
   await live.execute('loop.track.mute',{trackId:layer.trackId,muted:true});assert.equal(live.getState().loops[0].muted,true);await live.execute('loop.track.stop',{trackId:layer.trackId});assert.equal(live.getState().loops[0].playing,false);await live.execute('loop.track.play',{trackId:layer.trackId,quantize:'off'});assert.equal(live.getState().loops[0].playing,true);
   await live.execute('loop.capture.toggle',{source:'input',beats:.25,quantize:'off'});await live.execute('loop.capture.cancel');assert.equal(live.getState().capture.phase,'idle');assert.equal(engine.getState().tracks.length,before+1);
   await live.execute('loop.track.remove',{trackId:layer.trackId});assert.equal(engine.getState().tracks.length,before);assert.equal(live.getState().loops.length,0);await live.dispose();
+});
+test('loop arming uses the clock after worklet preparation and late audio still commits the complete loop',async()=>{
+  const{engine,live,taps,context}=await fixture(),create=live.captureFactory;
+  live.captureFactory=async(...args)=>{const tap=await create(...args);context.currentTime+=.5;return tap;};
+  const capture=await live.execute('loop.capture.start',{source:'master',beats:.25,quantize:'off'}),tap=taps.at(-1);
+  assert.ok(capture.startFrame>=Math.ceil((context.currentTime+.02)*context.sampleRate));assert.equal(capture.endFrame-capture.startFrame,1000);
+  await tap.feed(capture.startFrame+64,[new Float32Array(1000).fill(.25),new Float32Array(1000).fill(.5)]);await live.pendingCapture?.committing;
+  const loop=live.getState().loops[0];assert.equal(loop.duration,.125);const audio=await engine.execute('clip.getAudio',{clipId:loop.clipId});assert.equal(audio.channels[0].length,1000);assert.ok(audio.channels[0].every(sample=>sample===.25));assert.ok(audio.channels[1].every(sample=>sample===.5));await live.dispose();
+});
+test('actual capture-tap topology stays acyclic and master handoff preserves the scheduled phase',async()=>{
+  const previous=Object.getOwnPropertyDescriptor(globalThis,'AudioWorkletNode');
+  Object.defineProperty(globalThis,'AudioWorkletNode',{configurable:true,value:class extends AudioNodeMock{constructor(){super();this.messages=[];this.port={postMessage:message=>this.messages.push(message),close(){}};}}});
+  const cyclic=root=>{const active=new Set(),seen=new Set();const visit=node=>{if(active.has(node))return true;if(seen.has(node))return false;seen.add(node);active.add(node);for(const[next]of node.connections||[])if(visit(next))return true;active.delete(node);return false;};return visit(root);};
+  try{
+    for(const source of ['master','input']){
+      const{live,context}=await fixture();let tap;
+      live.captureFactory=async(ctx,node,options)=>(tap=new CaptureTap(ctx,node,{framesPerChunk:2048,...options}));
+      try{
+        if(source==='input')await live.execute('audio.input.start',{channels:[0]});
+        const capture=await live.execute('loop.capture.start',{source,beats:.25,quantize:'off'}),pending=live.pendingCapture,node=tap.node,channels=source==='master'?2:1,frames=capture.endFrame-capture.startFrame;
+        assert.equal(cyclic(live.masterOutput),false);assert.equal(node.connections.length,source==='master'?1:2);assert.ok(tap.source.connections.some(([next])=>next===node));
+        context.currentTime=(capture.endFrame+80)/context.sampleRate;
+        node.port.onmessage({data:{type:'chunk',sequence:0,startFrame:capture.startFrame,frames,channels,sampleRate:context.sampleRate,data:new Float32Array(frames*channels).fill(.25)}});
+        node.port.onmessage({data:{type:'end',frames,startFrame:capture.startFrame,endFrame:capture.endFrame}});await tap.pending;await tick();await pending.committing;
+        assert.equal(cyclic(live.masterOutput),false);assert.equal(tap.source.connections.some(([next])=>next===node),false);assert.equal(node.connections.length,2);
+        const layer=live.getState().loops[0];assert.equal(layer.duration,.125);assert.equal(layer.transition,source==='master'?'main-thread':'audio-clock');assert.equal(layer.transitionDelayFrames,source==='master'?80:0);
+        assert.equal(node.messages.filter(message=>message.type==='start').length,1);assert.equal(node.messages.some(message=>message.type==='loop'),false);
+        assert.equal(node.messages.find(message=>message.type==='start').endFrame,capture.endFrame);
+      }finally{await live.dispose();}
+    }
+  }finally{if(previous)Object.defineProperty(globalThis,'AudioWorkletNode',previous);else delete globalThis.AudioWorkletNode;}
 });
 test('long recorder archives bounded chunks; pause omits gaps; every archive action operates on its explicit recording ID',async()=>{
   const{engine,live,taps,context}=await fixture();await live.execute('recorder.start',{source:'master',name:'Synthetic long-set path'});const recordingId=live.getState().recorder.recordingId;

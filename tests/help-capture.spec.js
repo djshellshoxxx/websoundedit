@@ -43,33 +43,52 @@ async function capture(page, testInfo, manifest, { name, chapter, caption, alt, 
     expect(unclipped, callout.selector + ' is not hidden by a scrolling panel').toBe(true);
     measured.push({ ...callout, box });
   }
-  const placements = await page.evaluate(items => {
+  const placements = await page.evaluate(async items => {
+    await document.fonts.ready;
     const ns = 'http://www.w3.org/2000/svg', svg = document.createElementNS(ns, 'svg');
     svg.id = 'help-capture-callouts'; svg.setAttribute('viewBox', `0 0 ${innerWidth} ${innerHeight}`); svg.setAttribute('aria-hidden', 'true');
     Object.assign(svg.style, { position: 'fixed', inset: '0', width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: '2147483647', overflow: 'visible' });
     const defs = document.createElementNS(ns, 'defs'), marker = document.createElementNS(ns, 'marker');
     marker.id = 'help-arrow-head'; marker.setAttribute('viewBox', '0 0 10 10'); marker.setAttribute('refX', '9'); marker.setAttribute('refY', '5'); marker.setAttribute('markerWidth', '7'); marker.setAttribute('markerHeight', '7'); marker.setAttribute('orient', 'auto-start-reverse');
     const triangle = document.createElementNS(ns, 'path'); triangle.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z'); triangle.setAttribute('fill', '#e4512b'); marker.append(triangle); defs.append(marker); svg.append(defs);
+    const dialogs = [...document.querySelectorAll('dialog[open]')]; (dialogs.at(-1) || document.body).append(svg);
+    const textNode = () => { const text = document.createElementNS(ns, 'text'); text.setAttribute('fill', '#251e18'); text.setAttribute('font-family', 'system-ui,sans-serif'); text.setAttribute('font-size', '12'); text.setAttribute('font-weight', '650'); return text; };
+    const measure = textNode(); measure.setAttribute('visibility', 'hidden'); svg.append(measure);
+    const measureText = value => { measure.textContent = value; return measure.getComputedTextLength(); };
     const placed = [], overlap = (a, b) => Math.max(0, Math.min(a.x + a.width + 8, b.x + b.width) - Math.max(a.x - 8, b.x)) * Math.max(0, Math.min(a.y + a.height + 8, b.y + b.height) - Math.max(a.y - 8, b.y));
     for (const [index, item] of items.entries()) {
-      const { box } = item, width = Math.min(230, innerWidth - 24), height = 44, targetX = box.x + box.width / 2, targetY = box.y + box.height / 2;
+      const { box } = item, width = Math.min(230, innerWidth - 24), rows = [];
+      let row = '';
+      for (const word of `${index + 1}. ${item.label}`.split(' ')) {
+        const next = row ? `${row} ${word}` : word;
+        if (row && measureText(next) > width - 24) { rows.push(row); row = word; }
+        else row = next;
+        if (measureText(row) > width - 24) throw new Error(`Guide label contains a word wider than its box: ${item.label}`);
+      }
+      if (row) rows.push(row);
+      const height = Math.max(44, rows.length * 16 + 12), targetX = box.x + box.width / 2, targetY = box.y + box.height / 2;
       const position = side => ({ x: side === 'left' ? box.x - width - 18 : side === 'right' ? box.x + box.width + 18 : targetX - width / 2, y: side === 'below' ? box.y + box.height + 18 : side === 'left' || side === 'right' ? targetY - height / 2 : box.y - height - 20 });
       const preferred = position(item.side || 'above'); preferred.x += item.dx || 0; preferred.y += item.dy || 0;
       const choices = [preferred, ...['above', 'below', 'left', 'right'].map(position), ...[12, innerWidth - width - 12].flatMap(x => [12, innerHeight / 2 - height / 2, innerHeight - height - 12].map(y => ({ x, y })))].map(point => ({ x: Math.max(12, Math.min(innerWidth - width - 12, point.x)), y: Math.max(12, Math.min(innerHeight - height - 12, point.y)), width, height }));
       const cost = (candidate, rank) => placed.reduce((total, other) => total + overlap(candidate, other) * 100, 0) + items.reduce((total, other) => total + overlap(candidate, other.box) * 10, 0) + rank * 30;
       const { rect } = choices.map((rect, rank) => ({ rect, score: cost(rect, rank) })).sort((a, b) => a.score - b.score)[0], { x, y } = rect;
-      placed.push(rect);
       const line = document.createElementNS(ns, 'line'); for (const [key, value] of Object.entries({ x1: x + width / 2, y1: y + height / 2, x2: targetX, y2: targetY, stroke: '#e4512b', 'stroke-width': 3, 'marker-end': 'url(#help-arrow-head)' })) line.setAttribute(key, value); svg.append(line);
       const labelBox = document.createElementNS(ns, 'rect'); for (const [key, value] of Object.entries({ x, y, width, height, rx: 5, fill: '#fff7ed', stroke: '#e4512b', 'stroke-width': 2 })) labelBox.setAttribute(key, value); svg.append(labelBox);
-      const words = item.label.split(' '), rows = ['']; for (const word of words) { const row = rows.length - 1; if ((rows[row] + ' ' + word).trim().length > 29 && rows.length < 2) rows.push(word); else rows[row] = (rows[row] + ' ' + word).trim(); }
-      for (const [row, label] of rows.entries()) { const text = document.createElementNS(ns, 'text'); text.setAttribute('x', x + 12); text.setAttribute('y', y + (rows.length === 1 ? 27 : 18) + row * 16); text.setAttribute('fill', '#251e18'); text.setAttribute('font-family', 'system-ui,sans-serif'); text.setAttribute('font-size', '12'); text.setAttribute('font-weight', '650'); text.textContent = (row === 0 ? `${index + 1}. ` : '') + label; svg.append(text); }
+      const textBoxes = [];
+      for (const [row, label] of rows.entries()) {
+        const text = textNode(); text.setAttribute('x', x + 12); text.setAttribute('y', y + (height - (rows.length - 1) * 16) / 2 + 4 + row * 16); text.textContent = label; svg.append(text);
+        const bounds = text.getBBox(), textBox = { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
+        if (textBox.x < x + 4 || textBox.x + textBox.width > x + width - 4 || textBox.y < y + 4 || textBox.y + textBox.height > y + height - 4) throw new Error(`Guide label text escaped its measured box: ${item.label}`);
+        textBoxes.push(textBox);
+      }
+      placed.push({ ...rect, textBoxes });
     }
-    const dialogs = [...document.querySelectorAll('dialog[open]')]; (dialogs.at(-1) || document.body).append(svg); return placed;
+    measure.remove(); return placed;
   }, measured);
   const file = `${name}.png`, path = testInfo.outputPath(file);
   try {
     await page.screenshot({ path, animations: 'disabled' });
-    manifest.images.push({ file, chapter, caption, alt, ...page.viewportSize(), callouts: measured.map(({ selector, label, box }, index) => ({ selector, label, box, labelBox: placements[index] })) });
+    manifest.images.push({ file, chapter, caption, alt, ...page.viewportSize(), callouts: measured.map(({ selector, label, box }, index) => { const { textBoxes, ...labelBox } = placements[index]; return { selector, label, box, labelBox, textBoxes }; }) });
     await saveManifest(testInfo, manifest);
   } finally {
     await page.evaluate(() => document.querySelector('#help-capture-callouts')?.remove());

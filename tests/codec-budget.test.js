@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
+import {readFile} from 'node:fs/promises';
 import {assertEncodingBudget,assertEncodedSize,outputPolicy,readBoundedFFmpegOutput,ENCODING_LIMITS} from '../src/codec-budget.js';
 import {encodeAudio,codecCapabilities} from '../src/codecs.js';
 import {encodeAudioBytes,readBoundedNativeOutput,nativeCapabilities} from '../scripts/node-codecs.mjs';
 import {encodeOpus} from '../src/opus.js';
+import {encodeWav} from '../src/wav.js';
 const resource=error=>error.code==='RESOURCE_LIMIT';
 test('browser and native capability reports publish the same actual encoded and projected PCM limits',async()=>{
   assert.deepEqual(codecCapabilities()[0].exportLimits,ENCODING_LIMITS);assert.deepEqual((await nativeCapabilities()).exportLimits,ENCODING_LIMITS);
@@ -27,9 +29,29 @@ test('native output stat rejects encoder-bound/truncated and oversized files bef
   assert.equal(reads,0);const bytes=await readBoundedNativeOutput('fixture',policy,{statFile:async()=>({size:4,isFile:()=>true}),read:async()=>Uint8Array.of(1,2,3,4)});assert.deepEqual(bytes,Uint8Array.of(1,2,3,4));assert.throws(()=>assertEncodedSize(NaN,policy));
 });
 test('browser FFmpeg probes only a tiny size report and refuses oversized output before transferring the file',async()=>{
-  const reads=[],deleted=[];let args;const codec={ffprobe:async values=>{args=values;return 0;},readFile:async path=>{reads.push(path);if(path==='websoundedit-output-size.txt')return new TextEncoder().encode('3700000000\n');throw new Error('Oversized output must not be transferred');},deleteFile:async path=>deleted.push(path)};
+  const reads=[],deleted=[];let args;const codec={writeFile:async(path,data)=>{assert.equal(path,'websoundedit-output-size.txt');assert.equal(data.byteLength,0);},ffprobe:async values=>{args=values;return 0;},readFile:async path=>{reads.push(path);if(path==='websoundedit-output-size.txt')return new TextEncoder().encode('3700000000\n');throw new Error('Oversized output must not be transferred');},deleteFile:async path=>deleted.push(path)};
   await assert.rejects(readBoundedFFmpegOutput(codec,'result.wav',outputPolicy()),resource);assert.deepEqual(reads,['websoundedit-output-size.txt']);assert.ok(args.includes('format=size'));assert.deepEqual(deleted,['websoundedit-output-size.txt']);
   codec.readFile=async path=>path==='websoundedit-output-size.txt'?new TextEncoder().encode('4\n'):Uint8Array.of(1,2,3,4);assert.deepEqual(await readBoundedFFmpegOutput(codec,'result.wav',outputPolicy()),Uint8Array.of(1,2,3,4));
+});
+test('pinned FFmpeg WASM size probe accepts its success sentinel only with a fresh valid bounded report',{timeout:30000},async()=>{
+  const previous=Object.getOwnPropertyDescriptor(globalThis,'self'),url=new URL('../node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js',import.meta.url);
+  Object.defineProperty(globalThis,'self',{configurable:true,writable:true,value:{location:{href:url.href}}});
+  try{
+    const create=(await import(url.href)).default,core=await create({wasmBinary:await readFile(new URL('./ffmpeg-core.wasm',url))});core.setLogger(()=>{});
+    const source=encodeWav({sampleRate:8000,channels:[new Float32Array(80).fill(.25)]});core.FS.writeFile('source.wav',source);
+    const reads=[],codes=[],codec={writeFile:async(path,bytes)=>core.FS.writeFile(path,bytes),ffprobe:async args=>{core.reset();core.ffprobe(...args);const result=core.ret;codes.push(result);core.reset();return result;},readFile:async path=>{reads.push(path);return core.FS.readFile(path);},deleteFile:async path=>core.FS.unlink(path)};
+    assert.deepEqual(await readBoundedFFmpegOutput(codec,'source.wav',outputPolicy()),source);assert.equal(codes[0],-1);
+    reads.length=0;await assert.rejects(readBoundedFFmpegOutput(codec,'source.wav',{rejectAt:source.length}),resource);assert.deepEqual(reads,['websoundedit-output-size.txt']);
+    // A failed probe can also return -1. A report left by an earlier job must
+    // neither authorize a read nor disguise the new empty/missing report.
+    core.FS.writeFile('websoundedit-output-size.txt',new TextEncoder().encode('4\n'));reads.length=0;
+    await assert.rejects(readBoundedFFmpegOutput(codec,'missing.wav',outputPolicy()),/size report/);assert.equal(codes.at(-1),-1);assert.deepEqual(reads,['websoundedit-output-size.txt']);
+    let read=false;await assert.rejects(readBoundedFFmpegOutput({writeFile:async()=>{},ffprobe:async()=>1,readFile:async()=>{read=true;},deleteFile:async()=>{}},'failed.wav',outputPolicy()),/Could not verify/);assert.equal(read,false);
+    // A permission-denied probe can preserve a stale small size while returning
+    // the same -1 sentinel. Failure to truncate must precede even probing/reading.
+    core.FS.writeFile('websoundedit-output-size.txt',new TextEncoder().encode('4\n'));core.FS.chmod('websoundedit-output-size.txt',0o444);core.FS.chmod('/',0o555);reads.length=0;const probes=codes.length;
+    await assert.rejects(readBoundedFFmpegOutput(codec,'source.wav',{rejectAt:source.length}));assert.equal(codes.length,probes);assert.deepEqual(reads,[]);
+  }finally{if(previous)Object.defineProperty(globalThis,'self',previous);else delete globalThis.self;}
 });
 test('Opus counts pages against a small output cap before final concatenation and releases its encoder on failure',async()=>{
   const audio={sampleRate:48000,channels:[Float32Array.from({length:48000},(_,i)=>Math.sin(i*.17)*.2)]};await assert.rejects(encodeOpus(audio,{bitrate:320,maxOutputBytes:1024}),resource);

@@ -172,6 +172,8 @@ Open **Live performance → Loop layers**. Choose **Input**, **Master program** 
 
 **Start capture** arms or begins the take. It ends at the requested sample-clock beat boundary, commits a new editable track and starts one loop voice. **Stop & keep take** commits completed audio early; **Cancel capture** discards the in-progress take.
 
+Choose **Input** for guitar or microphone layering when the first repeat needs the most direct transition. Input and individual-track captures switch to repetition on the audio clock. **Master program** captures the whole mix and can have a brief delay before its first audible repeat while the capture connection changes; its repeat phase remains aligned. This handoff delay is separate from the input/output device's latency.
+
 Each completed layer has independent Play, Stop, Mute and Delete controls. Runtime-owned loop tracks are omitted from ordinary transport playback so the same audio does not sound twice. Stop keeps a layer's track; Delete removes it. Transport Stop stops all loop voices. Panic stops owned notes and active capture.
 
 The existing **Loop studio** remains useful for offline repetition of a selected fragment. Its crossfades overlap adjoining copies and shorten each join; zero crossfade preserves beat-exact repeated duration. Live capture and offline repetition have separate controls and purposes.

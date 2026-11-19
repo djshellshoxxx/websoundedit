@@ -17,7 +17,7 @@ self.onmessage=({data})=>{
       case'export':{const writable=await data.handle.createWritable();result=await archive.export(data.params.recordingId,writable,data.params,{signal:controller.signal,onProgress:progress=>self.postMessage({type:'progress',...progress})});break;}
       default:throw new Error('Unknown recording operation.');
     }
-    const transfer=data.data?[data.data.buffer]:result?.channels?.map(c=>c.buffer)||[];self.postMessage({id:data.id,result,...(data.data?{buffer:data.data.buffer}:{})},transfer);
+    const transfer=data.data?[data.data.buffer]:Array.isArray(result?.channels)?result.channels.map(channel=>channel.buffer):[];self.postMessage({id:data.id,result,...(data.data?{buffer:data.data.buffer}:{})},transfer);
   }catch(error){self.postMessage({id:data.id,error:{message:error.message,code:error.code||'STORAGE_ERROR'},...(data.data?{buffer:data.data.buffer}:{})},data.data?[data.data.buffer]:[]);}finally{pending--;queuedBytes-=bytes;controllers.delete(data.id);}};
   queue=queue.then(run,run);
 };
