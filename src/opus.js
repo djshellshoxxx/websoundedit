@@ -8,6 +8,7 @@
  * No runtime network access; the package embeds its WASM in a local ES module.
  */
 import { createEncoder, loadLibopus, Application, Signal, EncoderCtl } from 'libopus-wasm';
+import { vorbisComments } from './metadata.js';
 
 const RATE = 48000;
 const FRAME = 960; // 20 ms; granules always count 48 kHz samples per channel.
@@ -72,12 +73,15 @@ function opusHead(channels, preSkip) {
   header[18] = 0; // Mapping family 0: one mono or coupled stereo stream.
   return header;
 }
-function opusTags() {
+export function opusTags(metadata = {}) {
   const vendor = new TextEncoder().encode('Circuit Drift Labs WebSoundEdit / libopus-wasm 0.3.0');
-  const tags = new Uint8Array(16 + vendor.length), view = new DataView(tags.buffer);
+  const comments = vorbisComments(metadata).map(value => new TextEncoder().encode(value));
+  const tags = new Uint8Array(16 + vendor.length + comments.reduce((size, value) => size + 4 + value.length, 0)), view = new DataView(tags.buffer);
   tags.set(new TextEncoder().encode('OpusTags'));
   view.setUint32(8, vendor.length, true); tags.set(vendor, 12);
-  view.setUint32(12 + vendor.length, 0, true); // Zero user comments.
+  view.setUint32(12 + vendor.length, comments.length, true);
+  let offset = 16 + vendor.length;
+  for (const value of comments) { view.setUint32(offset, value.length, true); tags.set(value, offset + 4); offset += 4 + value.length; }
   return tags;
 }
 function streamSerial() {
@@ -107,7 +111,7 @@ function validate(audio, bitrate) {
  * zero padded, enough extra input flushes encoder lookahead, and the EOS granule
  * trims padding back to the exact original sample count after pre-skip.
  */
-export async function encodeOpus(audio, { bitrate = 192, onProgress, signal } = {}) {
+export async function encodeOpus(audio, { bitrate = 192, onProgress, signal, metadata = {} } = {}) {
   abortIfRequested(signal);
   const frames = validate(audio, bitrate), channels = audio.channels.length;
   const encoder = await createEncoder({ sampleRate: RATE, channels, application: Application.Audio,
@@ -121,7 +125,7 @@ export async function encodeOpus(audio, { bitrate = 192, onProgress, signal } = 
     const packetCount = Math.ceil(totalFrames / FRAME);
     const serial = streamSerial();
     const pages = [createOggPage([opusHead(channels, preSkip)], { serial, sequence: 0, granule: 0, flags: 2 }),
-      createOggPage([opusTags()], { serial, sequence: 1, granule: 0 })];
+      createOggPage([opusTags(metadata)], { serial, sequence: 1, granule: 0 })];
     const pcm = new Float32Array(FRAME * channels);
     let pagePackets = [], pageSegments = 0, sequence = 2, decodedFrames = 0;
     onProgress?.(0);

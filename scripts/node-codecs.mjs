@@ -6,6 +6,7 @@ import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { encodeWav, decodeWav } from '../src/wav.js';
+import { normalizeMetadata, ffmpegMetadataArgs } from '../src/metadata.js';
 
 export const AUDIO_FORMATS = Object.freeze({
   wav: { extension: 'wav', mime: 'audio/wav', codec: 'pcm_s16le' },
@@ -58,11 +59,12 @@ export async function decodeAudioBytes(bytes, { sampleRate } = {}) {
   } finally { await rm(folder, { recursive: true, force: true }); }
 }
 export async function encodeAudioBytes(audio, options = {}) {
+  const metadata = normalizeMetadata(options.metadata || {});
   const format = String(options.format || 'wav').toLowerCase(); const info = AUDIO_FORMATS[format];
   if (!info) throw new Error(`Unsupported output format: ${format}`);
   const bitDepth = options.bitDepth ?? 16;
   if (![16, 24, 32].includes(bitDepth)) throw new Error('WAV bit depth must be 16, 24 or 32.');
-  if (format === 'wav' && !options.sampleRate && !options.channels) return encodeWav(audio, { bitDepth, float: options.float === true });
+  if (format === 'wav' && !options.sampleRate && !options.channels) return encodeWav(audio, { bitDepth, float: options.float === true, metadata });
   if (options.sampleRate !== undefined && ![8000, 11025, 16000, 22050, 24000, 32000, 44100, 48000, 88200, 96000, 192000].includes(options.sampleRate)) throw new Error('Unsupported output sample rate.');
   if (options.channels !== undefined && ![1, 2].includes(options.channels)) throw new Error('Output channels must be 1 or 2.');
   const bitrate = options.bitrate ?? 192;
@@ -72,7 +74,7 @@ export async function encodeAudioBytes(audio, options = {}) {
     const input = join(folder, 'source.wav'), output = join(folder, `result.${info.extension}`);
     await writeFile(input, encodeWav(audio, { bitDepth: 32, float: true }));
     const codec = format === 'wav' ? options.float ? 'pcm_f32le' : `pcm_s${bitDepth}le` : format === 'aiff' && bitDepth === 24 ? 'pcm_s24be' : info.codec;
-    const args = ['-i', input, '-map', '0:a:0', '-c:a', codec];
+    const args = ['-i', input, '-map', '0:a:0', '-c:a', codec, ...ffmpegMetadataArgs(metadata, format)];
     if (['mp3', 'ogg', 'opus', 'aac', 'm4a', 'wma'].includes(format)) args.push('-b:a', `${bitrate}k`);
     if (options.sampleRate) args.push('-ar', String(options.sampleRate));
     if (options.channels) args.push('-ac', String(options.channels));

@@ -2,11 +2,11 @@
 // the audio engine. They have no timers: the UI decides when a view needs repaint.
 import { eqCoefficients, duckEnvelope } from './dsp.js';
 
-const COLORS = Object.freeze({
+const COLORS = {
   background: '#11151c', grid: '#26303b', strongGrid: '#394653',
   text: '#dce5eb', muted: '#93a3b2', original: '#8999a7',
   teal: '#4fb6c4', orange: '#e8532a', red: '#ff746c',
-});
+};
 const PALETTE = ['#4fb6c4', '#e99c6a', '#92bd79', '#b2a1d6', '#deb95c', '#e28da4'];
 const MONO = '"JetBrains Mono", "SFMono-Regular", Consolas, monospace';
 const peakCache = new WeakMap();
@@ -16,7 +16,14 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const durationOf = audio => audio?.channels?.[0]?.length / audio?.sampleRate || 0;
 
-function setup(canvas, background = COLORS.background) {
+function setup(canvas, background) {
+  if (typeof globalThis.getComputedStyle === 'function' && canvas?.nodeType) {
+    const style = getComputedStyle(canvas);
+    for (const [key, token] of Object.entries({background:'--wave-bg',grid:'--wave-grid',strongGrid:'--edge',text:'--text',muted:'--muted',original:'--muted',teal:'--teal',orange:'--accent',red:'--red'})) {
+      const value = style.getPropertyValue(token).trim(); if (value) COLORS[key] = value;
+    }
+  }
+  background ??= COLORS.background;
   if (!canvas?.getContext) return null;
   const rect = canvas.getBoundingClientRect?.();
   const dpr = Math.max(1, finite(globalThis.devicePixelRatio, 1));
@@ -198,6 +205,14 @@ function waveform(ctx, channel, sampleRate, clipStart, view, plot, color, gain =
   ctx.restore();
 }
 
+function channelTint(color) {
+  if (!/^#[a-f0-9]{6}$/i.test(color)) return color;
+  const value = parseInt(color.slice(1),16), rgb = [(value>>16)&255,(value>>8)&255,value&255];
+  // A related second-channel hue differentiates stereo without altering PCM geometry.
+  const mixed = rgb.map((n,i) => Math.round(n*.72 + [220,172,238][i]*.28));
+  return `rgb(${mixed.join(',')})`;
+}
+
 /** Draws post-fader L/R lanes. Mono is duplicated with the engine's pan gains. */
 export function drawTrack(canvas, options = {}) {
   const surface = setup(canvas);
@@ -205,12 +220,13 @@ export function drawTrack(canvas, options = {}) {
   const { ctx, width, height } = surface;
   const { track = {}, audioById = new Map(), preview, selection, markers = [], compareOriginal = false } = options;
   const view = { start: finite(options.view?.start), duration: Math.max(0.001, finite(options.view?.duration, 8)) };
-  const color = trackColor(track), top = 25, laneHeight = Math.max(1, (height - top - 8) / 2);
+  const baseColor = trackColor(track), top = 25, laneHeight = Math.max(1, (height - top - 8) / 2);
   const lanes = [{ top, height: laneHeight }, { top: top + laneHeight, height: laneHeight }];
   beatGrid(ctx, width, height, view, finite(options.bpm, 120), finite(options.beatOffset), finite(options.beatsPerBar, 4));
   lanes.forEach(lane => line(ctx, 0, lane.top + lane.height / 2 + 0.5, width, lane.top + lane.height / 2 + 0.5, '#34414b'));
   const clips = [];
   for (const clip of track.clips || []) {
+    const color = /^#[a-f0-9]{6}$/i.test(clip.keyAnalysis?.color || '') ? clip.keyAnalysis.color : baseColor;
     const original = audioById instanceof Map ? audioById.get(clip.id) : audioById[clip.id];
     const wet = preview?.clipId === clip.id && preview.audio?.channels?.length ? preview.audio : null;
     const audio = wet || original;
@@ -226,7 +242,7 @@ export function drawTrack(canvas, options = {}) {
     line(ctx, visibleStart + 0.5, 3, visibleStart + 0.5, height - 4, '#586a7455');
     line(ctx, visibleEnd - 0.5, 3, visibleEnd - 0.5, height - 4, '#586a7455');
     ctx.font = `8px ${MONO}`;
-    const suffix = wet ? '  / PREVIEW' : '';
+    const suffix = `${clip.keyAnalysis?.key ? '  · ' + clip.keyAnalysis.key : ''}${wet ? '  / PREVIEW' : ''}`;
     clippedText(ctx, `${clip.name || 'Audio'}${suffix}`, visibleStart + 7, 12, visibleEnd - visibleStart - 14, color);
     if (!audio?.channels?.length) {
       if (visibleEnd - visibleStart > 90) text(ctx, 'Loading waveform…', visibleStart + 8, height / 2);
@@ -240,7 +256,7 @@ export function drawTrack(canvas, options = {}) {
     }
     const wetGain = mixerGains(track, audio.channels.length);
     for (let c = 0; c < 2; c++) waveform(ctx, audio.channels[c] || audio.channels[0], audio.sampleRate, start, view,
-      { ...lanes[c], width }, color, wetGain[c], alpha * (wet && compareOriginal ? 0.25 : 0.9));
+      { ...lanes[c], width }, c === 0 ? color : channelTint(color), wetGain[c], alpha * (wet && compareOriginal ? 0.25 : 0.95));
   }
 
   let selectedGeometry = null;
@@ -473,7 +489,7 @@ export function drawDetail(canvas, audio, original = null, options = {}) {
   spectrumPath(ctx, data, plot, COLORS.teal, options.compareOriginal && before ? 0.3 : 1, true);
   ctx.font = `8px ${MONO}`;
   const label = data.peakDb > -100 ? `${Math.round(data.peakHz)} Hz · ${data.peakDb.toFixed(1)} dBFS` : 'Silence';
-  text(ctx, label, plot.x + plot.width - 4, plot.y + 5, '#a8ccd2', 'right');
+  text(ctx, label, plot.x + plot.width - 4, plot.y + 5, COLORS.text, 'right');
   return { ...plot, mode: 'spectrum', spectrum: data };
 }
 

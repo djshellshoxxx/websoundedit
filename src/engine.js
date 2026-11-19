@@ -3,6 +3,10 @@
  * Audio buffers are immutable inside the engine, allowing bounded history to share PCM.
  */
 import { processAudio, detectBpm, detectSilence, analyzeAudio, generateAudio, sliceAudio, concatAudio, resampleAudio } from './dsp.js';
+import { processRack, processRackEffect } from './rack-dsp.js';
+import { RACK_EFFECTS } from './rack-config.js';
+import { detectKey, manualKey, validateKeyAnalysis } from './key-detection.js';
+import { normalizeMetadata } from './metadata.js';
 
 export const LIMITS = Object.freeze({ projectBytes: 256 * 1024 * 1024, renderBytes: 256 * 1024 * 1024, historyBytes: 256 * 1024 * 1024, historyEntries: 30, tracks: 64, clips: 512, recipeCommands: 256, timelineSeconds: 600 });
 export class EditorError extends Error {
@@ -40,10 +44,10 @@ function checkAudio(audio, clone = false, { allowEmpty = false } = {}) {
 function emptyProject({ sampleRate = 48000, name: projectName = 'Untitled session', bpm = 120 } = {}) {
   number(sampleRate, undefined, 8000, 192000, 'Sample rate');
   if (!Number.isInteger(sampleRate)) fail('Sample rate must be an integer.');
-  return { version: 1, name: name(projectName), sampleRate, bpm: number(bpm, 120, 20, 400, 'BPM'), beatsPerBar: 4, beatOffset: 0, tracks: [], markers: [], selection: null, settings: {}, selectedTrackId: null, selectedClipId: null };
+  return { version: 1, name: name(projectName), sampleRate, bpm: number(bpm, 120, 20, 400, 'BPM'), beatsPerBar: 4, beatOffset: 0, tracks: [], markers: [], selection: null, settings: {}, metadata: {}, selectedTrackId: null, selectedClipId: null };
 }
 function snapshot(project) {
-  return { ...project, tracks: project.tracks.map(t => ({ ...t, clips: t.clips.map(c => ({ ...c, audio: c.audio })) })), markers: project.markers.map(m => ({ ...m })), selection: project.selection && { ...project.selection }, settings: copyJSON(project.settings) };
+  return { ...project, tracks: project.tracks.map(t => ({ ...t, clips: t.clips.map(c => ({ ...c, audio: c.audio })) })), markers: project.markers.map(m => ({ ...m })), selection: project.selection && { ...project.selection }, settings: copyJSON(project.settings), metadata: copyJSON(project.metadata || {}) };
 }
 function byteUsage(projects) {
   const seen = new Set(); let bytes = 0;
@@ -53,7 +57,7 @@ function byteUsage(projects) {
   return bytes;
 }
 function projectDuration(p) { let end = 0; for (const t of p.tracks) for (const c of t.clips) end = Math.max(end, c.start + audioDuration(c.audio)); return end; }
-function clipInfo(c, trackId) { return { id: c.id, clipId: c.id, trackId, name: c.name, start: c.start, duration: audioDuration(c.audio), sampleRate: c.audio.sampleRate, channels: c.audio.channels.length, frames: c.audio.channels[0].length }; }
+function clipInfo(c, trackId) { return { id: c.id, clipId: c.id, trackId, name: c.name, start: c.start, duration: audioDuration(c.audio), sampleRate: c.audio.sampleRate, channels: c.audio.channels.length, frames: c.audio.channels[0].length, keyAnalysis: c.keyAnalysis ? copyJSON(c.keyAnalysis) : null }; }
 function trackInfo(t) { return { id: t.id, name: t.name, gainDb: t.gainDb, pan: t.pan, mute: t.mute, solo: t.solo, clips: t.clips.map(c => clipInfo(c, t.id)) }; }
 function alignChannels(audio, count) {
   if (audio.channels.length === count) return audio;
@@ -120,7 +124,9 @@ const effects = [
   ['duck', 'Tempo-shaped ducking, gating or true sidechain compression', { source: 'tempo', mode: 'volume', depth: 0.8, rate: 1, attack: 0, hold: 0.1, release: 0.7, curve: 1, sourceTrackId: null }],
   ['loop', 'Repeat audio with optional boundary crossfades', { repeats: 4, crossfadeMs: 5 }],
   ['beatRepeat', 'Slice and reorder a rhythm', { division: 4, pattern: [0, 1, 2, 3] }],
-  ['granular', 'Build a seeded granular texture', { grainMs: 80, density: 8, spread: 0.2, seed: 1, mix: 0.5 }]
+  ['granular', 'Build a seeded granular texture', { grainMs: 80, density: 8, spread: 0.2, seed: 1, mix: 0.5 }],
+  ['rack', 'Process an ordered creative effects chain as one edit', { chain: [] }],
+  ...Object.entries(RACK_EFFECTS).map(([effect, info]) => [effect, info.description || info.title, { ...info.defaults, wet: info.wet }])
 ];
 export const EFFECTS = Object.freeze(effects.map(([effect, description, parameters]) => ({ effect, description, parameters })));
 const command = (method, description, parameters = {}, mutates = false) => ({ method, description, parameters, mutates });
@@ -128,6 +134,10 @@ export const COMMANDS = Object.freeze([
   command('commands.list', 'Discover all core methods'), command('project.state', 'Read metadata without PCM'), command('project.new', 'Create an empty project', { name: 'Untitled session', sampleRate: 48000, bpm: 120 }, true),
   command('project.update', 'Set project name, tempo, grid and offset', { name: 'Session', bpm: 120, beatsPerBar: 4, beatOffset: 0 }, true), command('project.select', 'Select a track and clip', { trackId: 'track-id', clipId: 'clip-id' }),
   command('project.save', 'Create portable JSON with embedded PCM'), command('project.load', 'Load a portable JSON project', { project: {} }, true),
+  command('metadata.update', 'Replace audio export metadata', { metadata: {} }, true),
+  command('analysis.key', 'Estimate and store the whole sample key', { clipId: null }, true),
+  command('analysis.keyAll', 'Estimate and store each sample key', {}, true),
+  command('clip.key', 'Set or clear a manual sample key', { clipId: null, tonic: 0, mode: 'major' }, true),
   command('settings.save', 'Create a settings JSON object'), command('settings.load', 'Replace project settings', { settings: {} }, true),
   command('history.undo', 'Undo the last edit'), command('history.redo', 'Redo an undone edit'),
   command('track.add', 'Create an empty track', { name: 'Track' }, true), command('track.update', 'Set name, gain, pan, mute or solo', { trackId: 'track-id', gainDb: 0, pan: 0, mute: false, solo: false }, true), command('track.remove', 'Remove a track and its clips', { trackId: 'track-id' }, true),
@@ -156,7 +166,7 @@ export class AudioEditor {
   getProject() { return this.project; }
   getState() {
     const p = this.project;
-    return { version: p.version, name: p.name, sampleRate: p.sampleRate, bpm: p.bpm, beatsPerBar: p.beatsPerBar, beatOffset: p.beatOffset, duration: projectDuration(p), tracks: p.tracks.map(trackInfo), markers: p.markers.map(m => ({ ...m })), selection: p.selection && { ...p.selection }, settings: copyJSON(p.settings), selectedTrackId: p.selectedTrackId, selectedClipId: p.selectedClipId, history: { undo: this.undo.length, redo: this.redo.length, bytes: byteUsage([p, ...this.undo, ...this.redo]) }, canUndo: this.undo.length > 0, canRedo: this.redo.length > 0, hasClipboard: !!this.clipboard, revision: this.revision };
+    return { version: p.version, name: p.name, sampleRate: p.sampleRate, bpm: p.bpm, beatsPerBar: p.beatsPerBar, beatOffset: p.beatOffset, duration: projectDuration(p), tracks: p.tracks.map(trackInfo), markers: p.markers.map(m => ({ ...m })), selection: p.selection && { ...p.selection }, settings: copyJSON(p.settings), metadata: copyJSON(p.metadata || {}), selectedTrackId: p.selectedTrackId, selectedClipId: p.selectedClipId, history: { undo: this.undo.length, redo: this.redo.length, bytes: byteUsage([p, ...this.undo, ...this.redo]) }, canUndo: this.undo.length > 0, canRedo: this.redo.length > 0, hasClipboard: !!this.clipboard, revision: this.revision };
   }
   execute(method, params = {}) {
     const next = this._queue.then(() => this._execute(method, params)); this._queue = next.catch(() => {}); return next;
@@ -169,7 +179,8 @@ export class AudioEditor {
     const oldClipboard = this.clipboard;
     try {
       const result = await this._dispatch(method, params);
-      if (entry.mutates) { this._checkLimits(); this.undo.push(before); this.redo = []; this._trimHistory(); this.revision++; }
+      if (entry.mutates) {
+        this._checkLimits(); this.undo.push(before); this.redo = []; this._trimHistory(); this.revision++; }
       return result;
     } catch (error) { if (before) this.project = before; this.clipboard = oldClipboard; throw error; }
   }
@@ -252,7 +263,12 @@ export class AudioEditor {
       const sidechainTrack = this._track(sourceTrackId);
       context.sidechain = this._renderTracks([sidechainTrack], target.clip.start + target.start, target.clip.start + target.end, { ignoreMute: true });
     }
-    const processed = checkAudio(await processAudio(source, effect, { ...options, bpm: options.bpm ?? this.project.bpm }, context), false, { allowEmpty: effect === 'removeSilence' });
+    const effectOptions = { ...options, bpm: options.bpm ?? this.project.bpm };
+    const { wet, ...rackEffectOptions } = options;
+    const rendered = effect === 'rack' ? await processRack(source, effectOptions, context)
+      : Object.hasOwn(RACK_EFFECTS, effect) ? await processRackEffect(source, effect, rackEffectOptions, wet ?? RACK_EFFECTS[effect].wet, context)
+      : await processAudio(source, effect, effectOptions, context);
+    const processed = checkAudio(rendered, false, { allowEmpty: effect === 'removeSilence' });
     let replacement;
     if (target.channels === 'all') {
       let background = alignChannels(target.clip.audio, processed.channels.length);
@@ -277,6 +293,7 @@ export class AudioEditor {
       return { trackId: target.track.id, clipId: target.clip.id, id: target.clip.id, removed: true, duration: 0 };
     }
     target.clip.audio = replacement;
+    target.clip.keyAnalysis = null;
     if (this.project.selection?.clipId === target.clip.id) this.project.selection = processed.channels[0].length ? { trackId: target.track.id, clipId: target.clip.id, start: target.start, end: target.start + audioDuration(processed), channels: target.channels } : null;
     this._select(target.track, target.clip);
     return clipInfo(target.clip, target.track.id);
@@ -322,7 +339,7 @@ export class AudioEditor {
   }
   _saveProject() {
     const p = snapshot(this.project);
-    return { format: 'websoundedit', ...p, tracks: p.tracks.map(t => ({ ...t, clips: t.clips.map(c => ({ ...c, audio: encodePCM(c.audio) })) })) };
+    return { format: 'websoundedit', ...p, tracks: p.tracks.map(t => ({ ...t, clips: t.clips.map(c => ({ ...c, keyAnalysis: c.keyAnalysis ? copyJSON(c.keyAnalysis) : null, audio: encodePCM(c.audio) })) })) };
   }
   _loadProject(raw) {
     const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -336,13 +353,14 @@ export class AudioEditor {
       count += t.clips.length; if (count > LIMITS.clips) fail('Project exceeds clip limit.', 'RESOURCE_LIMIT');
       return { id: readId(t.id), name: name(t.name), gainDb: number(t.gainDb, 0, -96, 24, 'Track gain'), pan: number(t.pan, 0, -1, 1, 'Pan'), mute: t.mute === true, solo: t.solo === true, clips: t.clips.map(c => {
         if (!c) fail('Invalid clip.'); const audio = decodePCM(c.audio, budget); if (audio.sampleRate !== p.sampleRate) fail('All project clips must use the project sample rate.');
-        return { id: readId(c.id), name: name(c.name), start: number(c.start, 0, 0, LIMITS.timelineSeconds, 'Clip start'), audio };
+        return { id: readId(c.id), name: name(c.name), start: number(c.start, 0, 0, LIMITS.timelineSeconds, 'Clip start'), audio, keyAnalysis: validateKeyAnalysis(c.keyAnalysis) };
       }) };
     });
     if (data.markers !== undefined && !Array.isArray(data.markers)) fail('Project markers must be an array.');
     if ((data.markers?.length || 0) > 1000) fail('Too many markers.');
     p.markers = (data.markers || []).map(m => ({ id: readId(m.id), name: name(m.name, 'Marker'), time: number(m.time, 0, 0, LIMITS.timelineSeconds, 'Marker time') }));
     p.settings = this._validateSettings(data.settings || {});
+    p.metadata = normalizeMetadata(data.metadata || {});
     p.selectedTrackId = data.selectedTrackId || null; p.selectedClipId = data.selectedClipId || null;
     this.project = p; this._repairSelection();
     if (data.selection) { const target = this._target({ target: data.selection }); this.project.selection = { trackId: target.track.id, clipId: target.clip.id, start: target.start, end: target.end, channels: target.channels }; this._select(target.track, target.clip); this.project.selection = { trackId: target.track.id, clipId: target.clip.id, start: target.start, end: target.end, channels: target.channels }; }
@@ -374,6 +392,10 @@ export class AudioEditor {
       case 'project.select': { const track = params.trackId ? this._track(params.trackId) : params.clipId ? this._clip(params.clipId).track : this._track(); const clip = params.clipId ? this._clip(params.clipId, track.id).clip : track.clips[0]; this._select(track, clip); return this.getState(); }
       case 'project.save': return this._saveProject();
       case 'project.load': return this._loadProject(params.project);
+      case 'metadata.update': p.metadata = normalizeMetadata(params.metadata); return copyJSON(p.metadata);
+      case 'analysis.key': { const { clip } = this._clip(params.clipId || p.selectedClipId); clip.keyAnalysis = detectKey(clip.audio); return copyJSON(clip.keyAnalysis); }
+      case 'analysis.keyAll': { const results = []; for (const track of p.tracks) for (const clip of track.clips) { clip.keyAnalysis = detectKey(clip.audio); results.push({ clipId: clip.id, name: clip.name, ...copyJSON(clip.keyAnalysis) }); } return results; }
+      case 'clip.key': { const { clip } = this._clip(params.clipId || p.selectedClipId); clip.keyAnalysis = params.tonic === null ? null : manualKey(params.tonic, params.mode); return clipInfo(clip, this._clip(clip.id).track.id); }
       case 'settings.save': return { format: 'websoundedit-settings', version: 1, settings: copyJSON(p.settings) };
       case 'settings.load': { let settings = params.settings; if (settings?.format === 'websoundedit-settings') { if (settings.version !== 1) fail('Unsupported settings version.'); settings = settings.settings; } p.settings = this._validateSettings(settings); return copyJSON(p.settings); }
       case 'history.undo': { const previous = this.undo.pop(); if (!previous) return false; this.redo.push(snapshot(p)); this.project = previous; this.revision++; return true; }
@@ -390,7 +412,7 @@ export class AudioEditor {
       case 'clip.update': { const { track, clip } = this._clip(params.clipId, params.trackId); if (own(params, 'name')) clip.name = name(params.name); if (own(params, 'start')) clip.start = number(params.start, undefined, 0, LIMITS.timelineSeconds, 'Clip start'); if (params.destinationTrackId && params.destinationTrackId !== track.id) { const destination = this._track(params.destinationTrackId); track.clips = track.clips.filter(c => c.id !== clip.id); destination.clips.push(clip); this._select(destination, clip); if (p.selection?.clipId === clip.id) p.selection.trackId = destination.id; return clipInfo(clip, destination.id); } return clipInfo(clip, track.id); }
       case 'clip.remove': { const { track, clip } = this._clip(params.clipId, params.trackId); track.clips = track.clips.filter(c => c.id !== clip.id); this._repairSelection(); return true; }
       case 'clip.duplicate': { const { track, clip } = this._clip(params.clipId, params.trackId); const dest = params.newTrack ? this._addTrack({ name: `${track.name} copy` }) : track; const duplicate = { ...clip, id: id('clip'), name: `${clip.name} copy`, start: number(params.start, clip.start + audioDuration(clip.audio), 0, LIMITS.timelineSeconds, 'Clip start') }; dest.clips.push(duplicate); this._select(dest, duplicate); return clipInfo(duplicate, dest.id); }
-      case 'clip.split': { const { track, clip } = this._clip(params.clipId, params.trackId); const at = number(params.at, p.selection?.clipId === clip.id ? p.selection.start : undefined, 0, audioDuration(clip.audio), 'Split position'); const frame = Math.round(at * clip.audio.sampleRate); if (frame <= 0 || frame >= clip.audio.channels[0].length) fail('Split position must be inside the clip.'); const cut = frame / clip.audio.sampleRate; const right = { ...clip, id: id('clip'), name: `${clip.name} · B`, start: clip.start + cut, audio: portion(clip.audio, cut, audioDuration(clip.audio)) }; clip.audio = portion(clip.audio, 0, cut); track.clips.splice(track.clips.indexOf(clip) + 1, 0, right); this._select(track, right); return { left: clipInfo(clip, track.id), right: clipInfo(right, track.id) }; }
+      case 'clip.split': { const { track, clip } = this._clip(params.clipId, params.trackId); const at = number(params.at, p.selection?.clipId === clip.id ? p.selection.start : undefined, 0, audioDuration(clip.audio), 'Split position'); const frame = Math.round(at * clip.audio.sampleRate); if (frame <= 0 || frame >= clip.audio.channels[0].length) fail('Split position must be inside the clip.'); const cut = frame / clip.audio.sampleRate; const right = { ...clip, id: id('clip'), name: `${clip.name} · B`, start: clip.start + cut, keyAnalysis: null, audio: portion(clip.audio, cut, audioDuration(clip.audio)) }; clip.audio = portion(clip.audio, 0, cut); clip.keyAnalysis = null; track.clips.splice(track.clips.indexOf(clip) + 1, 0, right); this._select(track, right); return { left: clipInfo(clip, track.id), right: clipInfo(right, track.id) }; }
       case 'selection.set': {
         const { track, clip } = this._clip(params.clipId, params.trackId); const duration = audioDuration(clip.audio);
         const start = Math.max(0, Math.min(duration, number(params.start, undefined, -LIMITS.timelineSeconds, LIMITS.timelineSeconds, 'Selection start'))), end = Math.max(0, Math.min(duration, number(params.end, undefined, -LIMITS.timelineSeconds, LIMITS.timelineSeconds, 'Selection end')));
@@ -400,13 +422,13 @@ export class AudioEditor {
       case 'selection.clear': p.selection = null; return true;
       case 'edit.copy': { const target = this._target(params); this.clipboard = this._selectedAudio(target); return { duration: audioDuration(this.clipboard), channels: this.clipboard.channels.length }; }
       case 'edit.cut':
-      case 'edit.delete': { const target = this._target(params, { requireSelection: true }); if (target.channels !== 'all') fail('Cut and delete require All channels; use Silence for one channel.'); if (method === 'edit.cut') this.clipboard = this._selectedAudio(target); const audio = spliceAudio(target.clip.audio, target.start, target.end, null); if (!audio.channels[0].length) { target.track.clips = target.track.clips.filter(c => c.id !== target.clip.id); } else target.clip.audio = audio; p.selection = null; this._repairSelection(); return true; }
-      case 'edit.trim': { const target = this._target(params, { requireSelection: true }); if (target.channels !== 'all') fail('Trim requires All channels.'); target.clip.audio = this._selectedAudio(target); if (params.keepTimelinePosition !== false) target.clip.start += target.start; p.selection = { trackId: target.track.id, clipId: target.clip.id, start: 0, end: audioDuration(target.clip.audio), channels: 'all' }; return clipInfo(target.clip, target.track.id); }
+      case 'edit.delete': { const target = this._target(params, { requireSelection: true }); if (target.channels !== 'all') fail('Cut and delete require All channels; use Silence for one channel.'); if (method === 'edit.cut') this.clipboard = this._selectedAudio(target); const audio = spliceAudio(target.clip.audio, target.start, target.end, null); if (!audio.channels[0].length) { target.track.clips = target.track.clips.filter(c => c.id !== target.clip.id); } else { target.clip.audio = audio; target.clip.keyAnalysis = null; } p.selection = null; this._repairSelection(); return true; }
+      case 'edit.trim': { const target = this._target(params, { requireSelection: true }); if (target.channels !== 'all') fail('Trim requires All channels.'); target.clip.audio = this._selectedAudio(target); target.clip.keyAnalysis = null; if (params.keepTimelinePosition !== false) target.clip.start += target.start; p.selection = { trackId: target.track.id, clipId: target.clip.id, start: 0, end: audioDuration(target.clip.audio), channels: 'all' }; return clipInfo(target.clip, target.track.id); }
       case 'edit.paste': {
         if (!this.clipboard) fail('The internal clipboard is empty.', 'EMPTY_CLIPBOARD');
         if (!p.selectedClipId && !params.clipId) return this._addClip({ audio: this.clipboard, trackId: params.trackId || p.selectedTrackId || undefined, name: 'Pasted audio', start: params.start || 0 });
         const { track, clip } = this._clip(params.clipId, params.trackId); const at = number(params.at, p.selection?.clipId === clip.id ? p.selection.start : audioDuration(clip.audio), 0, audioDuration(clip.audio), 'Paste position');
-        let audio = this.clipboard; if (audio.sampleRate !== p.sampleRate) audio = await resampleAudio(audio, p.sampleRate); clip.audio = spliceAudio(clip.audio, at, at, audio); this._select(track, clip); p.selection = { trackId: track.id, clipId: clip.id, start: at, end: at + audioDuration(audio), channels: 'all' }; return clipInfo(clip, track.id);
+        let audio = this.clipboard; if (audio.sampleRate !== p.sampleRate) audio = await resampleAudio(audio, p.sampleRate); clip.audio = spliceAudio(clip.audio, at, at, audio); clip.keyAnalysis = null; this._select(track, clip); p.selection = { trackId: track.id, clipId: clip.id, start: at, end: at + audioDuration(audio), channels: 'all' }; return clipInfo(clip, track.id);
       }
       case 'effect.apply': return this._effect(params);
       case 'effect.preview': return this._effect(params, true);
