@@ -56,7 +56,13 @@ export function encodeWav(audio, { bitDepth = 16, float = false, metadata = {} }
   return bytes;
 }
 
-export function decodeWav(input, { layout: requestedLayout } = {}) {
+/** Decode WAV with optional stricter limits, checked before allocating decoded PCM.
+ * maxDurationSeconds defaults to 600 and must be finite, positive and at most 600.
+ * maxChannels defaults to 8 and accepts 1, 2, 6 or 8. layout retains its speaker-map override.
+ */
+export function decodeWav(input, { layout: requestedLayout, maxDurationSeconds = 600, maxChannels = 8 } = {}) {
+  if (typeof maxDurationSeconds !== 'number' || !Number.isFinite(maxDurationSeconds) || maxDurationSeconds <= 0 || maxDurationSeconds > 600) throw new RangeError('WAV maxDurationSeconds must be a finite positive number no greater than 600.');
+  if (![1, 2, 6, 8].includes(maxChannels)) throw new RangeError('WAV maxChannels must be 1, 2, 6 or 8.');
   let bytes;
   if (input instanceof ArrayBuffer) bytes = new Uint8Array(input);
   else if (ArrayBuffer.isView(input)) bytes = new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
@@ -101,6 +107,7 @@ export function decodeWav(input, { layout: requestedLayout } = {}) {
   const { code, channels, sampleRate, blockAlign, bits } = format;
   if (![1, 3].includes(code) || (code === 1 && ![8, 16, 24, 32].includes(bits)) || (code === 3 && ![32, 64].includes(bits))) throw new RangeError('Unsupported WAV encoding; use uncompressed PCM or IEEE float.');
   if (![1, 2, 6, 8].includes(channels)) throw new RangeError('WAV import supports mono, stereo, 5.1 or 7.1.');
+  if (channels > maxChannels) throw new RangeError(maxChannels === 2 ? 'Choose a mono or stereo WAV. The channel limit is 2.' : `WAV exceeds the ${maxChannels}-channel limit.`);
   const maskedLayout = Object.keys(CHANNEL_LAYOUTS).find(key => CHANNEL_LAYOUTS[key].mask === format.mask && CHANNEL_LAYOUTS[key].count === channels);
   if (format.mask && !maskedLayout && requestedLayout === undefined) throw new RangeError('WAV has an unsupported speaker mask; choose its channel layout explicitly.');
   const layout = requestedLayout !== undefined ? normalizeLayout(requestedLayout, channels) : maskedLayout;
@@ -110,6 +117,7 @@ export function decodeWav(input, { layout: requestedLayout } = {}) {
   if (blockAlign !== channels * width || data.size % blockAlign !== 0) throw new RangeError('Invalid WAV block alignment.');
   const frames = data.size / blockAlign;
   if (frames / sampleRate > 600 || frames * channels * 4 > MAX_BYTES) throw new RangeError('Audio exceeds the 10-minute / 256 MiB decoded-audio limit.');
+  if (frames / sampleRate > maxDurationSeconds) throw new RangeError(`Choose a WAV no longer than ${maxDurationSeconds} seconds.`);
   const output = Array.from({ length: channels }, () => new Float32Array(frames));
   let offset = data.start;
   for (let i = 0; i < frames; i++) for (let c = 0; c < channels; c++) {

@@ -9,6 +9,19 @@
 - **sql.js 1.16.0** — MIT SQLite WASM wrapper. https://github.com/sql-js/sql.js . Used only for local Audacity AUP3 database import/export. WASM binaries are self-hosted with the application; SQLite itself is public domain.
 - **fflate 0.8.3** — MIT. https://github.com/101arrowz/fflate . Packages legacy Audacity XML and AU blocks into ZIP; input paths and declared decompressed sizes are checked before extraction.
 - **@xmldom/xmldom 0.9.12** — MIT. https://github.com/xmldom/xmldom . Parses legacy Audacity XML without loading external resources. Internal DTD/entity declarations are rejected by this integration.
+- **onnxruntime-web 1.31.1** — Microsoft runtime; its installed package metadata and JavaScript banner identify MIT. The package README links to the canonical source/license: https://github.com/microsoft/onnxruntime and https://github.com/microsoft/onnxruntime/blob/main/README.md#license . The optional Stem Lab prototype uses its self-hosted JavaScript/WASM CPU runtime in a dedicated worker. This runtime license does not license a model loaded into it.
+
+The installed ONNX Runtime Web tarball omits standalone `LICENSE` and `ThirdPartyNotices.txt` files. Upstream publishes canonical [license](https://github.com/microsoft/onnxruntime/blob/main/LICENSE) and [third-party notices](https://github.com/microsoft/onnxruntime/blob/main/ThirdPartyNotices.txt), but the exact source revision corresponding to this npm release has not been verified in this prototype. Before production distribution, verify that correspondence and include the complete applicable notices with the runtime assets. These canonical links do not assert that a `v1.31.1` Git tag was verified.
+
+## Optional Stem Lab research model
+
+Stem Lab accepts the user-supplied `htdemucs_fp16weights.onnx` file from `StemSplitio/htdemucs-onnx`, pinned to revision `d54ed9eb60e258ea82131c6ee14578628816456a`, size `165612636` bytes, and SHA-256 `d05c269d0178d2a72ad484b10b11dd370193fc923201c3b27a99f848745db70a`. Model provenance: https://huggingface.co/StemSplitio/htdemucs-onnx/blob/d54ed9eb60e258ea82131c6ee14578628816456a/README.md . The integration follows the published model tensor contract and reference chunked inference approach.
+
+Demucs is the work of Simon Rouard, Francisco Massa, Alexandre Défossez, and contributors at Meta. Original code and MIT license: https://github.com/facebookresearch/demucs and https://github.com/facebookresearch/demucs/blob/main/LICENSE . ONNX conversion/reference implementation: https://github.com/StemSplit/demucs-onnx . Research reference: https://arxiv.org/abs/2211.00847 .
+
+**Code and weights have distinct provenance.** Although the conversion's model card labels its artifact MIT, the original author states that pretrained weights are not covered by the code's MIT license and were supplied for scientific purposes: https://github.com/facebookresearch/demucs/issues/327 . WebSoundEdit does not treat a converter's label as resolving that discrepancy. No trained model weights are bundled, automatically fetched, or redistributed by this application. The selected model remains local, and Stem Lab sends no audio or telemetry to a separation service. See [Stem Lab documentation](../docs/STEM_ISOLATION.md) for the experimental scope and release gates.
+
+## Additional attribution
 
 Audacity project interoperability is an original implementation of public file layouts, informed by the upstream source and documentation. No Audacity implementation code or native binaries are distributed in this application. See [Audacity compatibility](../docs/AUDACITY.md) for primary references and support boundaries.
 

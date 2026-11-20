@@ -1,0 +1,64 @@
+name: Verify neural stem prototype
+on:
+  pull_request:
+    paths:
+      - 'src/stems/**'
+      - 'src/stem-lab.*'
+      - 'src/wav.js'
+      - 'stem-lab.html'
+      - 'scripts/*stem*.mjs'
+      - 'tests/stem*'
+      - 'package*.json'
+      - 'vite.config.js'
+      - '.github/workflows/stem-prototype.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: stem-prototype-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  prototype:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Check bounded PCM, cancellation and the existing WAV codec
+        run: node --test tests/stems-runtime.test.js tests/stem-wav-admission.test.js tests/wav.test.js
+      - run: npm run build
+      - name: Install three browser engines
+        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Verify prototype interface in three browser engines
+        run: |
+          npx playwright test tests/stem-lab.spec.js --project=chromium --project=firefox --project=webkit
+          cp test-results/browser-results.json test-results/stem-ui-results.json
+      - name: Obtain the pinned model for ephemeral research validation
+        # The app never downloads weights. This test-only copy is not packaged,
+        # cached, or included in an artifact. No real/user audio is used.
+        timeout-minutes: 5
+        run: |
+          curl --fail --location --retry 2 --max-time 240 \
+            'https://huggingface.co/StemSplitio/htdemucs-onnx/resolve/d54ed9eb60e258ea82131c6ee14578628816456a/htdemucs_fp16weights.onnx' \
+            --output "$RUNNER_TEMP/htdemucs_fp16weights.onnx"
+          echo 'd05c269d0178d2a72ad484b10b11dd370193fc923201c3b27a99f848745db70a  '"$RUNNER_TEMP/htdemucs_fp16weights.onnx" | sha256sum --check
+      - name: Exercise the real model and downloads in Chromium
+        env:
+          WSE_STEM_MODEL_PATH: ${{ runner.temp }}/htdemucs_fp16weights.onnx
+        run: npx playwright test tests/stem-model.spec.js --project=chromium
+      - name: Retain test evidence without model weights
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stem-prototype-evidence
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+      - name: Remove ephemeral model
+        if: always()
+        run: rm -f "$RUNNER_TEMP/htdemucs_fp16weights.onnx"

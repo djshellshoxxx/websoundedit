@@ -10,7 +10,7 @@ export class PresetPanel {
     this.el = container; this.onChange = onChange; this.getContext = getContext;
     this.assertInteractive = assertInteractive; this.safe = safe;
     this.selectedId = DEFAULT_PRESET_ID; this.query = ''; this.category = 'all';
-    this.el.innerHTML = `<div class="preset-intro"><h3>Start with a sound goal.</h3><p>Choose a preset, audition the preview, then Apply. One Undo restores the original audio.</p></div>
+    this.el.innerHTML = `<div class="preset-intro"><h3>Start with a sound goal.</h3><p>Choose a preset, audition the preview, then Apply. One Undo restores the original audio.</p><p><a href="./stem-lab.html" target="_blank" rel="noopener noreferrer">Open neural Stem Lab (prototype)</a> to separate a short WAV into model-predicted stems in another tab. Uses a local model file.</p></div>
       <div class="preset-filters"><label>Find a preset<input id="preset-search" type="search" placeholder="Vocal, limiter, mastering…" autocomplete="off"></label><label>Category<select id="preset-category"><option value="all">All categories</option>${PRESET_CATEGORIES.map(category => `<option value="${escape(category)}">${escape(category)}</option>`).join('')}</select></label></div>
       <p id="preset-results" class="preset-count" role="status" aria-live="polite"></p><div id="preset-list" class="preset-list" role="group" aria-label="Audio presets"></div>
       <section id="preset-detail" class="preset-detail" aria-label="Selected preset"></section>`;

@@ -55,6 +55,8 @@ Open **Audio presets**, search or choose a category, then select a recipe. Its d
 
 Vocal isolation, instrumental isolation and vocal removal use **stereo center/side processing**. They require a stereo clip with both channels selected. Centered instruments can remain with centered vocals, panned vocals and reverberation can survive removal, and the side-only instrumental result cancels when summed to mono. These are local stereo techniques, not AI stem separation.
 
+**Neural Stem Lab (prototype):** Audio presets also links to a separate browser lab for real model-based source separation. Supply the documented, hash-checked HTDemucs ONNX model locally, then open a mono/stereo WAV of up to 30 seconds. Inference runs in a dedicated browser worker and produces vocals, drums, bass and other, plus an instrumental mix of the three non-vocal stems. Audition or download 32-bit float WAVs and import them into the editor. Audio stays on the device; the lab does not fetch or bundle pretrained weights. This research prototype has a substantial memory requirement and is separate from the production presets. See [setup, model provenance and qualification](docs/STEM_ISOLATION.md).
+
 Clipped-peak repair conservatively interpolates short flat peaks with usable shoulders; it cannot reconstruct arbitrary distortion or the original lost recording. De-essers attenuate a high-frequency band dynamically and can also soften cymbals. Auto limiter measures PCM RMS, bounds its gain increase and catches sample peaks. Compression, limiting and mastering recipes are starting points for audition: they do not measure LUFS or oversampled true peaks. [Preset catalog and exact limits](docs/API.md#named-cleanup-vocal-and-mastering-presets).
 
 ### Batch conversion and scripting
