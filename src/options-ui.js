@@ -39,7 +39,7 @@ export class OptionsPanel {
     body.querySelector('#options-theme').onchange = event => this.safe(() => this.execute('ui.theme.set', { theme: event.target.value }));
     const gallery = document.createElement('div');
     gallery.className = 'theme-gallery'; gallery.setAttribute('role', 'group'); gallery.setAttribute('aria-label', 'Theme gallery');
-    gallery.innerHTML = Object.entries(THEME_INFO).map(([id, theme]) => `<button class="theme-card" data-theme-choice="${id}" aria-pressed="${id === this.getTheme()}" style="--theme-preview-bg:${theme.background};--theme-preview-accent:${theme.accent};--theme-preview-wave:${theme.wave}"><span class="theme-swatches" aria-hidden="true"><i></i><i></i></span><strong>${theme.title}</strong><small>${theme.description}</small></button>`).join('');
+    gallery.innerHTML = Object.entries(THEME_INFO).map(([id, theme]) => `<button class="theme-card" data-theme-choice="${id}" aria-label="${theme.title}: ${theme.description}" aria-pressed="${id === this.getTheme()}" style="--theme-preview-bg:${theme.background};--theme-preview-accent:${theme.accent};--theme-preview-wave:${theme.wave}"><span class="theme-swatches" aria-hidden="true"><i></i><i></i></span><strong>${theme.title}</strong><small>${theme.description}</small></button>`).join('');
     body.querySelector('.form-grid').after(gallery);
     gallery.addEventListener('click', event => { const button = event.target.closest('[data-theme-choice]'); if (button) this.safe(() => this.execute('ui.theme.set', { theme: button.dataset.themeChoice })); });
     body.querySelector('#options-tooltips').onchange = event => this.safe(() => this.execute('ui.tooltips.set', { enabled: event.target.checked }));
@@ -62,7 +62,7 @@ export class OptionsPanel {
         const raw = body.querySelector('#input-channels').value.split(',').map(value => value.trim()); if (raw.some(value => !/^\d+$/.test(value))) throw new Error('Enter channel indices separated by commas, such as 0, 1.');
         return normalizeWorkbenchPreferences({ ...preferences, input: { source: body.querySelector('#input-source').value, deviceId: body.querySelector('#input-device').value, channels: raw.map(Number), gainDb: +body.querySelector('#input-gain').value, echoCancellation: body.querySelector('#input-echo').checked, noiseSuppression: body.querySelector('#input-noise').checked, autoGainControl: body.querySelector('#input-auto').checked } }).input;
       };
-      body.querySelector('#input-start').onclick = () => this.safe(async () => { const input = read(); const button = body.querySelector('#input-start'); button.disabled = true; try { await this.execute('audio.input.start', { ...input, monitor: false }); this.updatePreferences({ ...this.getPreferences(), input }); } finally { if (button.isConnected) button.disabled = false; } });
+      body.querySelector('#input-start').onclick = () => this.safe(async () => { const input = read(); const button = body.querySelector('#input-start'); button.disabled = true; try { await this.execute('audio.input.start', { ...input, monitor: false }); this.updatePreferences({ ...this.getPreferences(), input }); await refreshDevices(); } finally { if (button.isConnected) button.disabled = false; } });
       body.querySelector('#input-stop').onclick = () => this.safe(() => this.execute('audio.input.stop', {}));
       body.querySelector('#input-apply').onclick = () => this.safe(async () => { const input = read(); if (this.getLiveState().input?.status === 'active') { const { gainDb, echoCancellation, noiseSuppression, autoGainControl } = input; await this.execute('audio.input.set', { gainDb, echoCancellation, noiseSuppression, autoGainControl }); } this.updatePreferences({ ...this.getPreferences(), input }); this.message('Input preferences saved. Channel/device changes require Start input.'); });
       const monitor = () => this.safe(async () => { const control = body.querySelector('#input-monitor'); try { await this.execute('audio.monitor.set', { enabled: control.checked, gainDb: +body.querySelector('#monitor-gain').value }); } catch (error) { control.checked = Boolean(this.getLiveState().input?.monitor); throw error; } });
@@ -71,12 +71,36 @@ export class OptionsPanel {
       body.innerHTML = `<p>Choose a destination and an explicit monitoring layout. The actual hardware capability is reported below.</p><div class="form-grid"><label>Output device<select id="output-device"${latest.capabilities?.outputSelection ? '' : ' disabled'}>${option('default', 'System default', preferences.output.deviceId)}${(devices.outputs || []).filter(device => device.deviceId !== 'default').map(device => option(device.deviceId, device.label || 'Unnamed output', preferences.output.deviceId)).join('')}</select></label><label>Monitoring layout<select id="output-layout">${Object.keys(CHANNEL_LAYOUTS).map(layout => option(layout, layout.toUpperCase(), preferences.output.monitorLayout)).join('')}</select></label></div><p class="field-hint">${latest.capabilities?.outputSelection ? 'Output selection is supported by this browser.' : 'This browser does not expose output-device selection. Use the system default output.'} Monitoring downmix excludes LFE by default.</p><button id="output-apply" class="primary">Apply output routing</button><output id="device-state" class="device-state" role="status"></output>`;
       body.querySelector('#output-apply').onclick = () => this.safe(async () => { const output = { deviceId: body.querySelector('#output-device').value, monitorLayout: body.querySelector('#output-layout').value }; await this.execute('audio.output.set', output); this.updatePreferences({ ...this.getPreferences(), output }); });
     }
+    const hardware = document.createElement('section'); hardware.className = 'hardware-details';
+    hardware.innerHTML = `<div class="inline-buttons"><button id="audio-refresh-devices">Rescan devices</button>${page === 'output' && latest.capabilities?.outputSelection && typeof navigator.mediaDevices?.selectAudioOutput === 'function' ? '<button id="audio-choose-output">Choose output device…</button>' : ''}</div><p class="field-hint">Connect your USB or built-in audio interface, then rescan. Input and output use the browser’s operating-system audio route. Music capture requests echo cancellation, noise suppression and automatic gain control off by default.</p><output id="hardware-state" class="device-state" role="status"></output>`;
+    body.append(hardware);
+    const refreshDevices = async () => {
+      const current = await this.execute('audio.devices.list', {});
+      if (!body.isConnected) return;
+      const picker = body.querySelector(page === 'input' ? '#input-device' : '#output-device');
+      const value = picker.value, available = page === 'input' ? current.inputs : current.outputs;
+      picker.innerHTML = option('default', 'System default', value) + (available || []).filter(device => device.deviceId !== 'default').map(device => option(device.deviceId, device.label || 'Unnamed device — start input to reveal permitted names', value)).join('');
+      if (![...picker.options].some(entry => entry.value === value)) { picker.value = 'default'; this.message('The previously selected device is no longer listed. Choose an available device and apply its routing.'); }
+      else this.message(`Found ${current.inputs?.length || 0} input and ${current.outputs?.length || 0} output devices. ${current.permission === 'granted' ? 'Permitted device names are available.' : 'Start input to grant access and reveal permitted device names.'}`);
+    };
+    body.querySelector('#audio-refresh-devices').onclick = () => this.safe(refreshDevices);
+    const chooseOutput = body.querySelector('#audio-choose-output');
+    if (chooseOutput) chooseOutput.onclick = () => this.safe(async () => {
+      const result = await this.execute('ui.audioOutput.choose', { monitorLayout: body.querySelector('#output-layout').value });
+      this.updatePreferences({ ...this.getPreferences(), output: { deviceId: result.deviceId, monitorLayout: result.monitorLayout } });
+      await refreshDevices(); if (body.isConnected) body.querySelector('#output-device').value = result.deviceId;
+    });
     if (problem) this.message(problem);
     const refresh = () => {
       if (!body.isConnected) return; const state = this.getLiveState(), input = state.input || {}, output = state.output || {};
       body.querySelector('#device-state').textContent = page === 'input' ? `Input: ${input.status || 'idle'} · ${input.source || 'no source'} · channels ${(input.channels || []).join(', ') || 'not acquired'} · ${input.layout || 'layout not acquired'}${input.error ? ' · ' + input.error : ''}` : `Output: ${output.deviceId || 'default'} · actual maximum ${output.maxChannels ?? 'unknown'} channels · monitoring ${output.monitorLayout || 'stereo'}${output.fallback ? ' · explicit fallback' : ''}${output.message ? ' · ' + output.message : ''}`;
       const monitor = body.querySelector('#input-monitor'); if (monitor) monitor.checked = Boolean(input.monitor);
       const stop = body.querySelector('#input-stop'); if (stop) stop.disabled = !['active', 'requesting'].includes(input.status);
+      const context = state.context || {}, ms = value => Number.isFinite(value) ? `${(value * 1000).toFixed(1)} ms` : 'not reported';
+      const rate = value => Number.isFinite(value) ? `${value.toLocaleString()} Hz` : 'not acquired';
+      const processing = input.actualProcessing || {}, flag = name => processing[name] === true ? 'on' : processing[name] === false ? 'off' : 'not reported';
+      const details = `Audio engine: ${context.state || 'not-started'} · project ${this.getState().sampleRate.toLocaleString()} Hz · engine ${rate(context.sampleRate)} · input device ${rate(input.actualSampleRate)}. Browser latency estimates: processing ${ms(context.baseLatency)} · output ${ms(context.outputLatency)}. These are reported estimates, not a measured round trip.${input.active ? ` Device processing: echo ${flag('echoCancellation')}; noise suppression ${flag('noiseSuppression')}; automatic gain ${flag('autoGainControl')}.` : ''}`;
+      const outputNode = body.querySelector('#hardware-state'); if (outputNode.textContent !== details) outputNode.textContent = details;
     }; refresh(); return this.subscribeLive(refresh);
   }
   layout(body) {

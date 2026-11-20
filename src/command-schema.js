@@ -3,6 +3,7 @@
  * in the owning engine/runtime (for example, whether a selected clip exists).
  */
 import { RACK_EFFECTS, normalizeRackChain } from './rack-config.js';
+import { AUDIO_PRESETS } from './presets.js';
 
 export class CommandValidationError extends TypeError {
   constructor(message, path = 'params') { super(path + ': ' + message); this.name = 'CommandValidationError'; this.code = 'INVALID_ARGUMENT'; this.path = path; }
@@ -39,6 +40,7 @@ const effects = {
   eq: { bands: S.array(eqBand, 12) },
   compressor: { thresholdDb: n(-80, 0), ratio: n(1, 100), attackMs: n(0, 500), releaseMs: n(1, 5000), kneeDb: n(0, 40), makeupDb: n(-24, 36) },
   limiter: { ceilingDb: n(-24, 0), lookaheadMs: n(0, 50), releaseMs: n(1, 5000) },
+  preset: { presetId: S.enum(...AUDIO_PRESETS.map(preset => preset.id)) },
   stretch: { ratio: n(.5, 2), preservePitch: b }, pitch: { semitones: n(-12, 12), preserveDuration: b }, speed: { rate: n(.5, 2) },
   removeSilence: { thresholdDb: n(-100, 0), minDuration: n(.005, 60), padding: n(0, 5) },
   trimSilence: { thresholdDb: n(-120, 0), minDuration: n(0, 600), padding: n(0, 10) },
@@ -52,7 +54,7 @@ for (const [name, definition] of Object.entries(RACK_EFFECTS)) effects[name] = {
   wet:n(0,1),
   ...Object.fromEntries(definition.fields.map(field => [field.key, field.type === 'select' ? S.enum(...field.options) : (field.integer ? i : n)(field.min,field.max)])),
 };
-export const EFFECT_SCHEMAS = Object.freeze(Object.fromEntries(Object.entries(effects).map(([name, fields]) => [name, S.object({ ...fields, bpm:n(20,400) }, name==='eq'?['bands']:[])])));
+export const EFFECT_SCHEMAS = Object.freeze(Object.fromEntries(Object.entries(effects).map(([name, fields]) => [name, S.object({ ...fields, bpm:n(20,400) }, name==='eq'?['bands']:name==='preset'?['presetId']:[])])));
 const render = { scope:S.enum('mix','track','clip','selection'), ...selection, end:nullable(n(0,600)), raw:b, respectMute:b, respectSolo:b, outputLayout:layout };
 const projectFields = { name:str(200,1),sampleRate:i(8000,192000),bpm:n(20,400),outputLayout:layout };
 const recipeSteps=S.array(S.object({method:str(160,1),params:generic},['method']),256,1);

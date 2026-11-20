@@ -5,6 +5,8 @@
 import { processAudio, detectBpm, detectSilence, analyzeAudio, generateAudio, sliceAudio, concatAudio, resampleAudio, validateAudio } from './dsp.js';
 import { processRack, processRackEffect } from './rack-dsp.js';
 import { RACK_EFFECTS } from './rack-config.js';
+import { processPreset, validatePresetOptions } from './preset-dsp.js';
+import { DEFAULT_PRESET_ID } from './presets.js';
 import { detectKey, manualKey, validateKeyAnalysis } from './key-detection.js';
 import { normalizeMetadata } from './metadata.js';
 import { audioLayout, normalizeLayout, layoutMetadata, layoutForChannels, CHANNEL_LAYOUTS, channelIndices, convertLayout, trackMixMatrix } from './channel-layout.js';
@@ -170,6 +172,7 @@ const effects = [
   ['eq', 'Render parametric EQ bands', { bands: [{ type: 'peaking', frequency: 1000, gainDb: 0, q: 1, enabled: true }] }],
   ['compressor', 'Compress dynamic range', { thresholdDb: -18, ratio: 4, attackMs: 10, releaseMs: 120, kneeDb: 6, makeupDb: 0 }],
   ['limiter', 'Limit sample peaks with lookahead', { ceilingDb: -1, lookaheadMs: 5, releaseMs: 60 }],
+  ['preset', 'Apply a named cleanup, vocal, dynamics, mastering or creative recipe as one edit', { presetId: DEFAULT_PRESET_ID }],
   ['stretch', 'Change duration while preserving pitch', { ratio: 1, preservePitch: true }], ['pitch', 'Transpose by semitones', { semitones: 0, preserveDuration: true }], ['speed', 'Change speed and pitch together', { rate: 1 }],
   ['silence', 'Replace selected audio with silence', {}], ['removeSilence', 'Remove detected quiet regions', { thresholdDb: -45, minDuration: 0.25, padding: 0.02 }], ['dcRemove', 'Remove DC offset', {}],
   ['duck', 'Tempo-shaped ducking, gating or true sidechain compression', { source: 'tempo', mode: 'volume', depth: 0.8, rate: 1, attack: 0, hold: 0.1, release: 0.7, curve: 1, sourceTrackId: null }],
@@ -364,6 +367,12 @@ export class AudioEditor {
     if (!EFFECTS.some(e => e.effect === effect)) fail(`Unknown effect: ${effect}`);
     const target = this._target(params), options = params.params || {};
     if (!options || typeof options !== 'object' || Array.isArray(options)) fail('Effect parameters must be an object.');
+    if (effect === 'preset') {
+      const preset = validatePresetOptions(options);
+      // Check the original clip as well as the selected channel subset. A pair
+      // chosen from surround PCM is not a stereo recording of center/side data.
+      if (preset.stereoOnly && (target.clip.audio.channels.length !== 2 || target.indices.length !== 2)) fail('This preset requires a stereo clip and both channels.');
+    }
     if (target.channels !== 'all' && (lengthEffects.has(effect) || channelEffects.has(effect) || (effect === 'pitch' && options.preserveDuration === false))) fail('Time and channel-layout edits require All channels.');
     if (effect === 'mono' && (target.start !== 0 || target.end !== audioDuration(target.clip.audio))) fail('Mono conversion requires the whole clip.');
     const source = this._selectedAudio(target);
@@ -376,7 +385,8 @@ export class AudioEditor {
     }
     const effectOptions = { ...options, bpm: options.bpm ?? this.project.bpm };
     const { wet, ...rackEffectOptions } = options;
-    const rendered = effect === 'rack' ? await processRack(source, effectOptions, context)
+    const rendered = effect === 'preset' ? await processPreset(source, effectOptions, context)
+      : effect === 'rack' ? await processRack(source, effectOptions, context)
       : Object.hasOwn(RACK_EFFECTS, effect) ? await processRackEffect(source, effect, rackEffectOptions, wet ?? RACK_EFFECTS[effect].wet, context)
       : await processAudio(source, effect, effectOptions, context);
     const processed = target.channels === 'all' ? checkAudio(rendered, false, { allowEmpty: effect === 'removeSilence' }) : validateAudio(rendered, { allowEmpty: false });

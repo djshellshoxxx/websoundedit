@@ -15,6 +15,11 @@
 :root[data-theme-tone="light"] .track-name button,
 :root[data-theme-tone="light"] .track-fader output,
 :root[data-theme-tone="light"] .transport-clock output { color:var(--text); }
+:root[data-theme-tone="light"] .selection-title strong { color:var(--teal); }
+:root[data-theme-tone="light"] .selection-bar label { color:var(--muted); }
+:root:not([data-theme="studio"]) .timeline-scroll { background:var(--deep); }
+.timeline-label small,
+.control-ticks { color:var(--muted); }
 :root:not([data-theme="studio"]) h1>span,
 :root:not([data-theme="studio"]) .tempo-actions button,
 :root:not([data-theme="studio"]) .transport .icon-button { color:var(--muted); }

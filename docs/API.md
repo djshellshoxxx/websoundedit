@@ -178,6 +178,7 @@ Each accepts its listed parameters and optional `target`. The generic `effect.ap
 | `effect.eq` | `bands:[{type,frequency,gainDb,q,enabled}]`; peaking, lowshelf, highshelf, lowpass or highpass |
 | `effect.compressor` | `thresholdDb,ratio,attackMs,releaseMs,kneeDb,makeupDb` |
 | `effect.limiter` | `ceilingDb,lookaheadMs,releaseMs`; sample-peak limiter, not a true-peak meter/limiter |
+| `effect.preset` | Required `presetId`; apply an immutable named processing recipe as one undoable edit. See the preset catalog below. |
 | `effect.stretch` | `ratio` = output duration/input duration, `preservePitch:true` |
 | `effect.pitch` | `semitones,preserveDuration:true` |
 | `effect.speed` | `rate`; changes duration and pitch together |
@@ -188,6 +189,41 @@ Each accepts its listed parameters and optional `target`. The generic `effect.ap
 | `effect.loop` | `repeats,crossfadeMs`; replaces selected range with repeated audio |
 | `effect.beatRepeat` | `division,pattern,bpm?`; division = slices per beat; zero-based pattern indexes into the selected audio's slices |
 | `effect.granular` | `grainMs,density,spread,seed,mix`; seeded granular texture |
+
+### Named cleanup, vocal and mastering presets
+
+`src/presets.js` exports the DOM-free `AUDIO_PRESETS` catalog, `PRESET_CATEGORIES`, `DEFAULT_PRESET_ID` (`auto-limiter`) and `getAudioPreset(id)`. Each frozen entry has `{id,title,category,description,limitations,stereoOnly,steps}`. A step is `{effect,params,wet?}`; these are fixed recipes, not arbitrary command lists or user-supplied processors. There are 32 presets:
+
+| Category | Preset IDs |
+| --- | --- |
+| Cleanup | `repair-clipped-peaks`, `remove-dc`, `remove-rumble`, `reduce-hiss`, `gentle-noise-gate`, `strong-noise-gate` |
+| Vocals | `vocal-center`, `instrumental-sides`, `vocal-reduction`, `de-esser-gentle`, `de-esser-strong`, `vocal-presence` |
+| Instruments | `bass-definition`, `drum-punch`, `acoustic-warmth`, `piano-smooth` |
+| Compression | `compression-gentle`, `compression-vocal`, `compression-drums`, `compression-broadcast` |
+| Limiting | `auto-limiter`, `limiter-transparent`, `limiter-punchy`, `limiter-headroom` |
+| Mastering | `master-balanced`, `master-warm`, `master-bright`, `master-loud` |
+| Creative | `telephone`, `vintage-tape`, `spacious-chorus`, `rhythmic-pulse` |
+
+```js
+// Preview returns the complete replacement clip, without changing the session.
+const preview = await editor.execute('effect.preview', {
+  effect: 'preset', params: { presetId: 'de-esser-gentle' }
+});
+// Audition uses the existing mixer preview path and also leaves history intact.
+const audition = await editor.execute('audio.renderPreview', {
+  effect: 'preset', params: { presetId: 'de-esser-gentle' }, scope: 'selection'
+});
+await editor.execute('effect.preset', { presetId: 'de-esser-gentle' });
+// Equivalent generic apply: {effect:'preset',params:{presetId:'de-esser-gentle'}}
+```
+
+All presets retain sample rate, frame count, channel count, layout and timeline alignment. They process only the selected interval/channels (or the full selected clip when no range is selected), retain untouched PCM, and commit as one undo entry. Work runs through the existing worker queue and its resource limits: at most ten minutes / 256 MiB of selected PCM, with 1–4 fixed processing stages. The schema requires a known `presetId`, rejects parameter overrides and accepts an optional bounded `bpm` for the standard effect-call contract. The presets themselves use their stated fixed settings.
+
+The three stereo center presets require an original **stereo** clip and both channels; selecting two channels out of surround audio is rejected before processing. `vocal-center` extracts band-limited `(L+R)/2` into both outputs. `instrumental-sides` returns `(L-R)/2` and its inverse: this removes all shared center content, including centered instruments, and **cancels when summed to mono**. `vocal-reduction` subtracts a band-limited center from each channel, preserving center bass and out-of-band highs. These are local center/side operations, not AI source separation or guaranteed vocal/instrumental isolation; panned vocals and reverb can remain.
+
+Clipping repair reconstructs only short (at most 4 ms), flat, near-full-scale peaks with usable unclipped shoulders. Cubic interpolation is bounded to 6 dB above the observed plateau. If any repair succeeds, a shared attenuation step reserves a -1 dBFS sample-peak ceiling. Unsupported long or edge clipping and clean PCM remain unchanged when no repair succeeds; lost recording information cannot be recovered exactly. The de-esser uses a linked dynamic envelope to attenuate a zero-phase high-frequency band while retaining the complementary low band. It can also attenuate cymbals or other bright content. Auto limiter measures PCM RMS, caps automatic boost, leaves content below -60 dBFS RMS unboosted, and applies lookahead sample-peak limiting. Its RMS target can be limited by the boost cap and peak ceiling. Limiting and mastering presets do not measure LUFS or intersample true peaks.
+
+`node --expose-gc scripts/benchmark-presets.mjs` runs the new restoration/center/mastering processors on reproducible ten-minute stereo PCM and verifies unchanged source data, finite output, exact dimensions and resource preflights. It prints timings and hashes without claiming a hardware-independent performance threshold.
 
 ### Ducking, sidechain and gate envelopes
 
