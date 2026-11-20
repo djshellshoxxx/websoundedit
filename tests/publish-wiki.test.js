@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { publishWiki, readWikiSources, validateWikiContext, verifyWikiPublic, verifyWikiHTML, WIKI_REMOTE, WIKI_REPOSITORY, WIKI_LIMITS } from '../scripts/publish-wiki.mjs';
 
 const execute = promisify(execFile), TOKEN = 'fake_wiki_test_token_not_a_credential';
@@ -76,6 +77,17 @@ test('wiki publication refuses wrong repository/ref/SHA or missing token before 
   ]) await assert.rejects(publishWiki({env:{...context(),...patch},git:async()=>calls++}),error=>['WIKI_CONTEXT','WIKI_TOKEN'].includes(error.code));
   assert.equal(calls,0);
   assert.equal(validateWikiContext(context()).sha,'a'.repeat(40));
+});
+
+test('wiki CLI failures retain structured evidence and a nonzero exit without exposing credentials',async()=>{
+  await assert.rejects(execute(process.execPath,[fileURLToPath(new URL('../scripts/publish-wiki.mjs',import.meta.url))],{env:{...context(),GITHUB_REF:'refs/pull/1/merge'},encoding:'utf8'}),error=>{
+    assert.equal(error.code,1);
+    const evidence=JSON.parse(error.stdout);
+    assert.equal(evidence.status,'failed'); assert.equal(evidence.code,'WIKI_CONTEXT');
+    assert.ok(!JSON.stringify(evidence).includes(TOKEN)); assert.ok(!error.stderr.includes(TOKEN));
+    assert.match(error.stderr,/WIKI_CONTEXT/);
+    return true;
+  });
 });
 
 test('normal publication preserves unrelated pages, uses a fast-forward push and verifies anonymous public bytes and pages',async t=>{

@@ -9,6 +9,7 @@ import { BrowserFileIO, safeFilename, uniqueFilename } from '../src/file-ui.js';
 import { FILE_COMMANDS } from '../src/file-commands.js';
 import { CommandRuntime } from '../src/command-runtime.js';
 import { MacroPanel, normalizeMacroSettings } from '../src/macro-ui.js';
+import { batchConversionScript } from '../src/macro-examples.js';
 import { normalizeWorkbenchPreferences } from '../src/options-ui.js';
 import { LiveAudioRuntime } from '../src/live-audio.js';
 import { createRackEffect } from '../src/rack-config.js';
@@ -113,6 +114,46 @@ test('macro batch isolates files, preserves the original selection and tears dow
     failTeardown=true;panel.settings.draft='effect.gain({db:-1});';await assert.rejects(panel.batch({inputIds:[inputs[0].id]}),/teardown failed/);assert.equal(restores,4);assert.equal(panel.running,false);assert.deepEqual(await editor.execute('project.save'),saved);
     panel.dispose();runtime.dispose();
   }finally{if(previousDocument===undefined)delete globalThis.document;else globalThis.document=previousDocument;}
+});
+
+test('the macro result retained for display and download is independent of the API return value', async () => {
+  const previousDocument = globalThis.document; globalThis.document = { querySelectorAll: () => [], querySelector: () => null };
+  const runtime = new CommandRuntime();
+  let panel;
+  try {
+    panel = new MacroPanel({ runtime, routes: { register() {}, active: '' }, fileIO: { aliases: () => [] }, getState: () => null }); panel.register();
+    const result = await runtime.execute('macro.run', { text: 'let values=[3,1,2]; let nested={rows:[values]}; let count=array.length({values:values});' });
+    const completed = JSON.stringify(result), preview = panel.lastRunPreview;
+    result.variables.values.sort(); result.variables.nested.rows[0][0] = 99; result.completedSteps = 100;
+    assert.notEqual(panel.lastRunResult, result);
+    assert.equal(JSON.stringify(panel.lastRunResult), completed);
+    assert.equal(panel.lastRunPreview, preview);
+    assert.equal(JSON.stringify(JSON.parse(preview)), completed);
+  } finally {
+    panel?.dispose(); runtime.dispose();
+    if (previousDocument === undefined) delete globalThis.document; else globalThis.document = previousDocument;
+  }
+});
+
+test('quick batch conversion uses explicit text, retains the draft, preserves channels and restores after an input error', async () => {
+  const previousDocument = globalThis.document; globalThis.document = { querySelectorAll: () => [], querySelector: () => null };
+  try {
+    const editor = new AudioEditor({ sampleRate: SR }); await editor.execute('clip.add', { name: 'Original', audio: pcm(.3) });
+    const original = await editor.execute('project.save');
+    const runtime = new CommandRuntime({ coreExecute: editor.execute.bind(editor), coreCommands: COMMANDS, getState: editor.getState.bind(editor) });
+    const io = filesFor(editor); io.register(runtime);
+    const stereo = { sampleRate: SR, channels: [new Float32Array(800).fill(.2), new Float32Array(800).fill(-.1)] };
+    const inputs = io.supply([new File([encodeWav(stereo)], 'first.wav'), new File(['bad WAV'], 'bad.wav'), new File([encodeWav(stereo)], 'last.wav')]);
+    const panel = new MacroPanel({ runtime, routes: { register() {}, active: '' }, fileIO: io, getState: editor.getState.bind(editor), getProject: () => editor.execute('project.save'), restoreProject: project => editor.execute('project.load', { project }), persist() {}, download() {} }); panel.register();
+    panel.settings.draft = '// Keep my work\nnot.a.command({});';
+    const result = await runtime.execute('macro.batch', { text: batchConversionScript({ format: 'wav', normalize: true }), inputIds: inputs.map(input => input.id), continueOnError: true });
+    assert.deepEqual(result.results.map(item => item.success), [true, false, true]); assert.equal(result.outputCount, 2);
+    assert.deepEqual(panel.lastOutputs.map(output => output.name), ['first.wav', 'last.wav']);
+    assert.equal(panel.settings.draft, '// Keep my work\nnot.a.command({});'); assert.deepEqual(await editor.execute('project.save'), original);
+    for (const output of panel.lastOutputs) { const audio = decodeWav(output.bytes); assert.equal(audio.channels.length, 2); assert.equal(audio.channels[0].length, 800); assert.ok(Math.abs(audio.channels[0][0] - 10 ** (-1 / 20)) < .0001); assert.ok(audio.channels[1][0] < 0); }
+    await assert.rejects(runtime.execute('macro.batch', { macroId: 'some-macro', text: '', inputIds: [inputs[0].id] }), /not both/);
+    assert.deepEqual(await editor.execute('project.save'), original); panel.dispose(); runtime.dispose();
+  } finally { if (previousDocument === undefined) delete globalThis.document; else globalThis.document = previousDocument; }
 });
 
 test('project-replacing recipes prevalidate final live racks before any teardown or core mutation', async () => {

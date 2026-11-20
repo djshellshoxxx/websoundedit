@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { storageTest as test } from './native-storage.js';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { encodeWav } from '../src/wav.js';
 

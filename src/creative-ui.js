@@ -2,18 +2,10 @@ import { METADATA_FIELDS, normalizeMetadata } from './metadata.js';
 import { NOTE_NAMES } from './key-detection.js';
 import { MidiController, MidiSampler, midiValue, normalizeMidiMappings, parseMidiFile, renderMidiSequence, encodeMidiFile } from './midi.js';
 import { MidiActionEdges, normalizeMidiActions } from './midi-actions.js';
+export { THEMES, applyTheme } from './themes.js';
 
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
-export const THEMES = Object.freeze({ studio: 'Studio', daylight: 'Daylight', midnight: 'Midnight', terminal: 'Terminal' });
-
-export function applyTheme(theme) {
-  const selected = Object.hasOwn(THEMES, theme) ? theme : 'studio';
-  document.documentElement.dataset.theme = selected;
-  document.documentElement.style.colorScheme = selected === 'daylight' ? 'light' : 'dark';
-  const picker = $('#theme-select'); if (picker) picker.value = selected;
-  return selected;
-}
 
 /** Secondary dialogs stay separate from timeline/rendering and the effects rack. */
 export class CreativeTools {

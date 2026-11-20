@@ -82,7 +82,7 @@ Use deterministic synthetic signals for measurable checks. Tests should exercise
 
 ## 7. Browser and visual verification
 
-Use a supported desktop browser for the full workflow and inspect narrow layouts. If only one browser can be exercised in the release environment, report that limit rather than claiming cross-browser verification.
+Run the full shared desktop suite in Chromium, Firefox and WebKit, plus the mobile Chromium and WebKit layout projects. The default `npm run test:e2e` command selects all five projects. Shared desktop specs are included automatically; only the Chromium simulated microphone fixture is engine-specific. Preserve the native worklet, PCM and OPFS assertions in every desktop engine. Linux verification requires a working audio backend; CI provides a clocked PulseAudio null sink. Record each engine's actual result from `test-results/browser-results.json`, and report any environment blocker separately from an application failure. Published-site checks run after deployment and are intentionally skipped in a local build-only run.
 
 | ID | Scenario | Required result |
 | --- | --- | --- |

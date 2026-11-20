@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {AudioEditor} from '../src/engine.js';
 import {Playback} from '../src/playback.js';
-import {LiveAudioRuntime,LIVE_COMMANDS} from '../src/live-audio.js';
+import {LiveAudioRuntime,LIVE_COMMANDS,LIVE_LIMITS} from '../src/live-audio.js';
 import {RealtimeRackManager} from '../src/realtime-rack.js';
 import {RealtimeRackDSP} from '../src/realtime-dsp.js';
 import {RecordingStore} from '../src/recording-store.js';
@@ -12,7 +12,7 @@ import {MidiSampler} from '../src/midi.js';
 import {AudioContextMock,AudioNodeMock,MemoryDirectory,mediaTrack,mediaStream} from './audio-test-support.js';
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
 class SyntheticTap {
-  constructor(context,source,options){this.context=context;this.source=source;this.options=options;this.node=new AudioNodeMock();this.chunks=[];this.closed=false;this.kernel=new CaptureKernel({...options,onChunk:packet=>{const data=packet.data;this.chunks.push(Promise.resolve(options.onChunk({...packet,sampleRate:context.sampleRate})).then(buffer=>this.kernel.recycle(buffer||data.buffer)));},onEnd:result=>{this.finished=result;Promise.all(this.chunks).then(()=>{options.onEnd?.(result);this.resolveStop?.(result);});},onError:options.onError});}
+  constructor(context,source,options){this.context=context;this.source=source;this.options=options;this.node=new AudioNodeMock();this.chunks=[];this.closed=false;this.kernel=new CaptureKernel({...options,onChunk:packet=>{const data=packet.data;this.chunks.push(Promise.resolve(options.onChunk({...packet,data:new Float32Array(data.buffer,0,packet.frames*packet.channels),sampleRate:context.sampleRate})).then(buffer=>this.kernel.recycle(buffer||data.buffer)));},onEnd:result=>{this.finished=result;Promise.all(this.chunks).then(()=>{options.onEnd?.(result);this.resolveStop?.(result);});},onError:options.onError});}
   start(settings={}){this.finished=null;this.kernel.start({startFrame:Math.ceil(this.context.currentTime*this.context.sampleRate),endFrame:Number.MAX_SAFE_INTEGER,...settings});}
   stop(){if(this.finished)return Promise.resolve(this.finished);return new Promise(resolve=>{this.resolveStop=resolve;this.kernel.finish();});}
   setLoop(settings){this.loopSettings={...this.loopSettings,...settings};}
@@ -41,6 +41,79 @@ test('ordinary transport shares the live graph; knobs preserve playing sources, 
   await live.execute('automation.set',{lanes:[{slotId:'f',param:'wet',points:[{time:0,value:0},{time:1,value:1}]}]});await live.execute('automation.clear');await live.execute('transport.set',{rate:1.25,bpm:130,metronome:true});assert.equal(playback.rate,1.25);assert.equal(engine.getState().bpm,130);
   await live.releaseTrack(first.trackId);assert.ok(sources[0].stops.length);assert.equal(sources[1].stops.length,0);assert.equal(playback.playing,true);
   await live.execute('transport.pause');assert.equal(playback.playing,false);await live.execute('transport.seek',{position:.25});assert.equal(playback.position,.25);await live.execute('transport.stop');assert.equal(playback.position,0);await live.dispose();
+});
+test('visualization source lookup is silent and follows output, input and project cleanup', async () => {
+  const { engine, live, context } = await fixture();
+  try {
+    assert.equal(live.getVisualizationSource(), null); assert.equal(live.getVisualizationSource('input'), null); assert.equal(live.context, null);
+    await engine.execute('audio.generate', { duration: .1 });
+    await live.execute('transport.play', { scope: 'mix' });
+    const output = live.getVisualizationSource(), connections = output.node.connections.length;
+    assert.equal(output.context, context); assert.equal(output.node, live.masterOutput); assert.equal(output.channels, 2);
+    for (let i = 0; i < 20; i++) live.getVisualizationSource();
+    assert.equal(output.node.connections.length, connections);
+    await live.execute('audio.input.start', { channels: [0, 1] });
+    assert.equal(live.getVisualizationSource('input').node, live.inputNode);
+    assert.equal(live.getVisualizationSource('input').channels, 2);
+    await live.execute('audio.input.stop'); assert.equal(live.getVisualizationSource('input'), null);
+    await live.resetProject(); assert.equal(live.getVisualizationSource(), null);
+  } finally { await live.dispose(); }
+});
+test('a loop can be armed before first play and survives selection, stop, mix and seek transitions', async () => {
+  const { engine, live, playback } = await fixture();
+  try {
+    await engine.execute('audio.generate', { duration: 4 });
+    await engine.execute('selection.set', { start: 1, end: 2, channels: 'all' });
+    const armed = await live.execute('transport.set', { loop: true, loopStart: 1, loopEnd: 2 });
+    assert.deepEqual([armed.loop, armed.loopStart, armed.loopEnd], [true, 1, 2]);
+    assert.equal(live.context, null, 'loop configuration must not request audio output');
+    await live.execute('transport.play', { scope: 'selection' });
+    assert.deepEqual([playback._timelineOffset, playback._loopStart, playback._loopEnd], [1, 0, 1]);
+    await live.execute('transport.stop');
+    assert.deepEqual([live.getState().transport.loopStart, live.getState().transport.loopEnd], [1, 2]);
+    await live.execute('transport.play', { scope: 'mix' });
+    assert.deepEqual([playback._timelineOffset, playback._loopStart, playback._loopEnd], [0, 1, 2]);
+    await live.execute('transport.seek', { position: 1.25 });
+    assert.deepEqual([live.getState().transport.loopStart, live.getState().transport.loopEnd], [1, 2]);
+  } finally { await live.dispose(); }
+});
+
+test('paused loop changes use project time even outside the previous playback selection', async () => {
+  const { engine, live, playback } = await fixture();
+  try {
+    await engine.execute('audio.generate', { duration: 4 });
+    await engine.execute('selection.set', { start: 3, end: 4, channels: 'all' });
+    await live.execute('transport.play', { scope: 'selection' });
+    const playing = live.getState().transport;
+    await assert.rejects(live.execute('transport.set', { loop: true, loopStart: .25, loopEnd: .75, bpm: 130 }), /playing selection/);
+    assert.deepEqual(live.getState().transport, playing, 'an incompatible active loop must reject atomically');
+    await live.execute('transport.pause');
+    await live.execute('transport.set', { loop: true, loopStart: .25, loopEnd: .75 });
+    assert.deepEqual([live.getState().transport.loopStart, live.getState().transport.loopEnd], [.25, .75]);
+    await live.execute('transport.play', { scope: 'mix' });
+    assert.deepEqual([playback._loopStart, playback._loopEnd], [.25, .75]);
+    await live.execute('transport.pause');
+    await engine.execute('selection.set', { start: 2, end: 3, channels: 'all' });
+    await live.execute('transport.play', { scope: 'selection' });
+    assert.deepEqual([live.getState().transport.loopStart, live.getState().transport.loopEnd], [2, 3]);
+  } finally { await live.dispose(); }
+});
+
+test('invalid staged loops reject before tempo changes and empty-project arming stays silent', async () => {
+  const { engine, live } = await fixture();
+  try {
+    await live.execute('transport.set', { loop: true });
+    assert.equal(live.getState().transport.loop, true);
+    assert.equal(live.context, null);
+    await engine.execute('audio.generate', { duration: 4 });
+    const before = live.getState().transport;
+    for (const range of [{ loopStart: 1, loopEnd: 5 }, { loopStart: 2, loopEnd: 1 }]) {
+      await assert.rejects(live.execute('transport.set', { loop: true, bpm: 130, ...range }), /Loop/);
+      assert.deepEqual(live.getState().transport, before);
+    }
+    await live.execute('transport.play', { scope: 'mix' });
+    assert.deepEqual([live.getState().transport.loopStart, live.getState().transport.loopEnd], [0, 4]);
+  } finally { await live.dispose(); }
 });
 test('input settings, monitoring, bounded PCM subscriptions and device stop expose truthful active state',async()=>{
   const{live,taps,context,track}=await fixture();await live.execute('audio.input.start',{channels:[0,1],monitor:false});assert.equal(live.getState().input.sampleRate,8000);assert.equal(live.getState().input.active,true);
@@ -92,6 +165,62 @@ test('long recorder archives bounded chunks; pause omits gaps; every archive act
   await taps.at(-1).feed(0,[new Float32Array(2048).fill(.1),new Float32Array(2048).fill(.2)]);await live.execute('recorder.pause');assert.equal(live.getState().recorder.status,'paused');context.currentTime=5;await live.execute('recorder.resume');await taps.at(-1).feed(40000,[new Float32Array(2048).fill(.3),new Float32Array(2048).fill(.4)]);await live.execute('recorder.stop');const listed=await live.execute('recordings.list');assert.equal(listed.recordings[0].frames,4096);assert.equal(listed.recordings[0].seconds,.512);
   const exported=await live.execute('recordings.export',{recordingId,start:0,end:.1});assert.equal(exported.mime,'audio/wav');assert.ok(exported.bytes.length>0);await live.execute('recordings.importRange',{recordingId,start:0,end:.1,name:'Range'});assert.equal(engine.getState().tracks[0].clips[0].frames,800);
   await live.execute('recordings.auditionRange',{recordingId,start:.256,end:.512});assert.equal(live.playback.playing,true);await live.execute('recordings.recover',{recordingId});await live.execute('recordings.delete',{recordingId});assert.equal((await live.execute('recordings.list')).recordings.length,0);await live.dispose();
+});
+test('long recording preserves half a second of stalled PCM consumption and still bounds prolonged pressure',{timeout:10000},async()=>{
+  for(const [sampleRate,layout] of [[8000,'mono'],[48000,'stereo'],[192000,'7.1']]){
+    const{live,taps,context,archive}=await fixture(layout);context.sampleRate=sampleRate;
+    let release;const gate=new Promise(resolve=>{release=resolve;}),execute=live.storage.execute.bind(live.storage);let writes=Promise.resolve(),tap;
+    live.storage.execute=(method,...args)=>method==='append'?(writes=writes.then(async()=>{await gate;return execute(method,...args);})):execute(method,...args);
+    try{
+      await live.execute('recorder.start',{source:'master',name:'Delayed consumer'});tap=taps.at(-1);
+      const frames=sampleRate/2,channels=Array.from({length:tap.kernel.channels},(_,channel)=>Float32Array.from({length:frames},(_,frame)=>(frame%1024)/2048+channel/32));
+      // Advance the actual capture kernel for 500 ms before allowing any disk
+      // consumer to recycle its buffers. No wall-clock sleep is involved.
+      tap.kernel.process(channels,0,frames);
+      assert.equal(tap.kernel.active,true,`${sampleRate} Hz capture must survive a 500 ms consumer stall`);
+      release();await Promise.all(tap.chunks);const record=await live.execute('recorder.stop');
+      assert.equal(record.status,'complete');assert.equal(record.frames,frames);
+      assert.equal(live.graphs.voiceBytes,0,'stopping releases the recorder pool reservation');
+      const saved=await archive.readRange(record.id,{start:0,end:frames/sampleRate});assert.deepEqual(saved.channels,channels);
+      const errors=[],packets=[],kernel=new CaptureKernel({...tap.options,onChunk:packet=>packets.push(packet),onError:error=>errors.push(error)});
+      const capacity=kernel.poolSize*kernel.framesPerChunk;
+      assert.ok(capacity*kernel.channels*4<=8*1024*1024,'the entire capture pool stays within 8 MiB');
+      kernel.start({startFrame:0});kernel.process(Array.from({length:kernel.channels},()=>new Float32Array(capacity+128)),0,capacity+128);
+      assert.equal(kernel.active,false);assert.equal(errors.length,1);assert.equal(errors[0].code,'BACKPRESSURE');assert.equal(errors[0].frames,capacity);
+      assert.equal(packets.reduce((sum,packet)=>sum+packet.frames,0),capacity,'overflow retains only the bounded captured range');
+    }finally{release();tap?.kernel.finish();await Promise.allSettled(tap?.chunks||[]);tap?.dispose();await live.dispose();}
+  }
+});
+test('recorder pool reservations reject exhaustion and release on pause, failed resume and factory failure',async()=>{
+  const{live,taps}=await fixture();await live._context();const manager=live.graphs,factory=live.captureFactory,execute=live.storage.execute.bind(live.storage);let release;
+  try{
+    release=manager.reserveVoice(LIVE_LIMITS.voiceBytes);
+    await assert.rejects(live.execute('recorder.start',{source:'master'}),error=>error.code==='RESOURCE_LIMIT');
+    assert.equal(taps.length,0,'exhausted PCM budget rejects before a capture pool is allocated');assert.equal(manager.voiceBytes,LIVE_LIMITS.voiceBytes);
+    release();release=null;await live.execute('recorder.start',{source:'master'});assert.ok(manager.voiceBytes>0);
+    await live.execute('recorder.pause');assert.equal(manager.voiceBytes,0);
+    release=manager.reserveVoice(LIVE_LIMITS.voiceBytes);
+    await assert.rejects(live.execute('recorder.resume'),error=>error.code==='RESOURCE_LIMIT');
+    assert.equal(live.getState().recorder.status,'error','failed resume must not leave recording active without a tap');assert.equal(live.recordTap,null);assert.equal(manager.voiceBytes,LIVE_LIMITS.voiceBytes);
+    release();release=null;live.captureFactory=async()=>{throw new Error('Worklet creation fixture failure');};
+    await assert.rejects(live.execute('recorder.start',{source:'master'}),/Worklet creation fixture failure/);assert.equal(manager.voiceBytes,0);
+    live.captureFactory=factory;await live.execute('recorder.start',{source:'master'});
+    live.storage.execute=(method,...args)=>method==='stop'?Promise.reject(new Error('Storage stop fixture failure')):execute(method,...args);
+    await assert.rejects(live.execute('recorder.stop'),/Storage stop fixture failure/);assert.equal(manager.voiceBytes,0,'storage finalization failure still releases capture memory');
+  }finally{release?.();live.storage.execute=execute;await live.dispose();}
+});
+test('a capture error racing user stop or pause cannot mark a truncated recording complete',async()=>{
+  for(const method of ['recorder.stop','recorder.pause']){
+    const{live,taps,archive}=await fixture();
+    try{
+      await live.execute('recorder.start',{source:'master'});const tap=taps.at(-1),channels=[new Float32Array(2048).fill(.1),new Float32Array(2048).fill(.2)];await tap.feed(0,channels);
+      const message='Capture stopped because its bounded storage/consumer queue is full.';
+      tap.stop=async()=>{await Promise.resolve();tap.options.onError(Object.assign(new Error(message),{code:'BACKPRESSURE'}));return{frames:2048,error:message};};
+      if(method==='recorder.pause')await assert.rejects(live.execute(method),error=>error.message===message);else await live.execute(method);
+      const record=(await archive.list()).recordings[0];assert.equal(record.status,'error');assert.equal(live.getState().recorder.error,message);assert.equal(live.graphs.voiceBytes,0);
+      assert.deepEqual((await archive.readRange(record.id,{start:0,end:.256})).channels,channels,'committed PCM remains recoverable after an explicit overflow');
+    }finally{await live.dispose();}
+  }
 });
 test('live settings preflight is pure, reset races cannot reactivate input, and shared MIDI disposal leaves context usable',async()=>{
   const{engine,live,context,track}=await fixture();await engine.execute('audio.generate',{duration:.1});const settings={version:1,racks:{master:{chain:[{id:'t',effect:'tremolo',wet:.5}],automation:[]}}};const normalized=live.validateSettings(settings);assert.equal(live.getSettings().racks.master.chain.length,0);await live.loadSettings(normalized);await live.execute('audio.input.start',{channels:[0]});

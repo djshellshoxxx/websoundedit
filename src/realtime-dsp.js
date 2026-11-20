@@ -3,6 +3,7 @@
  * validation and admission; stable stage IDs retain their ring/filter history.
  */
 import { normalizeRackChain, RACK_EFFECTS } from './rack-config.js';
+import { createNoiseGateState, configureNoiseGate, noiseGateFrame } from './noise-gate.js';
 export const LIVE_LIMITS = Object.freeze({ stateBytes: 64 * 1024 * 1024, graphs: 65, stages: 128, stagesPerRack: 12, voices: 128, voiceBytes: 256 * 1024 * 1024, automationPoints: 8192, blockFrames: 2048, captureBytes: 64 * 1024 * 1024, queuedRecordingBytes: 8 * 1024 * 1024 });
 const TAU=2*Math.PI, REVERB_TIMES=[29.7,37.1,41.1,43.7], finite=x=>Math.max(-1e6,Math.min(1e6,Number.isFinite(x)?x:0));
 const resource=message=>Object.assign(new RangeError(message),{code:'RESOURCE_LIMIT'});
@@ -47,6 +48,7 @@ export function automationValue(lane,time,fallback){
 function read(memory,frame,delay){const at=((frame-delay)%memory.length+memory.length)%memory.length,i=Math.floor(at),f=at-i;return memory[i]*(1-f)+memory[(i+1)%memory.length]*f;}
 function makeStage(config,sr,count){
   const state={...config,params:{...config.params},frame:0,phase:0,channels:[],filter:null,filterKey:''};
+  if(config.effect==='noiseGate')state.gate=createNoiseGateState(count);
   for(let c=0;c<count;c++){
     const channel={ring:capacities[config.effect]?ring(config.effect==='reverb'?.201:capacities[config.effect],sr):null,lp:0,z1:0,z2:0,last:0,held:0,x:new Float64Array(6),y:new Float64Array(6)};
     if(config.effect==='reverb'){channel.combs=[29.7,37.1,41.1,43.7].map((ms,i)=>ring((ms*1.45+c*(i+1)*.31)/1000+.001,sr));channel.combLow=new Float64Array(4);channel.allpass=[ring(.0051,sr),ring(.0017,sr)];}
@@ -80,6 +82,7 @@ function wetSample(stage,input,c,sr,bpm){
     case'tape':{s.ring[frame%s.ring.length]=input;const seconds=frame/sr,delay=sr*(.006+.005*p.wow*Math.sin(TAU*.63*seconds)+.0004*p.flutter*Math.sin(TAU*7.1*seconds)),shaped=Math.tanh(read(s.ring,frame,delay)*p.drive)/Math.tanh(p.drive),coef=1-Math.exp(-TAU*Math.min(20000-p.warmth*17000,sr*.45)/sr);s.lp+=coef*(shaped-s.lp);output=s.lp;break;}
     case'stutter':{const length=Math.max(1,Math.round(sr*60/bpm/p.division)),at=frame%length,open=Math.max(1,Math.round(length*p.gate)),fade=Math.min(Math.floor(open/2),Math.round(p.fadeMs*sr/1000));if(frame<length)s.ring[at]=input;const envelope=at>=open?0:fade?Math.max(0,Math.min(1,at/fade,(open-1-at)/fade)):1;output=s.ring[at]*envelope;break;}
     case'bitcrusher':{if(frame%p.hold===0){const levels=2**(p.bits-1)-1;s.held=Math.round(input*levels)/levels;}output=s.held;break;}
+    case'noiseGate':output=input*stage.gate.gains[c];break;
   }
   return finite(output);
 }
@@ -117,7 +120,7 @@ export class RealtimeRackDSP {
     for(let i=0;i<length;i++){
       let time=timelineStart+i*timelineRate/this.sampleRate;if(loopEnd>loopStart&&time>=loopEnd)time=loopStart+(time-loopStart)%(loopEnd-loopStart);this._automate(time,(this.frames+i)/this.sampleRate);
       for(let c=0;c<this.channels;c++)output[c][i]=input[c]?.[i]||0;
-      for(const stage of this.stages){if(stage.effect==='filter')updateFilter(stage,this.sampleRate);for(let c=0;c<this.channels;c++){const dry=output[c][i],wet=wetSample(stage,dry,c,this.sampleRate,this.bpm);output[c][i]=stage.enabled?finite(dry*(1-stage.wet)+wet*stage.wet):dry;}stage.frame++;stage.phase=(stage.phase+TAU*(stage.params.rate||0)/this.sampleRate)%TAU;}
+      for(const stage of this.stages){if(stage.effect==='filter')updateFilter(stage,this.sampleRate);if(stage.effect==='noiseGate'){configureNoiseGate(stage.gate,stage.params,this.sampleRate);noiseGateFrame(stage.gate,output,i);}for(let c=0;c<this.channels;c++){const dry=output[c][i],wet=wetSample(stage,dry,c,this.sampleRate,this.bpm);output[c][i]=stage.enabled?finite(dry*(1-stage.wet)+wet*stage.wet):dry;}stage.frame++;stage.phase=(stage.phase+TAU*(stage.params.rate||0)/this.sampleRate)%TAU;}
     }
     this.frames+=length;return output;
   }

@@ -3,7 +3,11 @@ import { HELP_CHAPTERS, HELP_IMAGES } from '../src/help-content.js';
 
 // Commit and execute this gate with the reviewed PNGs and populated HELP_IMAGES.
 // A missing or partial image set is a failure, not an unsupported capability skip.
-test('the illustrated guide loads all 22 reviewed images across every chapter', async ({ page }) => {
+test('the illustrated guide loads all 22 reviewed images across every chapter', async ({ page, browserName }) => {
+  // Measured hosted Firefox snapshot timing projects ~258 s of tracing alone
+  // across this whole-guide audit. Keep a bounded overall budget for that
+  // instrumentation without extending the 15 s individual assertions.
+  if (browserName === 'firefox') test.setTimeout(360_000);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 

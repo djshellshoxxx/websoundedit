@@ -61,7 +61,7 @@ The browser adapter supplies `inputSampleRate` and `inputLayout`. Direct Node/HT
 
 ## Resource and connection limits
 
-The browser sends at most four queued 1,024-frame chunks. The API accepts at most 256 KiB per PCM request. The companion caps encoder stdin at 2 MiB and the UDP queue at 128 packets of at most 1,316 bytes, plus one small remainder. It drops rather than growing memory without bounds and reports loss. Stop gives the encoder and UDP queue bounded flush windows; forced or nonzero encoder exits remain visible as errors. One companion owns one active stream.
+The browser sends at most four queued 1,024-frame chunks. The API accepts at most 256 KiB per PCM request. The companion caps encoder stdin at 2 MiB and the UDP queue at 128 packets of at most 1,316 bytes, plus one small remainder. It drops rather than growing memory without bounds and reports loss. Stop allows up to ten seconds for the encoder to finish its tail, followed by up to two seconds for queued UDP packets. These deadlines are included in the capability report; forced or nonzero encoder exits remain visible as errors. One companion owns one active stream.
 
 The HTTP service binds `127.0.0.1`, checks exact Host and allowed Origin, requires a Bearer token and does not use cookie authentication. CORS is only granted to the configured origin; preflight support does not grant authentication. Browser redirects are rejected, credentials are omitted, response bodies are capped, and connection tokens never appear in a request URL. Ordinary editing has a separate admission/byte budget; cancellation remains available when that queue is full.
 

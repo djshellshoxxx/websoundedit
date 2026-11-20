@@ -5,6 +5,7 @@
 import { validateAudio } from './dsp.js';
 import { RACK_EFFECTS, normalizeRackChain, MAX_RACK_EFFECTS } from './rack-config.js';
 import { layoutMetadata } from './channel-layout.js';
+import { createNoiseGateState, configureNoiseGate, noiseGateFrame } from './noise-gate.js';
 
 export const RACK_EFFECT_NAMES = Object.freeze(Object.keys(RACK_EFFECTS));
 export const MAX_RACK_STAGES = MAX_RACK_EFFECTS;
@@ -205,6 +206,18 @@ function processWet(channel, sr, effect, params, bpm, channelIndex) {
 
 function renderStage(audio, stage, context) {
   if (!stage.enabled || stage.wet === 0) return copy(audio);
+  if (stage.effect === 'noiseGate') {
+    const state = createNoiseGateState(audio.channels.length), channels = audio.channels.map(channel => new Float32Array(channel.length));
+    configureNoiseGate(state, stage.params, audio.sampleRate);
+    for (let frame = 0; frame < channels[0].length; frame++) {
+      const gains = noiseGateFrame(state, audio.channels, frame);
+      for (let channel = 0; channel < channels.length; channel++) {
+        const dry = audio.channels[channel][frame], wet = dry * gains[channel];
+        channels[channel][frame] = dry * (1 - stage.wet) + wet * stage.wet;
+      }
+    }
+    return validateAudio({ sampleRate: audio.sampleRate, ...layoutMetadata(audio), channels });
+  }
   const bpm = numeric(stage.params.bpm ?? context.bpm, 120, 20, 400, 'BPM');
   const channels = audio.channels.map((channel, index) => {
     const wetChannel = processWet(channel, audio.sampleRate, stage.effect, stage.params, bpm, index);

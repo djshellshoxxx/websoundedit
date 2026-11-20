@@ -29,11 +29,21 @@ export class LiveAudioRuntime extends EventTarget {
     this.context=null;this.contextReady=null;this.graphManagerFactory=graphManagerFactory;this.captureFactory=captureFactory;this.graphs=null;this.layout='stereo';this.listeners=new Set();this.disposed=false;this.generation=0;this.inputGeneration=0;this.queue=Promise.resolve();this.pending=0;
     this.racks=new Map([['master',{chain:[],automation:[]}]]);this.loops=new Map();this.capture=emptyCapture();this.recorder=emptyRecorder();this.recordings=[];this.storageState={available:!!(storage||nav?.storage?.getDirectory),usage:null,quota:null,remainingBytes:null,error:null};
     this.storage=storage||new RecordingClient({onProgress:progress=>this._emit('progress',progress)});this.devices=devices||new AudioDevices({navigator:nav,onChange:()=>this._inputChanged()});this.subscribers=new Set();
-    this.output={deviceId:'default',monitorLayout:'stereo',maxChannels:2,fallback:false,message:null};this.monitor={enabled:false,gainDb:0};this.lastPlay={scope:'mix'};this.exportDestination=null;this.midiPanic=()=>{};
+    this.output={deviceId:'default',monitorLayout:'stereo',maxChannels:null,fallback:false,message:null};this.monitor={enabled:false,gainDb:0};this.lastPlay={scope:'mix'};this.exportDestination=null;this.midiPanic=()=>{};
     this.playback.setAudioRoute({contextProvider:()=>this._context(),outputNode:trackId=>this.graphs?.graphs.get(trackId)?.node||this.masterInput,monitorNode:()=>this.monitorOutput,meterNode:()=>this.masterOutput,layout:()=>this.layout,reserveVoice:bytes=>this.graphs?.reserveVoice(bytes)||(()=>{}),onClock:(clock,bpm)=>{this.clock=clock;this.graphs?.setClock(clock,bpm);}});
     this.engineListener=event=>this._engineChanged(event.detail||{});this.engine.addEventListener?.('state',this.engineListener);this.knownTracks=new Set(this._project().tracks.map(track=>track.id));
   }
   _project(){return this.engine.getState?.()||{sampleRate:48000,outputLayout:'stereo',bpm:120,beatsPerBar:4,beatOffset:0,tracks:[],duration:0,settings:{}};}
+  /** Read-only signal taps; inspecting them never starts audio or asks for a device. */
+  getVisualizationSource(source='master'){
+    if(!['master','input'].includes(source))throw new RangeError('Choose program output or active input.');
+    if(this.disposed||this.resetting||!this.context||this.context.state==='closed')return null;
+    if(source==='input'){
+      const input=this.devices.getState();
+      return this.inputNode&&input.status==='active'?{context:this.context,node:this.inputNode,channels:input.channels.length,layout:input.layout}:null;
+    }
+    return this.masterOutput?{context:this.context,node:this.masterOutput,channels:CHANNEL_LAYOUTS[this.layout].count,layout:this.layout}:null;
+  }
   capabilities(){return{audioWorklet:!!(globalThis.AudioWorkletNode||this.contextFactory&&this.captureFactory!==CaptureTap.create),...this.devices.capabilities(),outputSelection:!!(this.context?.setSinkId||(globalThis.AudioContext||globalThis.webkitAudioContext)?.prototype?.setSinkId),opfs:this.storageState.available,streamingFileExport:!!globalThis.showSaveFilePicker,layouts:Object.keys(CHANNEL_LAYOUTS),limits:LIVE_LIMITS,editor:{maxSeconds:600,maxBytes:256*1024*1024},recording:{maxSeconds:86400,maxBytes:512*1024**3},exportLimits:{...ENCODING_LIMITS},timePitchSurround:false};}
   commands(){return LIVE_COMMANDS.map(command=>copy(command));}
   subscribe(listener){if(typeof listener!=='function')throw new TypeError('Provide a live state listener.');this.listeners.add(listener);return()=>this.listeners.delete(listener);}
@@ -42,7 +52,7 @@ export class LiveAudioRuntime extends EventTarget {
   _error(error){this._emit('error',{code:error.code||'AUDIO_ERROR',message:error.message||String(error),recordingId:this.recorder.recordingId,recoverable:!!this.recorder.recordingId});}
   getState(){
     const input=this.devices.getState();input.active=input.status==='active';input.sampleRate=this.context?.sampleRate||null;
-    return{capabilities:this.capabilities(),context:{state:this.context?.state||'not-started',sampleRate:this.context?.sampleRate||null,projectLayout:this._project().outputLayout||'stereo'},input:{...input,monitor:this.monitor.enabled},output:copy(this.output),transport:{playing:this.playback.playing,position:this.playback.position,rate:this.playback.rate,loop:this.playback.loop,loopStart:this.playback._timelineOffset+this.playback._loopStart,loopEnd:this.playback._timelineOffset+this.playback._loopEnd,bpm:this._project().bpm,metronome:this.playback.metronome},racks:[...this.racks].map(([key,value])=>({target:key==='master'?'master':{trackId:key},...copy(value)})),capture:copy(this.capture),loops:[...this.loops.values()].map(loop=>({trackId:loop.trackId,clipId:loop.clipId,name:loop.name,playing:loop.playing,muted:loop.muted,duration:loop.duration,transition:loop.transition||'audio-clock',transitionDelayFrames:loop.transitionDelayFrames||0,transitionDelaySeconds:loop.transitionDelaySeconds||0})),recorder:{...copy(this.recorder),queuedBytes:this.storage.queuedBytes||0},recordings:copy(this.recordings),storage:copy(this.storageState)};
+    return{capabilities:this.capabilities(),context:{state:this.context?.state||'not-started',sampleRate:this.context?.sampleRate||null,baseLatency:Number.isFinite(this.context?.baseLatency)?this.context.baseLatency:null,outputLatency:Number.isFinite(this.context?.outputLatency)?this.context.outputLatency:null,projectLayout:this._project().outputLayout||'stereo'},input:{...input,monitor:this.monitor.enabled},output:copy(this.output),transport:{playing:this.playback.playing,position:this.playback.position,rate:this.playback.rate,loop:this.playback.loop,loopStart:this.playback._timelineOffset+this.playback._loopStart,loopEnd:this.playback._timelineOffset+this.playback._loopEnd,bpm:this._project().bpm,metronome:this.playback.metronome},racks:[...this.racks].map(([key,value])=>({target:key==='master'?'master':{trackId:key},...copy(value)})),capture:copy(this.capture),loops:[...this.loops.values()].map(loop=>({trackId:loop.trackId,clipId:loop.clipId,name:loop.name,playing:loop.playing,muted:loop.muted,duration:loop.duration,transition:loop.transition||'audio-clock',transitionDelayFrames:loop.transitionDelayFrames||0,transitionDelaySeconds:loop.transitionDelaySeconds||0})),recorder:{...copy(this.recorder),queuedBytes:this.storage.queuedBytes||0},recordings:copy(this.recordings),storage:copy(this.storageState)};
   }
   execute(method,params={},options={}){
     if(this.disposed)return Promise.reject(Object.assign(new Error('Live audio has been disposed.'),{code:'DISPOSED'}));
@@ -70,7 +80,7 @@ export class LiveAudioRuntime extends EventTarget {
       masterOutput=context.createGain();masterOutput.channelCount=CHANNEL_LAYOUTS[this.layout].count;masterOutput.channelCountMode='explicit';masterOutput.channelInterpretation='discrete';masterInput.connect(masterOutput);
       await manager.setAutomation('master',this.racks.get('master').automation);check();monitorOutput=context.createGain();monitorOutput.gain.value=1;monitorOutput.connect(context.destination);
       this.masterInput=masterInput;this.masterOutput=masterOutput;this.monitorOutput=monitorOutput;this._monitorRouting(this.output.monitorLayout);
-      this.epoch=context.currentTime;manager.setClock({audioTime:context.currentTime,timelineTime:0,rate:1,playing:false},project.bpm);context.onstatechange=()=>this._state('audio.context');return context;
+      this.epoch=context.currentTime;manager.setClock({audioTime:context.currentTime,timelineTime:0,rate:1,playing:false},project.bpm);context.onstatechange=()=>this._state('audio.context');this._state('audio.context');return context;
     })().catch(error=>{manager?.dispose();disconnect(masterOutput);disconnect(monitorOutput);if(this.graphs===manager)this.graphs=null;if(this.contextReady===ready)this.contextReady=null;throw error;});
     this.contextReady=ready;return ready;
   }
@@ -112,11 +122,32 @@ export class LiveAudioRuntime extends EventTarget {
     const proposed=[...this.graphs.graphs.values()].map(graph=>({id:graph.id,chain:graph.chain,automation:graph.automation}));for(const track of plan.tracks)if(!proposed.some(graph=>graph.id===track.id))proposed.push({id:track.id,...(this.racks.get(track.id)||{chain:[],automation:[]})});this.graphs.budget(proposed);
     for(const track of plan.tracks)await this._ensureTrack(track.id);abort(signal);if(generation!==this.generation)fail('Playback start was cancelled.','ABORTED');
     const position=params.position??(params.offset!==undefined?plan.start+params.offset:this.playback.position>=plan.start&&this.playback.position<plan.end?this.playback.position:plan.start),loop=params.loop??this.playback.loop;
-    const loopStart=(params.loopStart??plan.start)-plan.start,loopEnd=(params.loopEnd??plan.end)-plan.start;
+    const stagedStart=this.playback._timelineOffset+this.playback._loopStart,stagedEnd=this.playback._timelineOffset+this.playback._loopEnd;
+    const stagedFits=stagedEnd>stagedStart&&stagedStart>=plan.start&&stagedEnd<=plan.end;
+    const loopStart=(params.loopStart??(stagedFits?stagedStart:plan.start))-plan.start,loopEnd=(params.loopEnd??(stagedFits?stagedEnd:plan.end))-plan.start;
     const options={offset:position-plan.start,loop,loopStart,loopEnd,rate:params.rate??this.playback.rate,bpm:params.bpm??project.bpm,beatsPerBar:params.beatsPerBar??project.beatsPerBar,beatOffset:params.beatOffset??project.beatOffset,metronome:params.metronome??this.playback.metronome};
     const onAbort=()=>this.playback.stop();signal?.addEventListener('abort',onAbort,{once:true});try{await this.playback.playPlan(plan,options);abort(signal);}finally{signal?.removeEventListener('abort',onAbort);}this.lastPlay={scope,...(params.trackId?{trackId:params.trackId}:{}),...(params.clipId?{clipId:params.clipId}:{})};this.graphs.setClock({audioTime:context.currentTime,timelineTime:this.playback.position,rate:this.playback.rate,playing:true,loopStart:loop?plan.start+loopStart:0,loopEnd:loop?plan.start+loopEnd:0},options.bpm);return this.getState().transport;
   }
-  async _transportSet(params){const project=this._project();if(params.bpm!==undefined||params.beatsPerBar!==undefined||params.beatOffset!==undefined)await this.engine.execute('project.update',Object.fromEntries(['bpm','beatsPerBar','beatOffset'].filter(key=>params[key]!==undefined).map(key=>[key,params[key]])));this.playback.setTempo(params.bpm??project.bpm,params.beatOffset??project.beatOffset,params.beatsPerBar??project.beatsPerBar);if(params.rate!==undefined)this.playback.setRate(params.rate);if(params.metronome!==undefined)this.playback.setMetronome(params.metronome);if(params.loop!==undefined||params.loopStart!==undefined||params.loopEnd!==undefined)this.playback.setLoop(params.loop??this.playback.loop,{start:(params.loopStart??this.playback._timelineOffset+this.playback._loopStart)-this.playback._timelineOffset,end:(params.loopEnd??this.playback._timelineOffset+this.playback._loopEnd)-this.playback._timelineOffset});return this.getState().transport;}
+  async _transportSet(params){
+    const project=this._project();let nextLoop;
+    if(params.loop!==undefined||params.loopStart!==undefined||params.loopEnd!==undefined){
+      const offset=this.playback._timelineOffset,previousStart=offset+this.playback._loopStart,previousEnd=offset+this.playback._loopEnd;
+      const previousFits=previousEnd>previousStart&&previousStart>=0&&previousEnd<=project.duration;
+      const start=params.loopStart??(previousFits?previousStart:0),end=params.loopEnd??(previousFits?previousEnd:project.duration),enabled=params.loop??this.playback.loop;
+      if(!Number.isFinite(start)||!Number.isFinite(end)||start<0||end<0||start>project.duration||end>project.duration)fail('Loop bounds must fit the project duration.');
+      const pendingEmpty=project.duration===0&&params.loopStart===undefined&&params.loopEnd===undefined;
+      if(enabled&&end<=start&&!pendingEmpty)fail('Loop end must follow loop start.');
+      if(this.playback.playing&&(start<offset||end>offset+this.playback._duration))fail('Loop bounds must fit the playing selection. Stop playback or play the mix before changing its range.');
+      nextLoop={enabled,start:start-offset,end:end-offset};
+    }
+    // Preflight loop bounds before changing tempo or restarting an active source.
+    if(params.bpm!==undefined||params.beatsPerBar!==undefined||params.beatOffset!==undefined)await this.engine.execute('project.update',Object.fromEntries(['bpm','beatsPerBar','beatOffset'].filter(key=>params[key]!==undefined).map(key=>[key,params[key]])));
+    this.playback.setTempo(params.bpm??project.bpm,params.beatOffset??project.beatOffset,params.beatsPerBar??project.beatsPerBar);
+    if(params.rate!==undefined)this.playback.setRate(params.rate);
+    if(params.metronome!==undefined)this.playback.setMetronome(params.metronome);
+    if(nextLoop)this.playback.setLoop(nextLoop.enabled,nextLoop);
+    return this.getState().transport;
+  }
   async _inputStart(params,options){
     if(this.capture.phase!=='idle'||['recording','paused'].includes(this.recorder.status))fail('Stop capture/recording before changing the input device or channels.','BUSY');
     const generation=this.generation,inputGeneration=this.inputGeneration;const contextPromise=this._context(),streamPromise=this.devices.start(params,options);let stream;
@@ -197,8 +228,17 @@ export class LiveAudioRuntime extends EventTarget {
   async releaseTrack(trackId){this.playback.removeTrack?.(trackId);const loop=this.loops.get(trackId);if(loop){this._stopLoop(loop);loop.tap?.dispose();loop.route?.dispose();loop.release();this.loops.delete(trackId);}this.graphs?.remove(trackId);this.racks.delete(trackId);this._state('track.release');}
   async _quota(){if(!this.storageState.available)fail('Disk-backed recording storage is unavailable.','UNSUPPORTED');try{const estimate=await this.navigator?.storage?.estimate?.();if(estimate)this.storageState={...this.storageState,usage:estimate.usage??null,quota:estimate.quota??null,remainingBytes:estimate.quota!==undefined&&estimate.usage!==undefined?Math.max(0,estimate.quota-estimate.usage):null};}catch(error){this.storageState.error=error.message;}return this.storageState;}
   async _recorderTap(route){
-    const generation=this.generation,tap=await this.captureFactory(this.context,route.node,{channels:route.channels,onChunk:async packet=>{if(this.recorder.status!=='recording')return packet.data.buffer;const response=await this.storage.execute('append',{},packet.data);this._recordInfo(response.result);this._emit('progress',{recordingId:this.recorder.recordingId,frames:this.recorder.frames,bytesWritten:this.recorder.bytesWritten,queuedBytes:this.storage.queuedBytes||0,remainingBytes:this.storageState.remainingBytes});return response.buffer;},onError:error=>{this._error(error);this._stopRecording('error').catch(e=>this._error(e));}});
-    if(generation!==this.generation||this.recorder.status!=='recording'){tap.dispose();fail('Recording start was cancelled.','ABORTED');}this.recordTap=tap;tap.start();
+    // Disk writes and manifest commits need more scheduling tolerance than a
+    // short loop. Target 125 ms chunks and about two seconds of bounded PCM.
+    const generation=this.generation,framesPerChunk=Math.min(16384,Math.max(2048,Math.ceil(this.context.sampleRate*.125/128)*128)),poolSize=16,bytes=framesPerChunk*route.channels*4*poolSize;
+    if(bytes>8*1024*1024)fail('Recording capture buffers exceed the 8 MiB limit.','RESOURCE_LIMIT');
+    const release=this.graphs.reserveVoice(bytes);let tap;
+    try{
+      tap=await this.captureFactory(this.context,route.node,{channels:route.channels,framesPerChunk,poolSize,onChunk:async packet=>{if(this.recorder.status!=='recording')return packet.data.buffer;const response=await this.storage.execute('append',{},packet.data);this._recordInfo(response.result);this._emit('progress',{recordingId:this.recorder.recordingId,frames:this.recorder.frames,bytesWritten:this.recorder.bytesWritten,queuedBytes:this.storage.queuedBytes||0,remainingBytes:this.storageState.remainingBytes});return response.buffer;},onError:error=>{this.recorder.error=error.message;this._error(error);this._stopRecording('error').catch(e=>this._error(e));}});
+      const dispose=tap.dispose.bind(tap);tap.dispose=()=>{try{dispose();}finally{release();}};
+      if(generation!==this.generation||this.recorder.status!=='recording')fail('Recording start was cancelled.','ABORTED');
+      this.recordTap=tap;tap.start();
+    }catch(error){if(this.recordTap===tap)this.recordTap=null;try{tap?.dispose();}finally{release();}throw error;}
   }
   _recordInfo(result){if(!result)return;this.recorder={...this.recorder,recordingId:result.id,name:result.name,frames:result.frames,seconds:result.seconds,bytesWritten:result.bytes,maxBytes:result.maxBytes};}
   async _recordStart(params,options){if(['recording','paused','stopping'].includes(this.recorder.status))fail('A recording is already active.','BUSY');await this._quota();const source=params.source||'master',route=await this._source(source);abort(options.signal);if(options.generation!==undefined&&options.generation!==this.generation)fail('Recording start was cancelled.','ABORTED');const remaining=this.storageState.remainingBytes;if(remaining!==null&&remaining<1024*1024)fail('Insufficient storage quota for recording.','STORAGE_QUOTA');const maxBytes=Math.floor(Math.min(params.maxBytes??512*1024**3,remaining===null?Infinity:remaining*.9));const response=await this.storage.execute('start',{name:params.name||'DJ recording',sampleRate:this.context.sampleRate,layout:route.layout,maxBytes,maxSeconds:params.maxSeconds??86400});this.recorder={...emptyRecorder(),status:'recording',source};this.recordRoute=route;this._recordInfo(response.result);try{abort(options.signal);if(options.generation!==undefined&&options.generation!==this.generation)fail('Recording start was cancelled.','ABORTED');await this._recorderTap(route);abort(options.signal);if(options.generation!==undefined&&options.generation!==this.generation)fail('Recording start was cancelled.','ABORTED');return copy(this.recorder);}catch(error){await this._stopRecording('error');throw error;}}
@@ -206,7 +246,7 @@ export class LiveAudioRuntime extends EventTarget {
     if(this.stoppingRecording)return this.stoppingRecording;
     if(!this.recorder.recordingId||this.recorder.status==='idle')return Promise.resolve(null);
     this.stoppingRecording=(async()=>{
-      const tap=this.recordTap;this.recordTap=null;try{if(tap)await tap.stop();}catch(error){status='error';this.recorder.error=error.message;}finally{tap?.dispose();}
+      const tap=this.recordTap;this.recordTap=null;try{if(tap){const stopped=await tap.stop();if(stopped?.error){status='error';this.recorder.error=stopped.error;}}}catch(error){status='error';this.recorder.error=error.message;}finally{tap?.dispose();}
       this.recorder.status='stopping';let result;try{result=(await this.storage.execute('stop',{status})).result;this._recordInfo(result);this.recorder.status=status==='error'?'error':'idle';await this._refreshRecordings();}catch(error){this.recorder.status='error';this.recorder.error=error.message;throw error;}this._state('recorder.stop');return result;
     })().finally(()=>{this.stoppingRecording=null;});return this.stoppingRecording;
   }
@@ -251,8 +291,8 @@ export class LiveAudioRuntime extends EventTarget {
       case'loop.track.mute':{const loop=this.loops.get(params.trackId);if(!loop)fail('Loop layer was not found.','NOT_FOUND');loop.muted=params.muted;loop.tap?.setLoop({muted:params.muted});if(loop.level)loop.level.gain.setTargetAtTime(params.muted?0:1,this.context.currentTime,.005);return this.getState().loops;}
       case'loop.track.remove':await this.releaseTrack(params.trackId);return this.engine.execute('track.remove',{trackId:params.trackId});
       case'recorder.start':return this._recordStart(params,options);case'recorder.stop':return this._stopRecording();
-      case'recorder.pause':if(this.recorder.status!=='recording')fail('No recording is running.','NOT_RECORDING');await this.recordTap.stop();this.recordTap.dispose();this.recordTap=null;this._recordInfo((await this.storage.execute('pause')).result);this.recorder.status='paused';return copy(this.recorder);
-      case'recorder.resume':if(this.recorder.status!=='paused')fail('Recording is not paused.','NOT_RECORDING');this._recordInfo((await this.storage.execute('resume')).result);this.recorder.status='recording';await this._recorderTap(this.recordRoute);return copy(this.recorder);
+      case'recorder.pause':{if(this.recorder.status!=='recording')fail('No recording is running.','NOT_RECORDING');const tap=this.recordTap;try{const stopped=await tap.stop();if(stopped?.error)fail(stopped.error,'CAPTURE_ERROR');tap.dispose();this.recordTap=null;this._recordInfo((await this.storage.execute('pause')).result);this.recorder.status='paused';return copy(this.recorder);}catch(error){this.recorder.error=error.message;await this._stopRecording('error');throw error;}}
+      case'recorder.resume':if(this.recorder.status!=='paused')fail('Recording is not paused.','NOT_RECORDING');this._recordInfo((await this.storage.execute('resume')).result);this.recorder.status='recording';try{await this._recorderTap(this.recordRoute);}catch(error){this.recorder.error=error.message;await this._stopRecording('error');throw error;}return copy(this.recorder);
       case'recordings.list':return this._refreshRecordings();case'recordings.recover':{const result=(await this.storage.execute('recover',params)).result;await this._refreshRecordings();return result;}
       case'recordings.delete':{const result=(await this.storage.execute('delete',params)).result;await this._refreshRecordings();return result;}
       case'recordings.importRange':{const audio=(await this.storage.execute('range',params,undefined,undefined,{signal:options.signal})).result;abort(options.signal);return this.engine.execute('clip.add',{audio,name:params.name||'Recorded range'});}

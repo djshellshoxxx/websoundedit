@@ -18,7 +18,7 @@ runs:
           printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
         fi
         sudo apt-get -o Acquire::Retries=3 update -qq
-        sudo apt-get install -y --no-install-recommends ffmpeg audacity xvfb xauth
+        sudo apt-get install -y --no-install-recommends ffmpeg audacity xvfb xauth pulseaudio pulseaudio-utils
     - name: Install pinned native REAPER
       id: reaper-runtime
       shell: bash
@@ -51,11 +51,11 @@ runs:
       if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
       shell: bash
       run: npm run build
-    - name: Install Chromium
-      id: chromium
+    - name: Install Chromium, Firefox and WebKit
+      id: browsers
       if: ${{ !cancelled() && steps.build.outcome == 'success' }}
       shell: bash
-      run: npx playwright install --with-deps chromium
+      run: npx playwright install --with-deps chromium firefox webkit
     - name: Native Audacity open, render, save and reimport
       if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.audio-dependencies.outcome == 'success' }}
       shell: bash
@@ -64,9 +64,24 @@ runs:
       if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.audio-dependencies.outcome == 'success' && steps.reaper-runtime.outcome == 'success' }}
       shell: bash
       run: xvfb-run -a node scripts/verify-reaper.mjs test-results/reaper-native
-    - name: Browser editing, worklets, capture, codecs, accessibility and help screenshots
-      if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.chromium.outcome == 'success' }}
+    - name: Start virtual audio output for native browser graphs
+      if: ${{ !cancelled() && steps.browsers.outcome == 'success' && steps.audio-dependencies.outcome == 'success' }}
       shell: bash
+      run: |
+        # Firefox needs a working system audio backend to resume an AudioContext.
+        # The virtual device clocks real browser PCM/worklets; it does not test
+        # physical sound cards or replace the browser's audio implementation.
+        mkdir -p test-results/audio-backend
+        pulseaudio --start --exit-idle-time=-1 --log-target="file:$PWD/test-results/audio-backend/pulseaudio.log"
+        pactl load-module module-null-sink sink_name=websoundedit_ci format=float32le rate=48000 channels=2
+        pactl set-default-sink websoundedit_ci
+        echo 'PULSE_SINK=websoundedit_ci' >> "$GITHUB_ENV"
+        pactl info | tee test-results/audio-backend/server.txt
+        pactl list short sinks | tee test-results/audio-backend/sinks.txt
+    - name: Chromium, Firefox and WebKit desktop and mobile browser tests
+      if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.browsers.outcome == 'success' }}
+      shell: bash
+      # One invocation keeps every project's traces, screenshots and reports.
       run: npm run test:e2e
     - name: Save all verification evidence
       if: always()

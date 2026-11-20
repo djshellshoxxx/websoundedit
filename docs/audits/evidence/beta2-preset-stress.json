@@ -1,0 +1,70 @@
+{
+  "sampleRate": 8000,
+  "sourceSha256": "ecfaac8a7b813b2c1dc4b7580a5f0275b1d221b4adcb5293806dcdb805769e18",
+  "rows": [
+    {
+      "presetId": "repair-clipped-peaks",
+      "durationSeconds": 600,
+      "frames": 4800000,
+      "milliseconds": 251,
+      "samplePeak": 0.8912509,
+      "outputSha256": "814fe492bb74cf4c86752308d609a2f669d62155e47ad498ff1b470648d29b03",
+      "arrayBufferMiB": 73
+    },
+    {
+      "presetId": "de-esser-strong",
+      "durationSeconds": 600,
+      "frames": 4800000,
+      "milliseconds": 750,
+      "samplePeak": 1.00431,
+      "outputSha256": "524bc8ef06f17ebdda3a37f890b818a6d23fa1adde0ad6c5b3e26e1c7556c163",
+      "arrayBufferMiB": 110
+    },
+    {
+      "presetId": "vocal-center",
+      "durationSeconds": 600,
+      "frames": 4800000,
+      "milliseconds": 497,
+      "samplePeak": 0.9525204,
+      "outputSha256": "a6920d4d299b77f86d03fd8d70d3931bbd8aad4280a190cc0e9e3c98c2ae408a",
+      "arrayBufferMiB": 110
+    },
+    {
+      "presetId": "instrumental-sides",
+      "durationSeconds": 600,
+      "frames": 4800000,
+      "milliseconds": 59,
+      "samplePeak": 0.1,
+      "outputSha256": "cf09704ca77544cbd1268a6b6cb5aca34deef27c836b104242ba0fe37ff1a48c",
+      "arrayBufferMiB": 110
+    },
+    {
+      "presetId": "vocal-reduction",
+      "durationSeconds": 600,
+      "frames": 4800000,
+      "milliseconds": 466,
+      "samplePeak": 0.3297469,
+      "outputSha256": "1eb5d9ecf4886c0870fc28ab010bbc720da0c7ff1460a099f76f739dfbb9eb10",
+      "arrayBufferMiB": 128
+    },
+    {
+      "presetId": "auto-limiter",
+      "durationSeconds": 600,
+      "frames": 4800000,
+      "milliseconds": 232,
+      "samplePeak": 0.1609858,
+      "outputSha256": "873d82656fd6344c8b2e708d73aadb33e22d5fa94b05a7af97b86a882e0ea051",
+      "arrayBufferMiB": 165
+    },
+    {
+      "presetId": "master-bright",
+      "durationSeconds": 600,
+      "frames": 4800000,
+      "milliseconds": 1718,
+      "samplePeak": 0.4183466,
+      "outputSha256": "5760f74cd95cbcd21cb676b4a9e08070883107ee870205b8b0fe605f9dd78192",
+      "arrayBufferMiB": 165
+    }
+  ],
+  "resourcePreflights": "passed"
+}

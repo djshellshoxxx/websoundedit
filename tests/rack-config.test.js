@@ -6,10 +6,13 @@ import {
 } from '../src/rack-config.js';
 
 test('the effects catalogue contains the requested processors and validates every default', () => {
-  const expected = ['echo', 'delay', 'reverb', 'chorus', 'flanger', 'phaser', 'distortion', 'tremolo', 'filter', 'tape', 'stutter', 'bitcrusher'];
+  const expected = ['echo', 'delay', 'reverb', 'chorus', 'flanger', 'phaser', 'distortion', 'tremolo', 'filter', 'tape', 'stutter', 'bitcrusher', 'noiseGate'];
   assert.deepEqual(Object.keys(RACK_EFFECTS), expected);
   const chain = expected.map((effect, index) => createRackEffect(effect, { id: `stage-${index}` }));
-  assert.deepEqual(normalizeRackChain(chain), chain);
+  for (let start = 0; start < chain.length; start += MAX_RACK_EFFECTS) {
+    const admitted = chain.slice(start, start + MAX_RACK_EFFECTS);
+    assert.deepEqual(normalizeRackChain(admitted), admitted);
+  }
   for (const stage of chain) {
     assert.equal(typeof stage.wet, 'number');
     assert.equal(stage.enabled, true);

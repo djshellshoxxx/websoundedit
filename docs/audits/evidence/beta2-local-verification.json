@@ -1,0 +1,164 @@
+{
+  "record": "Local beta.2 qualification, 19 November 2026 (America/Los_Angeles)",
+  "unitIntegration": {
+    "passed": 452,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0,
+    "durationMs": 4523.504646
+  },
+  "build": "passed",
+  "fuzz": {
+    "status": "passed",
+    "results": [
+      {
+        "name": "audio",
+        "elapsedMs": 532,
+        "status": "passed",
+        "report": "audio.json"
+      },
+      {
+        "name": "live-audio",
+        "elapsedMs": 1167,
+        "status": "passed",
+        "report": "live-audio.json"
+      },
+      {
+        "name": "macro",
+        "elapsedMs": 3509,
+        "status": "passed",
+        "report": "macro.json"
+      },
+      {
+        "name": "audacity",
+        "elapsedMs": 498,
+        "status": "passed",
+        "report": "audacity.json"
+      },
+      {
+        "name": "reaper",
+        "elapsedMs": 301,
+        "status": "passed",
+        "report": "reaper.json"
+      },
+      {
+        "name": "api-baseline",
+        "elapsedMs": 1522,
+        "status": "passed",
+        "report": "api-baseline.json"
+      },
+      {
+        "name": "companion",
+        "elapsedMs": 558,
+        "status": "passed",
+        "report": "companion.json"
+      }
+    ]
+  },
+  "macroCounts": {
+    "parserCases": 4096,
+    "parserAccepted": 2250,
+    "parserRejected": 1846,
+    "astRoundTrips": 2250,
+    "oraclePrograms": 512,
+    "oraclePassed": 512,
+    "schemaValid": 128,
+    "schemaInvalid": 128,
+    "staticPreflight": 128,
+    "dynamicErrors": 64,
+    "executionBounds": 32,
+    "hostileData": 32,
+    "cases": 5248,
+    "passed": 5248,
+    "failed": 0,
+    "unexpectedRawErrors": 0,
+    "forbiddenGetterCalls": 0,
+    "ambientNetworkCalls": 0,
+    "prototypeMutations": 0,
+    "dataToolCases": 128
+  },
+  "focusedChromium": {
+    "liveVisualizerRack": 11,
+    "formatsAndScripting": 13
+  },
+  "hostedEvidence": "Use the workflow on the exact published commit; this file does not assert deployment or a complete hosted matrix pass.",
+  "focusedWebKitAfterFixes": 3,
+  "mobileWebKit": 3,
+  "publicationSmokeLocalPreview": 1,
+  "integrated36PresetChromium": 12,
+  "integrated36PresetPublicationLocalPreview": 1,
+  "recorderFollowUp": {
+    "localCodeCommit": "9e958db60a82f122eeb21467cfa07640eec9440e",
+    "boundedPool": {
+      "chunks": 16,
+      "framesPerChunkAt48kHz": 6016,
+      "maximumBytes": 8388608
+    },
+    "deterministicCoverage": [
+      "exact PCM across bounded consumer stalls",
+      "reservation exhaustion before allocation",
+      "release on pause/stop/start and resume failure",
+      "shared stop and first-error retention",
+      "drain pending writes before failure completion",
+      "ignore callbacks after disposal",
+      "reentrant onEnd failure"
+    ],
+    "focusedNativeWebKit": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "retries": 0,
+      "durationSeconds": 18.1,
+      "uiStallMs": 500,
+      "coverage": [
+        "production worklets",
+        "OPFS recording pause/resume",
+        "committed-frame export",
+        "recovery and bounded range import",
+        "sample-clock loop capture",
+        "manual worklet ramps"
+      ]
+    }
+  },
+  "hostedDiagnostic": {
+    "runId": 44669565550,
+    "url": "https://github.com/djshellshoxxx/websoundedit/actions/runs/44669565550",
+    "sourceCommit": "66fd7dafa728f41a042dd03be562e90d5e7356e8",
+    "conclusion": "failure",
+    "preBrowserGates": "passed: unit, audit, all seven fuzz groups, production build/SDK, native Audacity and REAPER",
+    "nativeFirefoxAudio": "passed with the PulseAudio virtual output",
+    "browser": {
+      "passed": 226,
+      "failed": 2,
+      "flaky": 1,
+      "skipped": 3,
+      "configured": 232,
+      "durationSeconds": 711.56
+    },
+    "mobile": {
+      "chromiumPassed": 3,
+      "webkitPassed": 3
+    },
+    "followUps": [
+      "WebKit Help capture uses the existing persistent native-storage fixture",
+      "Firefox complete-guide trace budget raised to 360 seconds without relaxing individual assertions",
+      "WebKit recorder pool and stop/error lifecycle repaired and independently qualified"
+    ],
+    "publicationGate": false
+  },
+  "firefoxHelpFollowUp": {
+    "engine": "Firefox 159",
+    "images": 22,
+    "untracedDurationSeconds": 7.8,
+    "tracedDurationSeconds": 349.532796,
+    "domSnapshots": 470,
+    "snapshotDurationSeconds": 334.833,
+    "successfulImageResponses": 22,
+    "failed": 0,
+    "skipped": 0,
+    "flaky": 0,
+    "overallBudgetSeconds": 360,
+    "individualAssertionBudgetSeconds": 15,
+    "localTrace": "DOM snapshots and network retained; screencast frames omitted to bound disk use. Hosted tracing unchanged."
+  }
+}

@@ -34,9 +34,12 @@ export class GuidanceUI {
   constructor({ enabled = true, getCommand = () => null } = {}) {
     this.enabled = enabled; this.getCommand = getCommand; this.target = null;
     this.tip = document.createElement('div'); this.tip.id = 'feature-guidance'; this.tip.className = 'feature-guidance'; this.tip.setAttribute('role', 'tooltip'); this.tip.setAttribute('popover', 'manual'); this.tip.hidden = true; document.body.append(this.tip);
-    this.over = event => { const target = event.target.closest?.('button,input,select,textarea,summary,a[href],[tabindex="0"]'); if (target && !target.closest('#feature-guidance')) this.show(target); };
+    this.touchInteraction = false;
+    this.pointerDown = event => { this.touchInteraction = event.pointerType === 'touch' || event.pointerType === 'pen'; if (this.touchInteraction) this.hide(); };
+    this.over = event => { if (event.pointerType === 'touch' || event.pointerType === 'pen' || event.type === 'focusin' && this.touchInteraction) return; const target = event.target.closest?.('button,input,select,textarea,summary,a[href],[tabindex="0"]'); if (target && !target.closest('#feature-guidance')) this.show(target); };
     this.out = event => { if (!event.relatedTarget?.closest?.('#feature-guidance') && !this.target?.contains(event.relatedTarget)) this.hide(); };
-    this.key = event => { if (event.key === 'Escape' && this.target) { if (!this.target.closest('#command-palette')) { event.preventDefault(); event.stopPropagation(); } this.hide(); } };
+    this.key = event => { this.touchInteraction = false; if (event.key === 'Escape' && this.target) { if (!this.target.closest('#command-palette')) { event.preventDefault(); event.stopPropagation(); } this.hide(); } };
+    document.addEventListener('pointerdown', this.pointerDown, true);
     document.addEventListener('pointerover', this.over); document.addEventListener('focusin', this.over);
     document.addEventListener('pointerout', this.out); document.addEventListener('focusout', this.out); document.addEventListener('keydown', this.key, true);
     this.tip.addEventListener('pointerleave', () => this.hide());
@@ -76,5 +79,5 @@ export class GuidanceUI {
     if (this.target) { if (this.previousDescription) this.target.setAttribute('aria-describedby', this.previousDescription); else this.target.removeAttribute('aria-describedby'); }
     this.target = null; this.tip.hidden = true; try { this.tip.hidePopover?.(); } catch {}
   }
-  dispose() { this.hide(); this.observer.disconnect(); for (const [name, callback] of [['pointerover', this.over], ['focusin', this.over], ['pointerout', this.out], ['focusout', this.out]]) document.removeEventListener(name, callback); document.removeEventListener('keydown', this.key, true); this.tip.remove(); }
+  dispose() { this.hide(); this.observer.disconnect(); for (const [name, callback] of [['pointerover', this.over], ['focusin', this.over], ['pointerout', this.out], ['focusout', this.out]]) document.removeEventListener(name, callback); document.removeEventListener('keydown', this.key, true); document.removeEventListener('pointerdown', this.pointerDown, true); this.tip.remove(); }
 }

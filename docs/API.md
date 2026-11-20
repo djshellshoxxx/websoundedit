@@ -50,7 +50,7 @@ A single input with no recipe, project or explicit scope is treated as format-on
 
 ## Direct JavaScript engine
 
-In Node, import `./src/engine.js` from the clone. The built site also provides a bundled `api.js` ES module for browser integrations. See [examples/direct-engine.mjs](../examples/direct-engine.mjs) for a complete local-file program.
+In Node, import `./src/engine.js` from the clone. The built site also provides a bundled `api.js` ES module for browser integrations. See [examples/direct-engine.mjs](https://github.com/djshellshoxxx/websoundedit/blob/main/examples/direct-engine.mjs) for a complete local-file program.
 
 ```js
 import { AudioEditor } from './src/engine.js';
@@ -135,6 +135,7 @@ The authoritative runtime registry is `await editor.execute('commands.list')`, t
 | `clip.remove` | `{clipId?,trackId?}`. |
 | `clip.duplicate` | `{clipId?,start?,newTrack?}`; default position is immediately after the source. |
 | `clip.split` | `{clipId?,at}`; at is clip-relative and inside the clip. Returns `{left,right}` metadata; selects the right half. |
+| `clip.extractChannels` | `{clipId?,trackId?}`; retains a multichannel source and creates one muted, speaker-labeled mono track per channel at its original start. Returns `{sourceClipId,tracks}` and selects the first stem. Stereo stems pan left/right; surround stems are centered editing copies. Source live effects are not copied. One undo step; checks track/clip and portable PCM budgets before adding any tracks. |
 | `clip.getAudio` | `{clipId?}`; returns a copy of raw clip PCM, without mixer gain/pan. |
 | `markers.add` | `{time,name?}`; timeline seconds. |
 | `markers.remove` | `{markerId}`. |
@@ -147,9 +148,11 @@ New edits after Undo discard Redo. History is bounded to 30 edits and 256 MiB of
 | --- | --- |
 | `selection.set` | `{clipId?,trackId?,start,end,channels:'all'|'left'|'right'}`; clamps to clip bounds then rejects an empty result. |
 | `selection.clear` | Removes the interval; the clip remains active. |
+| `selection.zeroCrossing` | `{radiusMs?:5,target?,channels?}`; requires a nonempty current or explicit range. Moves each edge to the nearest shared crossing of its selected channels within 0–50 ms (earlier time wins ties); an unfound edge stays unchanged. Returns the new selection, preserves nonempty bounds and creates no PCM/history edit. |
 | `edit.copy` | Optional `target`; copies the selection or active clip into the internal clipboard. |
 | `edit.cut` | Optional `target`; requires a selected range and all channels, then removes that range. |
 | `edit.paste` | `{clipId?,trackId?,at?}`; inserts clipboard PCM at a clip-relative time; defaults to selection start or clip end. Creates a clip if no clip is active. |
+| `edit.insertSilence` | `{clipId?,trackId?,at?,duration?:1,channels?:"all"}`; inserts zero samples in every channel, rounding position/duration to the nearest sample. Defaults to selection start or clip start. Rejects a partial-channel scope unless `channels:"all"` is explicit; does not replace the selection. Selects the inserted region, returns clip metadata plus `insertedFrames`, and is one undoable edit. PCM and timeline admission precede allocation. |
 | `edit.delete` | Requires a selected range and all channels. Use `effect.silence` to mute one channel instead. |
 | `edit.trim` | Keeps the selected range. Defaults to preserving its timeline location; `keepTimelinePosition:false` keeps the old clip start. |
 | `loop.create` | `{repeats?,crossfadeMs?,newTrack?,name?,start?,target?}`; copies/repeats the selection as a new clip. Default newTrack is true. |
@@ -175,6 +178,7 @@ Each accepts its listed parameters and optional `target`. The generic `effect.ap
 | `effect.eq` | `bands:[{type,frequency,gainDb,q,enabled}]`; peaking, lowshelf, highshelf, lowpass or highpass |
 | `effect.compressor` | `thresholdDb,ratio,attackMs,releaseMs,kneeDb,makeupDb` |
 | `effect.limiter` | `ceilingDb,lookaheadMs,releaseMs`; sample-peak limiter, not a true-peak meter/limiter |
+| `effect.preset` | Required `presetId`; apply an immutable named processing recipe as one undoable edit. See the preset catalog below. |
 | `effect.stretch` | `ratio` = output duration/input duration, `preservePitch:true` |
 | `effect.pitch` | `semitones,preserveDuration:true` |
 | `effect.speed` | `rate`; changes duration and pitch together |
@@ -185,6 +189,41 @@ Each accepts its listed parameters and optional `target`. The generic `effect.ap
 | `effect.loop` | `repeats,crossfadeMs`; replaces selected range with repeated audio |
 | `effect.beatRepeat` | `division,pattern,bpm?`; division = slices per beat; zero-based pattern indexes into the selected audio's slices |
 | `effect.granular` | `grainMs,density,spread,seed,mix`; seeded granular texture |
+
+### Named cleanup, vocal and mastering presets
+
+`src/presets.js` exports the DOM-free `AUDIO_PRESETS` catalog, `PRESET_CATEGORIES`, `DEFAULT_PRESET_ID` (`auto-limiter`) and `getAudioPreset(id)`. Each frozen entry has `{id,title,category,description,limitations,stereoOnly,steps}`. A step is `{effect,params,wet?}`; these are fixed recipes, not arbitrary command lists or user-supplied processors. There are 36 presets:
+
+| Category | Preset IDs |
+| --- | --- |
+| Cleanup | `repair-clipped-peaks`, `remove-dc`, `remove-rumble`, `reduce-hiss`, `gentle-noise-gate`, `strong-noise-gate`, `normalize-peak`, `normalize-headroom`, `normalize-mixing` |
+| Vocals | `vocal-center`, `instrumental-sides`, `vocal-reduction`, `instrumental-reduction`, `de-esser-gentle`, `de-esser-strong`, `vocal-presence` |
+| Instruments | `bass-definition`, `drum-punch`, `acoustic-warmth`, `piano-smooth` |
+| Compression | `compression-gentle`, `compression-vocal`, `compression-drums`, `compression-broadcast` |
+| Limiting | `auto-limiter`, `limiter-transparent`, `limiter-punchy`, `limiter-headroom` |
+| Mastering | `master-balanced`, `master-warm`, `master-bright`, `master-loud` |
+| Creative | `telephone`, `vintage-tape`, `spacious-chorus`, `rhythmic-pulse` |
+
+```js
+// Preview returns the complete replacement clip, without changing the session.
+const preview = await editor.execute('effect.preview', {
+  effect: 'preset', params: { presetId: 'de-esser-gentle' }
+});
+// Audition uses the existing mixer preview path and also leaves history intact.
+const audition = await editor.execute('audio.renderPreview', {
+  effect: 'preset', params: { presetId: 'de-esser-gentle' }, scope: 'selection'
+});
+await editor.execute('effect.preset', { presetId: 'de-esser-gentle' });
+// Equivalent generic apply: {effect:'preset',params:{presetId:'de-esser-gentle'}}
+```
+
+All presets retain sample rate, frame count, channel count, layout and timeline alignment. They process only the selected interval/channels (or the full selected clip when no range is selected), retain untouched PCM, and commit as one undo entry. Work runs through the existing worker queue and its resource limits: at most ten minutes / 256 MiB of selected PCM, with 1–4 fixed processing stages. The schema requires a known `presetId`, rejects parameter overrides and accepts an optional bounded `bpm` for the standard effect-call contract. The presets themselves use their stated fixed settings.
+
+The four stereo center presets require an original **stereo** clip and both channels; selecting two channels out of surround audio is rejected before processing. `vocal-center` extracts band-limited `(L+R)/2` into both outputs. `instrumental-sides` returns `(L-R)/2` and its inverse: this removes all shared center content, including centered instruments, and **cancels when summed to mono**. `vocal-reduction` subtracts a band-limited center from each channel, preserving center bass and out-of-band highs. `instrumental-reduction` keeps the 180 Hz–6.5 kHz center and normalizes its sample peak to −3 dBFS, reducing side-panned accompaniment while retaining centered instruments. These are local center/side operations, not AI source separation or guaranteed vocal/instrumental isolation; panned vocals and reverb can remain.
+
+Clipping repair reconstructs only short (at most 4 ms), flat, near-full-scale peaks with usable unclipped shoulders. Cubic interpolation is bounded to 6 dB above the observed plateau. If any repair succeeds, a shared attenuation step reserves a -1 dBFS sample-peak ceiling. Unsupported long or edge clipping and clean PCM remain unchanged when no repair succeeds; lost recording information cannot be recovered exactly. The de-esser uses a linked dynamic envelope to attenuate a zero-phase high-frequency band while retaining the complementary low band. It can also attenuate cymbals or other bright content. Auto limiter measures PCM RMS, caps automatic boost, leaves content below -60 dBFS RMS unboosted, and applies lookahead sample-peak limiting. Its RMS target can be limited by the boost cap and peak ceiling. Limiting and mastering presets do not measure LUFS or intersample true peaks.
+
+`node --expose-gc scripts/benchmark-presets.mjs` runs the new restoration/center/mastering processors on reproducible ten-minute stereo PCM and verifies unchanged source data, finite output, exact dimensions and resource preflights. It prints timings and hashes without claiming a hardware-independent performance threshold.
 
 ### Ducking, sidechain and gate envelopes
 
@@ -222,7 +261,7 @@ The sidechain uses source-track gain/pan and ignores that source track's mute sw
 | `audio.render` | `scope:'mix'|'track'|'clip'|'selection'`, optional IDs; mix/track accept timeline `start,end`. Returns AudioData. |
 | `audio.renderPreview` | `{effect,params,target?,scope?}`; returns draft processed audio through the mixer without committing. |
 
-Mix render is stereo float PCM and follows gain, pan, mute, solo and clip offsets. Mono track pan is equal-power; centered mono contributes approximately −3 dB to each output channel. Stereo pan is balance. Clip/selection render includes the track's gain and pan, ignores its mute switch, and exports only the selected channel when left/right is selected. `raw:true` on clip/selection render bypasses mixer gain/pan. Use `clip.getAudio` for raw whole-clip data.
+Mix render is float PCM in the chosen project/output layout (stereo by default) and follows gain, pan, mute, solo and clip offsets. Mono track pan is equal-power; centered mono contributes approximately −3 dB to each front output channel. Stereo pan is balance. Clip/selection render includes the track's gain and pan, ignores its mute switch, and exports only the selected channel when left/right is selected. `raw:true` on clip/selection render bypasses mixer gain/pan. Use `clip.getAudio` for raw whole-clip data.
 
 BPM is metadata unless a stretch effect is requested. To match a recording from 120 BPM to 128 BPM while preserving pitch, use `effect.stretch` ratio `120 / 128`, then `project.update` BPM 128. Manual half/double BPM correction simply sets half/double the project BPM and keeps the audio unchanged.
 
@@ -276,7 +315,7 @@ $env:WEBSOUNDEDIT_TOKEN = 'paste-the-token-here'
 python examples/remote-edit.py input.wav output.wav --recipe examples/cleanup.json --project edited.json
 ```
 
-The program uploads file bytes, runs the recipe, downloads encoded audio and optionally saves a JSON project. This is a complete script-driven edit using the same engine as the GUI. See [remote-edit.py](../examples/remote-edit.py) for the full implementation.
+The program uploads file bytes, runs the recipe, downloads encoded audio and optionally saves a JSON project. This is a complete script-driven edit using the same engine as the GUI. See [remote-edit.py](https://github.com/djshellshoxxx/websoundedit/blob/main/examples/remote-edit.py) for the full implementation.
 
 ## Browser UI commands and shortcuts
 
@@ -304,7 +343,7 @@ await editor.play({ scope: 'selection' });
 | `commands()` | Returns core registry plus UI action names, descriptions and configured shortcuts. |
 | `getState()` | Returns a copied metadata snapshot. |
 | `importFile(file, {name?,start?,trackId?})` | Decodes a browser File/Blob and adds/selects a clip. Returns its IDs and metadata. |
-| `exportAudio({scope?,format?,sampleRate?,channels?,bitDepth?,bitrate?,name?,download?})` | Renders and encodes committed audio. Returns `{bytes,ext,mime,...}`. Set `download:false` to receive bytes without a download. Default scope is mix. `channels` is `original` or `mono`; original means rendered channels. Apply a draft before exporting it. |
+| `exportAudio({scope?,format?,sampleRate?,outputLayout?,bitDepth?,bitrate?,name?,raw?,live?,download?})` | Runs the typed `file.export` command. Returns `{bytes,ext,mime,...}`. Set `download:false` to receive bytes without a download. Default scope is mix. `outputLayout` is `mono`, `stereo`, `5.1` or `7.1`; omit it to retain the render's default layout. `raw:true` on clip/selection bypasses mix gain/pan; `live:true` explicitly renders the current live rack. Apply a selection draft before exporting it. |
 | `saveProject({download=true})` | Returns portable JSON including UI settings; normally downloads it. Set download false for a script. |
 | `loadProject(projectObject)` | Restores a portable project, embedded audio and UI settings. |
 | `saveSettings()` | Returns the UI settings object, including effect values and shortcuts. |
@@ -326,13 +365,31 @@ UI command examples are `execute('ui.help')`, `execute('ui.settings')` and `exec
 
 Browser project settings include the current UI values, while standalone engine settings are arbitrary validated JSON. User audio remains on the device. Loading the site's scripts/codecs is a download; file import and processing do not upload audio.
 
+### Typed export arguments and metadata
+
+`websoundedit.exportAudio(options)` and `execute('file.export', options)` use the same schema in `src/file-commands.js`. Audio format IDs are `wav`, `mp3`, `flac`, `ogg`, `opus`, `m4a`, `aac`, `aiff`, `alac` and `wma`; editable project IDs are `session`, `aup3`, `aup` and `reaper`. Availability, rate and channel limits come from the encoder capability result. ALAC uses an M4A container; Opus output uses 48 kHz.
+
+Use **`outputLayout`**, not `channels`, to request an explicit output conversion. Export does not accept a per-call `metadata` override. Change project tags with `metadata.update` before exporting:
+
+```js
+await websoundedit.execute('metadata.update', {
+  metadata: { title: 'Processed take', artist: 'Example' }
+});
+const file = await websoundedit.exportAudio({
+  scope: 'mix', format: 'flac', outputLayout: 'stereo',
+  name: 'processed-take', download: false
+});
+```
+
+`metadata.update` replaces the normalized tag set, so include every tag you want to retain. Export reports format-specific metadata omissions in its warnings. Unknown keys are rejected instead of being silently interpreted as codec options. The older binary HTTP `/v1/export` adapter has its own documented request contract; its arguments should not be copied into `file.export`.
+
 ## Resource and quality boundaries
 
 This release supports up to 64 tracks, 512 clips, 1,000 markers and a 10-minute timeline, subject to a 256 MiB decoded PCM budget. Browser decoder/encoder overhead and undo memory can make smaller jobs preferable. These are application guardrails, not a promise that every phone can process a maximum-sized project. DSP runs on float PCM; the built-in time/pitch algorithm is suitable for a lightweight editor and can sound different from an offline mastering tool at extreme ratios. Peak normalization and the limiter do not claim integrated LUFS or oversampled true-peak compliance.
 
 ## Creative workbench API (0.2)
 
-All new audio processors are core commands, usable from the browser, DOM-free engine, recipes, CLI and companion: `effect.echo`, `effect.delay`, `effect.reverb`, `effect.chorus`, `effect.flanger`, `effect.phaser`, `effect.distortion`, `effect.tremolo`, `effect.filter`, `effect.tape`, `effect.stutter`, `effect.bitcrusher` and `effect.rack`. `commands.list` returns defaults; the exported `RACK_EFFECTS` schema describes ranges and choices.
+All new audio processors are core commands, usable from the browser, DOM-free engine, recipes, CLI and companion: `effect.echo`, `effect.delay`, `effect.reverb`, `effect.chorus`, `effect.flanger`, `effect.phaser`, `effect.distortion`, `effect.tremolo`, `effect.filter`, `effect.tape`, `effect.stutter`, `effect.bitcrusher`, `effect.noiseGate` and `effect.rack`. `commands.list` returns defaults; the exported `RACK_EFFECTS` schema describes ranges and choices. There are 13 effect types and a maximum of 12 stages per chain.
 
 A serial rack processes the current selection (or whole selected clip). Each stage has its own dry/wet blend. One rack application creates one undo entry:
 
@@ -361,7 +418,7 @@ await editor.execute('metadata.update', {
 });
 ```
 
-`keyAnalysis` is included in clip state and native projects. Unknown/ambiguous audio has a null key. PCM edits invalidate the estimate; undo restores it. `metadata.update` replaces the normalized tag set. Browser `exportAudio` defaults to the project's tags and accepts an explicit `metadata` override; container-specific omissions are returned in `result.warnings`.
+`keyAnalysis` is included in clip state and native projects. Unknown/ambiguous audio has a null key. PCM edits invalidate the estimate; undo restores it. `metadata.update` replaces the normalized tag set. Browser `exportAudio` and typed `file.export` use those project tags; update them before export rather than supplying an unsupported `metadata` argument. Container-specific omissions are returned in `result.warnings`.
 
 Browser-specific editing helpers:
 
@@ -409,7 +466,68 @@ runtime.dispose();
 
 All command inputs are bounded plain data. Accessors, prototype keys and executable objects are rejected. Unknown or unsupported methods fail before execution. Macro text is interpreted, never passed to JavaScript `eval` or `Function`. Static validation catches known argument problems before the first step; dynamic errors report command, line, column and completed steps. Cancellation occurs between atomic edits and interrupts waits; already completed edits remain applied. Digital silence returns `null` for negative-infinite dB values retained in macro variables, matching JSON. Test `stats.peakDb === null` before numeric comparisons.
 
-The browser records successful semantic actions with `macro.record.start` / `macro.record.stop`; imported files become supplied `input` aliases instead of embedded PCM. Imported projects do not arm MIDI, shortcuts, startup scripts or network credentials. See [Macros](MACROS.md) for the language and visual recorder.
+The browser records successful semantic actions with `macro.record.start` / `macro.record.stop`; imported files become supplied `input` aliases instead of embedded PCM. Imported projects do not arm MIDI, shortcuts, startup scripts or network credentials. See [Macros](MACROS.md) for the visual recorder and triggers, and [Scripting and batch audio](SCRIPTING.md) for the complete language/tool reference.
+
+### Random, array, math and text tools
+
+The shared Macro 1 interpreter includes **35 data tools** described by `MACRO_BUILTINS` in `src/macro-builtins.js`. These are interpreter calls with one argument object, not arbitrary JavaScript methods. They work with `MacroRunner` in the browser, DOM-free runtime, CLI and companion. `random.*` provides seeding, floats, inclusive integers and choices; `array.*` provides bounded range/copy/edit/sort/shuffle/aggregate operations; `math.*` provides arithmetic helpers and dB/gain conversion; `text.*` provides bounded literal conversion/splitting/joining/replacement.
+
+```js
+const result = await websoundedit.execute('macro.run', { text: `
+  random.seed({seed: "levels"});
+  let levels = [];
+  for (group of [1, 2]) {
+    repeat (3) {
+      levels = array.append({values: levels,
+        value: random.float({min: -9, max: -3})});
+    }
+  }
+  let average = array.mean({values: levels});
+` });
+```
+
+An execution owns its random state. Without an explicit seed it starts fresh; use an unsigned 32-bit integer or a nonempty string of at most 256 UTF-16 code units for repeatable output. `random.float` includes its minimum and excludes its maximum; `random.int` includes both integer bounds. The generator is for creative variation and reproducible tests, not cryptographic material. Array helpers return independently owned copies. Nested loops share the same execution budget, and calls/array/string work consume the corresponding limits.
+
+The workbench offers six editable examples and displays **Run result and variables** after a normal run; **Download result JSON** saves the complete retained result. Long display previews are explicitly shortened. Default limits include 128 KiB source, 48 parser nesting levels, 10,000 loop iterations, 10,000 named calls, 200,000 operations, 50,000 value nodes and 8 MiB retained data. See [SCRIPTING.md](SCRIPTING.md) for exact signatures and cancellation semantics.
+
+### Browser batches and quick conversion
+
+`macro.batch` accepts either `macroId` or explicit `text`, optional `inputIds`, `continueOnError` and `download`. Omitting both program selectors uses the current draft. Supply the files through the GUI or file-supply API first; a script receives bounded aliases rather than filesystem access. Each input runs in a cleared session, and the original project and draft are restored after success, failure or cancellation. Completed output artifacts remain available.
+
+```js
+await websoundedit.execute('macro.batch', {
+  text: 'effect.preset({presetId:"auto-limiter"}); file.export({format:"flac",scope:"clip",raw:true,name:input.stem});',
+  inputIds: suppliedAliases.map(input => input.id),
+  continueOnError: true, download: false
+});
+```
+
+Batch context exposes `input`, `file` and `inputs`; aliases have `id`, `name`, `stem` and `size`. A program without `file.import` receives the per-file automatic import. If importing explicitly, use `file.import({input: input.id})`. A fixed random seed restarts for each file; `random.seed({seed: input.stem})` creates repeatable per-filename variation.
+
+The GUI's quick converter generates the same script commands for ten audio formats, an optional preset and optional −1 dBFS sample-peak normalization. It exports raw clip PCM to avoid mixer changes to channel count, at the current project's sample rate. Input, decoded-audio and retained-output bounds still apply. [Batch workflows and generated-recipe behavior](SCRIPTING.md#quick-conversion-and-processing-without-writing-a-script).
+
+### Browser audio devices and live diagnostics
+
+Use the registered browser commands for device access; saved IDs do not grant permission. A permission-bearing start or picker must originate from an explicit user action where the browser requires it.
+
+| Method | Arguments and behavior |
+| --- | --- |
+| `audio.capabilities` | No arguments; reports browser input, output selection, AudioWorklet, recording/export capabilities and limits. |
+| `audio.devices.list` | No arguments; returns permitted `inputs`, `outputs` and permission state without starting capture. This also powers Rescan devices. |
+| `audio.input.start` | Optional `source:"microphone"|"display"`, `deviceId`, `channels`, `gainDb`, `monitor`, `echoCancellation`, `noiseSuppression`, `autoGainControl`. Channels are distinct zero-based indices, at most eight. Starts explicit acquisition and validates the result. |
+| `audio.input.set` | `gainDb` and supported processing booleans update an active input. Device/channel changes require a fresh start. |
+| `audio.input.stop` | Releases all acquired tracks. |
+| `audio.monitor.set` | `enabled` and `gainDb` (−96…12) control input monitoring separately from input gain. |
+| `audio.output.set` | `deviceId`, `monitorLayout:"mono"|"stereo"|"5.1"|"7.1"`; selects supported output routing with reported fallback. |
+| `ui.audioOutput.choose` | Optional `monitorLayout`; workbench-only explicit output permission picker, available only when the browser exposes it. |
+
+`runtime.live.getState().context` reports `state`, `sampleRate`, `baseLatency`, `outputLatency` and `projectLayout`; absent numerical reports are `null`. Input state includes actual acquired sample rate/processing where the browser reports them. Processing/output latency estimates are not measured round-trip hardware latency. Audio interfaces use the browser/operating-system route; exclusive native-driver control is outside the browser API.
+
+### Live signal display
+
+The workbench's bottom visualizer observes the existing program output after live effects or an already-active input. Waveform keeps channels separate; waterfall and spectrogram link channel powers so antiphase stereo does not cancel visually. Display mode and Freeze/Resume affect only visualization, and source selection acquires no input or transport permission. Reduced-motion settings pause animation, while hidden/offscreen views suspend analysis.
+
+`src/live-visualizer.js` bounds analysis to a 2,048-sample FFT, 192 logarithmic bands, 240 history frames, eight channels and at most 30 displayed frames per second. Spectral color spans −96…0 dB. It is a live signal view, not a full-file loudness or intersample true-peak measurement. [Reading the display](USER_GUIDE.md#full-color-live-display).
 
 ### New HTTP companion resources
 
@@ -429,3 +547,29 @@ All paths retain exact Host/Origin validation and Bearer authentication. The ser
 `file.import`, `file.export`, `file.exportStems`, `macro.validate`, `macro.run`, `macro.batch`, `macro.cancel`, `macro.status`, `macro.record.start`, `macro.record.stop`, `stream.start`, `stream.stop` and `stream.status` are available through `/v1/execute`. The Node runtime advertises browser capture/transport commands as unavailable. Filesystem paths cannot be supplied by an HTTP request or macro. Explicit CLI arguments are the operator's file selection.
 
 A workbench retains at most 128 input aliases / 256 MiB and 128 output artifacts / 128 MiB. Download and remove retained artifacts to reclaim memory, or use the CLI's bounded sequential file sink. `file.input.remove` and `file.artifact.remove` release retained data. The server admits at most eight active/queued normal jobs with a 512 MiB aggregate reservation. See [Companion](COMPANION.md) for live UDP setup and its separate bounded queues.
+
+
+### Noise gate (`effect.noiseGate`)
+
+Available both as a named selection effect and as `noiseGate` in an ordered or live rack. Parameters are validated by the same command/rack schemas. Defaults:
+
+```js
+await editor.execute('effect.noiseGate', {
+  thresholdDb: -40, hysteresisDb: 6, floorDb: -80,
+  attackMs: 2, holdMs: 40, releaseMs: 120,
+  channelMode: 'linked', wet: 1
+});
+```
+
+| Parameter | Range and meaning |
+| --- | --- |
+| `thresholdDb` | −96…0 dBFS; absolute sample-peak opening threshold. |
+| `hysteresisDb` | 0…24 dB; the closing threshold is `thresholdDb - hysteresisDb`. |
+| `floorDb` | −96…0 dB; closed attenuation, with 0 dB exactly transparent. |
+| `attackMs` | 0…100 ms; one-pole opening time constant, with 0 immediate. |
+| `holdMs` | 0…1000 ms; keeps the gate open for this many samples after the detector falls below its closing threshold. |
+| `releaseMs` | 1…2000 ms; one-pole closing time constant. |
+| `channelMode` | `linked` (maximum absolute sample detector, common gain) or `independent` (per-channel detector/gain). |
+| `wet` | 0…1; linear input/output blend, default 1. |
+
+The effect starts closed at the requested range boundary, has no lookahead and preserves duration. A linked detector operates on the channels included in the effect target. Nonselected channels and samples outside the target remain exact. Live rack stage IDs retain gate history through parameter updates and reordering; fresh live-settings renders start with an empty/closed state. There are no per-frame allocations or duration-sized detector buffers.

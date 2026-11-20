@@ -28,6 +28,8 @@ test('effects rack supports real drag ordering, keyboard reordering, rotary wet/
   // into view after mouse-down moves the source away before Chromium starts it.
   await stages.nth(0).locator('summary').click();
   await stages.nth(1).locator('summary').click();
+  await stages.nth(1).locator('[data-rack-remove]').scrollIntoViewIfNeeded();
+  await expect(stages.nth(0).locator('[data-rack-drag]')).toBeInViewport();
   await stages.nth(0).locator('[data-rack-drag]').dragTo(stages.nth(1).locator('[data-rack-remove]'));
   await expect.poll(() => effectOrder(page)).toEqual(['distortion', 'delay']);
   await stages.nth(0).locator('[data-rack-drag]').focus();

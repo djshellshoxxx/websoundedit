@@ -21,9 +21,10 @@ const counters = {
   staticPreflight: 0, dynamicErrors: 0, executionBounds: 0, hostileData: 0,
   cases: 0, passed: 0, failed: 0, unexpectedRawErrors: 0,
   forbiddenGetterCalls: 0, ambientNetworkCalls: 0, prototypeMutations: 0,
+  dataToolCases: 0,
 };
 const started = performance.now(), corpusHash = createHash('sha256'), failures = [], phaseTimes = {};
-const sourceFilesSha256 = Object.fromEntries(await Promise.all(['src/macro.js', 'src/command-schema.js', 'src/command-runtime.js', 'tests/fuzz/macros.mjs'].map(async file => [file, createHash('sha256').update(await readFile(new URL(`../../${file}`, import.meta.url))).digest('hex')])));
+const sourceFilesSha256 = Object.fromEntries(await Promise.all(['src/macro.js', 'src/macro-builtins.js', 'src/command-schema.js', 'src/command-runtime.js', 'tests/fuzz/macros.mjs'].map(async file => [file, createHash('sha256').update(await readFile(new URL(`../../${file}`, import.meta.url))).digest('hex')])));
 const encode = text => new TextEncoder().encode(text), semantic = value => {
   if (Array.isArray(value)) return value.map(semantic);
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'loc').map(([key, child]) => [key, semantic(child)]));
@@ -59,6 +60,8 @@ try {
     'let values=analysis.stats({}); if(values.peakDb>-1){effect.normalize({targetDb:-1});}',
     'wait({seconds:0}); track.update({pan:.25,gainDb:-3});',
     'let a=1; if(a<0){} else if(a===1){a+=2;}else{a-=3;}',
+    'let a=["-","+","!", "]", "if"];let b=text.join({values:a,separator:"-"});',
+    'random.seed({seed:42});for(item of array.range({end:3})){let x=random.int({min:-4,max:4});}',
   ];
   const fragments = [';', '/*', '*/', '//', '\n', '\0', '"', "'", '.', '{}', '[]', '()', 'constructor', '__proto__', '=>', '1e999', '\\u0000', 'else', 'repeat', '!', '&&', '||', 'true', 'false'];
   const phaseStarted = performance.now();
@@ -193,6 +196,23 @@ try {
     });
   }
   phaseTimes.boundsMs = Math.round(performance.now() - boundsStarted);
+
+  const dataToolStarted = performance.now();
+  for (let index = 0; index < 128; index++) {
+    const start = programRandom() % 21 - 10, count = programRandom() % 12 + 1, step = programRandom() % 4 + 1;
+    const source = `random.seed({seed:${index}});let original=array.range({start:${start},end:${start + count * step},step:${step}});let shuffled=array.shuffle({values:original});let result=[];for(x of shuffled){let row=[];repeat(3){row=array.append({values:row,value:random.int({min:-8,max:8})});}result=array.append({values:result,value:row});}let total=array.sum({values:original});let label=text.join({values:original,separator:"-"});`;
+    counters.dataToolCases++;
+    await exercise('data-tools', index, source, async () => {
+      const calls = [], a = await fakeRunner(calls).run(source), b = await fakeRunner(calls).run(source);
+      const expected = Array.from({ length: count }, (_, item) => start + item * step);
+      assert.deepEqual(a.variables, b.variables); assert.deepEqual(a.variables.original, expected);
+      assert.deepEqual(a.variables.shuffled.slice().sort((x, y) => x - y), expected);
+      assert.equal(a.variables.total, expected.reduce((sum, value) => sum + value, 0)); assert.equal(a.variables.label, expected.join('-'));
+      assert.equal(a.variables.result.length, count); assert.ok(a.variables.result.every(row => row.length === 3 && row.every(value => Number.isInteger(value) && value >= -8 && value <= 8)));
+      assert.equal(calls.length, 0);
+    });
+  }
+  phaseTimes.dataToolsMs = Math.round(performance.now() - dataToolStarted);
 
   const attacks = [];
   const addAttack = (name, action) => attacks.push({ name, action });
