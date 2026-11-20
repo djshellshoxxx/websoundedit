@@ -75,8 +75,8 @@ Open **Audio presets** from the workbench. Use **Find a preset** and **Category*
 
 | Category | Available recipes |
 | --- | --- |
-| Cleanup | Repair clipped peaks; Remove DC offset; Reduce low rumble; Soften high-frequency hiss; Gentle room-noise gate; Firm room-noise gate. |
-| Vocals | Vocal isolation · stereo center; Instrumental isolation · stereo sides; Vocal removal · center reduction; Gentle de-esser; Focused de-esser; Vocal presence. |
+| Cleanup | Repair clipped peaks; Remove DC offset; Reduce low rumble; Soften high-frequency hiss; Gentle room-noise gate; Firm room-noise gate; Normalize peaks at −1, −3 or −6 dBFS. |
+| Vocals | Vocal isolation · stereo center; Instrumental isolation · stereo sides; Vocal removal · center reduction; Instrumental removal · center focus; Gentle de-esser; Focused de-esser; Vocal presence. |
 | Instruments | Bass definition; Drum punch; Acoustic clarity; Smooth piano. |
 | Compression | Gentle bus compression; Vocal leveling compression; Punchy drum compression; Dense speech compression. |
 | Limiting | Auto limiter; Transparent peak limiter; Fast peak limiter; Headroom limiter. |

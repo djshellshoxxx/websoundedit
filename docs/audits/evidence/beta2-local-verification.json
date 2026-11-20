@@ -1,7 +1,7 @@
 {
   "record": "Local beta.2 qualification, 19 November 2026 (America/Los_Angeles)",
   "unitIntegration": {
-    "passed": 439,
+    "passed": 441,
     "failed": 0,
     "skipped": 0
   },
@@ -11,43 +11,43 @@
     "results": [
       {
         "name": "audio",
-        "elapsedMs": 1476,
+        "elapsedMs": 2086,
         "status": "passed",
         "report": "audio.json"
       },
       {
         "name": "live-audio",
-        "elapsedMs": 2997,
+        "elapsedMs": 3415,
         "status": "passed",
         "report": "live-audio.json"
       },
       {
         "name": "macro",
-        "elapsedMs": 4908,
+        "elapsedMs": 4549,
         "status": "passed",
         "report": "macro.json"
       },
       {
         "name": "audacity",
-        "elapsedMs": 500,
+        "elapsedMs": 487,
         "status": "passed",
         "report": "audacity.json"
       },
       {
         "name": "reaper",
-        "elapsedMs": 300,
+        "elapsedMs": 448,
         "status": "passed",
         "report": "reaper.json"
       },
       {
         "name": "api-baseline",
-        "elapsedMs": 957,
+        "elapsedMs": 1468,
         "status": "passed",
         "report": "api-baseline.json"
       },
       {
         "name": "companion",
-        "elapsedMs": 1209,
+        "elapsedMs": 576,
         "status": "passed",
         "report": "companion.json"
       }
@@ -82,5 +82,7 @@
   "hostedEvidence": "Use the workflow on the exact published commit; this file does not assert deployment or a complete hosted matrix pass.",
   "focusedWebKitAfterFixes": 3,
   "mobileWebKit": 3,
-  "publicationSmokeLocalPreview": 1
+  "publicationSmokeLocalPreview": 1,
+  "integrated36PresetChromium": 12,
+  "integrated36PresetPublicationLocalPreview": 1
 }
