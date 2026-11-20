@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0e1116">
+  <meta name="robots" content="noindex">
+  <meta name="description" content="An optional WebSoundEdit research prototype for local neural music stem separation.">
+  <title>Neural stem isolation · prototype | WebSoundEdit</title>
+  <link rel="icon" href="./mark.svg" type="image/svg+xml">
+</head>
+<body>
+  <a class="skip-link" href="#stem-setup">Skip to stem setup</a>
+  <header class="lab-header">
+    <a class="brand" href="./index.html"><img src="./mark.svg" width="30" height="30" alt=""><span>WebSoundEdit<small>CIRCUIT DRIFT LABS</small></span></a>
+    <a href="./index.html">Open audio editor</a>
+  </header>
+  <main>
+    <section class="lab-intro" aria-labelledby="lab-title">
+      <span class="eyebrow">LOCAL AUDIO RESEARCH</span>
+      <h1 id="lab-title">Neural stem isolation <span>· prototype</span></h1>
+      <p>Separate a short music clip into vocals, drums, bass and other instruments with a neural model. Audio is processed in this tab on your device.</p>
+      <p class="muted">This experimental workflow is separate from the editor’s stereo center/side presets. Model estimates can contain bleed and artifacts. Use a capable desktop; model inference may need more than 1 GB of memory.</p>
+    </section>
+
+    <div class="setup-grid" id="stem-setup">
+      <section class="panel" aria-labelledby="model-title">
+        <span class="step">01 / MODEL</span>
+        <h2 id="model-title">Load the research model</h2>
+        <p>Select the supported <code id="model-filename">htdemucs_fp16weights.onnx</code> file from your device. The model’s size and SHA-256 are checked before it runs.</p>
+        <p class="muted">The model is not bundled or downloaded automatically. Read the <a id="model-card" target="_blank" rel="noopener noreferrer">model card</a> and <a href="./docs/STEM_ISOLATION.md" target="_blank" rel="noopener noreferrer">prototype notes</a> for the tested file and weight provenance.</p>
+        <label class="file-label" for="stem-model-file">ONNX model file <span id="model-size">166 MB</span></label>
+        <input id="stem-model-file" type="file" accept=".onnx" aria-describedby="model-status">
+        <p id="model-status" class="detail">No model selected.</p>
+        <button id="stem-load-model" type="button" disabled>Load model</button>
+      </section>
+
+      <section class="panel" aria-labelledby="source-title">
+        <span class="step">02 / SOURCE</span>
+        <h2 id="source-title">Choose a short WAV</h2>
+        <p>Use a mono or stereo PCM/float WAV up to <strong>30 seconds</strong> and <strong>24 MiB</strong>. Export a region from WebSoundEdit if your track is longer.</p>
+        <p class="muted">Input is resampled to 44.1 kHz. Mono is duplicated for the model. Surround files are rejected. Normalize below full scale in the editor if the source peaks above 0 dBFS.</p>
+        <label class="file-label" for="stem-audio-file">Source WAV file</label>
+        <input id="stem-audio-file" type="file" accept="audio/wav,audio/x-wav,.wav" aria-describedby="source-status">
+        <p id="source-status" class="detail">No source selected.</p>
+        <div id="original-preview" hidden>
+          <h3>Original · model input</h3>
+          <audio id="original-player" controls preload="metadata" aria-label="Original audio preview"></audio>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel job-panel" aria-labelledby="separate-title">
+      <div>
+        <span class="step">03 / SEPARATE</span>
+        <h2 id="separate-title">Create the stems</h2>
+        <p>Inference runs in a dedicated worker. Cancel stops that worker and releases the model; load it again to retry.</p>
+      </div>
+      <div class="job-actions">
+        <button id="stem-separate" class="primary" type="button" disabled>Separate stems</button>
+        <button id="stem-cancel" type="button" disabled>Cancel</button>
+        <button id="stem-release" type="button" disabled>Release model</button>
+      </div>
+      <div class="job-progress">
+        <progress id="stem-progress" max="1" value="0" aria-label="Stem separation progress"></progress>
+        <p id="stem-status" role="status" aria-live="polite">Choose a model and a source WAV to begin.</p>
+        <p id="stem-error" class="error" role="alert" hidden></p>
+      </div>
+    </section>
+
+    <section class="results-section" id="stem-results" aria-labelledby="results-title" hidden>
+      <div class="results-heading">
+        <span class="step">04 / LISTEN & EXPORT</span>
+        <h2 id="results-title">Your separated stems</h2>
+        <p id="stem-result-summary" class="detail"></p>
+        <p class="muted">Downloads preserve the model’s output as stereo, 44.1 kHz, 32-bit float WAV. Listening previews use 16-bit PCM and clamp peaks above full scale. Import the downloads into WebSoundEdit to edit or mix them.</p>
+        <p class="muted">Instrumental is the sum of the drums, bass and other predictions. Stem sums may differ from the original recording.</p>
+      </div>
+      <div id="stem-result-list" class="result-grid"></div>
+    </section>
+
+    <noscript><p class="error">This prototype requires JavaScript and WebAssembly to run the local model.</p></noscript>
+  </main>
+  <footer><span>No audio uploads. No automatic model downloads.</span><a href="./docs/STEM_ISOLATION.md">Prototype documentation</a></footer>
+  <script type="module" src="./src/stem-lab.js"></script>
+</body>
+</html>

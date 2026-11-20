@@ -2,9 +2,13 @@ import assert from 'node:assert/strict';
 import { readFile, stat } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 // Links in the published user guide must resolve to the current references.
-const guides = ['USER_GUIDE', 'SCRIPTING', 'BROWSER_SUPPORT', 'API', 'VERIFICATION', 'THIRD_PARTY'].map(name => [`docs/${name}.md`, `docs/${name}.md`]);
+const guides = ['USER_GUIDE', 'SCRIPTING', 'BROWSER_SUPPORT', 'API', 'VERIFICATION', 'THIRD_PARTY', 'STEM_ISOLATION'].map(name => [`docs/${name}.md`, `docs/${name}.md`]);
 guides.push(['docs/audits/BETA_2_QUALIFICATION_20261119.md', 'docs/audits/BETA_2_QUALIFICATION_20261119.md'], ['docs/THIRD_PARTY.md', 'licenses/THIRD_PARTY.md']);
 const outputRoot = resolve('dist');
+assert.ok((await stat('dist/stem-lab.html')).isFile(), 'The isolated stem prototype must be a built page.');
+for (const file of ['ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm']) {
+  assert.deepEqual(await readFile(`dist/stems-runtime/${file}`), await readFile(`node_modules/onnxruntime-web/dist/${file}`), `Stem runtime ${file} must match the pinned package.`);
+}
 for (const [sourcePath, publishedPath] of guides) {
   const text = await readFile(`dist/${publishedPath}`, 'utf8');
   assert.equal(text, await readFile(sourcePath, 'utf8'), `Published ${publishedPath} must match its source.`);
