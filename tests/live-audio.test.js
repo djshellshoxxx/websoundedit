@@ -42,6 +42,62 @@ test('ordinary transport shares the live graph; knobs preserve playing sources, 
   await live.releaseTrack(first.trackId);assert.ok(sources[0].stops.length);assert.equal(sources[1].stops.length,0);assert.equal(playback.playing,true);
   await live.execute('transport.pause');assert.equal(playback.playing,false);await live.execute('transport.seek',{position:.25});assert.equal(playback.position,.25);await live.execute('transport.stop');assert.equal(playback.position,0);await live.dispose();
 });
+test('a loop can be armed before first play and survives selection, stop, mix and seek transitions', async () => {
+  const { engine, live, playback } = await fixture();
+  try {
+    await engine.execute('audio.generate', { duration: 4 });
+    await engine.execute('selection.set', { start: 1, end: 2, channels: 'all' });
+    const armed = await live.execute('transport.set', { loop: true, loopStart: 1, loopEnd: 2 });
+    assert.deepEqual([armed.loop, armed.loopStart, armed.loopEnd], [true, 1, 2]);
+    assert.equal(live.context, null, 'loop configuration must not request audio output');
+    await live.execute('transport.play', { scope: 'selection' });
+    assert.deepEqual([playback._timelineOffset, playback._loopStart, playback._loopEnd], [1, 0, 1]);
+    await live.execute('transport.stop');
+    assert.deepEqual([live.getState().transport.loopStart, live.getState().transport.loopEnd], [1, 2]);
+    await live.execute('transport.play', { scope: 'mix' });
+    assert.deepEqual([playback._timelineOffset, playback._loopStart, playback._loopEnd], [0, 1, 2]);
+    await live.execute('transport.seek', { position: 1.25 });
+    assert.deepEqual([live.getState().transport.loopStart, live.getState().transport.loopEnd], [1, 2]);
+  } finally { await live.dispose(); }
+});
+
+test('paused loop changes use project time even outside the previous playback selection', async () => {
+  const { engine, live, playback } = await fixture();
+  try {
+    await engine.execute('audio.generate', { duration: 4 });
+    await engine.execute('selection.set', { start: 3, end: 4, channels: 'all' });
+    await live.execute('transport.play', { scope: 'selection' });
+    const playing = live.getState().transport;
+    await assert.rejects(live.execute('transport.set', { loop: true, loopStart: .25, loopEnd: .75, bpm: 130 }), /playing selection/);
+    assert.deepEqual(live.getState().transport, playing, 'an incompatible active loop must reject atomically');
+    await live.execute('transport.pause');
+    await live.execute('transport.set', { loop: true, loopStart: .25, loopEnd: .75 });
+    assert.deepEqual([live.getState().transport.loopStart, live.getState().transport.loopEnd], [.25, .75]);
+    await live.execute('transport.play', { scope: 'mix' });
+    assert.deepEqual([playback._loopStart, playback._loopEnd], [.25, .75]);
+    await live.execute('transport.pause');
+    await engine.execute('selection.set', { start: 2, end: 3, channels: 'all' });
+    await live.execute('transport.play', { scope: 'selection' });
+    assert.deepEqual([live.getState().transport.loopStart, live.getState().transport.loopEnd], [2, 3]);
+  } finally { await live.dispose(); }
+});
+
+test('invalid staged loops reject before tempo changes and empty-project arming stays silent', async () => {
+  const { engine, live } = await fixture();
+  try {
+    await live.execute('transport.set', { loop: true });
+    assert.equal(live.getState().transport.loop, true);
+    assert.equal(live.context, null);
+    await engine.execute('audio.generate', { duration: 4 });
+    const before = live.getState().transport;
+    for (const range of [{ loopStart: 1, loopEnd: 5 }, { loopStart: 2, loopEnd: 1 }]) {
+      await assert.rejects(live.execute('transport.set', { loop: true, bpm: 130, ...range }), /Loop/);
+      assert.deepEqual(live.getState().transport, before);
+    }
+    await live.execute('transport.play', { scope: 'mix' });
+    assert.deepEqual([live.getState().transport.loopStart, live.getState().transport.loopEnd], [0, 4]);
+  } finally { await live.dispose(); }
+});
 test('input settings, monitoring, bounded PCM subscriptions and device stop expose truthful active state',async()=>{
   const{live,taps,context,track}=await fixture();await live.execute('audio.input.start',{channels:[0,1],monitor:false});assert.equal(live.getState().input.sampleRate,8000);assert.equal(live.getState().input.active,true);
   await live.execute('audio.input.set',{gainDb:-3,noiseSuppression:true});await live.execute('audio.monitor.set',{enabled:true,gainDb:-6});assert.equal(live.getState().input.monitor,true);

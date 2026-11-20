@@ -112,11 +112,32 @@ export class LiveAudioRuntime extends EventTarget {
     const proposed=[...this.graphs.graphs.values()].map(graph=>({id:graph.id,chain:graph.chain,automation:graph.automation}));for(const track of plan.tracks)if(!proposed.some(graph=>graph.id===track.id))proposed.push({id:track.id,...(this.racks.get(track.id)||{chain:[],automation:[]})});this.graphs.budget(proposed);
     for(const track of plan.tracks)await this._ensureTrack(track.id);abort(signal);if(generation!==this.generation)fail('Playback start was cancelled.','ABORTED');
     const position=params.position??(params.offset!==undefined?plan.start+params.offset:this.playback.position>=plan.start&&this.playback.position<plan.end?this.playback.position:plan.start),loop=params.loop??this.playback.loop;
-    const loopStart=(params.loopStart??plan.start)-plan.start,loopEnd=(params.loopEnd??plan.end)-plan.start;
+    const stagedStart=this.playback._timelineOffset+this.playback._loopStart,stagedEnd=this.playback._timelineOffset+this.playback._loopEnd;
+    const stagedFits=stagedEnd>stagedStart&&stagedStart>=plan.start&&stagedEnd<=plan.end;
+    const loopStart=(params.loopStart??(stagedFits?stagedStart:plan.start))-plan.start,loopEnd=(params.loopEnd??(stagedFits?stagedEnd:plan.end))-plan.start;
     const options={offset:position-plan.start,loop,loopStart,loopEnd,rate:params.rate??this.playback.rate,bpm:params.bpm??project.bpm,beatsPerBar:params.beatsPerBar??project.beatsPerBar,beatOffset:params.beatOffset??project.beatOffset,metronome:params.metronome??this.playback.metronome};
     const onAbort=()=>this.playback.stop();signal?.addEventListener('abort',onAbort,{once:true});try{await this.playback.playPlan(plan,options);abort(signal);}finally{signal?.removeEventListener('abort',onAbort);}this.lastPlay={scope,...(params.trackId?{trackId:params.trackId}:{}),...(params.clipId?{clipId:params.clipId}:{})};this.graphs.setClock({audioTime:context.currentTime,timelineTime:this.playback.position,rate:this.playback.rate,playing:true,loopStart:loop?plan.start+loopStart:0,loopEnd:loop?plan.start+loopEnd:0},options.bpm);return this.getState().transport;
   }
-  async _transportSet(params){const project=this._project();if(params.bpm!==undefined||params.beatsPerBar!==undefined||params.beatOffset!==undefined)await this.engine.execute('project.update',Object.fromEntries(['bpm','beatsPerBar','beatOffset'].filter(key=>params[key]!==undefined).map(key=>[key,params[key]])));this.playback.setTempo(params.bpm??project.bpm,params.beatOffset??project.beatOffset,params.beatsPerBar??project.beatsPerBar);if(params.rate!==undefined)this.playback.setRate(params.rate);if(params.metronome!==undefined)this.playback.setMetronome(params.metronome);if(params.loop!==undefined||params.loopStart!==undefined||params.loopEnd!==undefined)this.playback.setLoop(params.loop??this.playback.loop,{start:(params.loopStart??this.playback._timelineOffset+this.playback._loopStart)-this.playback._timelineOffset,end:(params.loopEnd??this.playback._timelineOffset+this.playback._loopEnd)-this.playback._timelineOffset});return this.getState().transport;}
+  async _transportSet(params){
+    const project=this._project();let nextLoop;
+    if(params.loop!==undefined||params.loopStart!==undefined||params.loopEnd!==undefined){
+      const offset=this.playback._timelineOffset,previousStart=offset+this.playback._loopStart,previousEnd=offset+this.playback._loopEnd;
+      const previousFits=previousEnd>previousStart&&previousStart>=0&&previousEnd<=project.duration;
+      const start=params.loopStart??(previousFits?previousStart:0),end=params.loopEnd??(previousFits?previousEnd:project.duration),enabled=params.loop??this.playback.loop;
+      if(!Number.isFinite(start)||!Number.isFinite(end)||start<0||end<0||start>project.duration||end>project.duration)fail('Loop bounds must fit the project duration.');
+      const pendingEmpty=project.duration===0&&params.loopStart===undefined&&params.loopEnd===undefined;
+      if(enabled&&end<=start&&!pendingEmpty)fail('Loop end must follow loop start.');
+      if(this.playback.playing&&(start<offset||end>offset+this.playback._duration))fail('Loop bounds must fit the playing selection. Stop playback or play the mix before changing its range.');
+      nextLoop={enabled,start:start-offset,end:end-offset};
+    }
+    // Preflight loop bounds before changing tempo or restarting an active source.
+    if(params.bpm!==undefined||params.beatsPerBar!==undefined||params.beatOffset!==undefined)await this.engine.execute('project.update',Object.fromEntries(['bpm','beatsPerBar','beatOffset'].filter(key=>params[key]!==undefined).map(key=>[key,params[key]])));
+    this.playback.setTempo(params.bpm??project.bpm,params.beatOffset??project.beatOffset,params.beatsPerBar??project.beatsPerBar);
+    if(params.rate!==undefined)this.playback.setRate(params.rate);
+    if(params.metronome!==undefined)this.playback.setMetronome(params.metronome);
+    if(nextLoop)this.playback.setLoop(nextLoop.enabled,nextLoop);
+    return this.getState().transport;
+  }
   async _inputStart(params,options){
     if(this.capture.phase!=='idle'||['recording','paused'].includes(this.recorder.status))fail('Stop capture/recording before changing the input device or channels.','BUSY');
     const generation=this.generation,inputGeneration=this.inputGeneration;const contextPromise=this._context(),streamPromise=this.devices.start(params,options);let stream;

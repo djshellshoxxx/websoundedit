@@ -1,0 +1,34 @@
+:root[data-theme="graphite"] { --bg:#131416; --panel:#1e2023; --deep:#17191c; --edge:#51565e; --accent:#d9dde3; --teal:#a9d5ed; --text:#f1f2f4; --muted:#b3b8c1; --green:#abd9a2; --yellow:#e7cb86; --red:#ffa09a; --wave-bg:#17191c; --wave-grid:#3b4149; --wave-1:#b5d7ef; --wave-2:#e2c4a5; --wave-3:#c5b7e2; --wave-4:#b5d6ab; --wave-5:#e6d7a6; --wave-6:#e2b7c7; }
+:root[data-theme="ocean"] { --bg:#071b20; --panel:#0d2a31; --deep:#092229; --edge:#3b6872; --accent:#63d6c8; --teal:#7bdded; --text:#e5f5f4; --muted:#a2c4cb; --green:#8de3b2; --yellow:#f0cf7b; --red:#ffaaa3; --wave-bg:#092229; --wave-grid:#234e5a; --wave-1:#70e0ed; --wave-2:#ffc689; --wave-3:#bdb5f6; --wave-4:#91e8be; --wave-5:#e9dc9f; --wave-6:#f5b6d1; }
+:root[data-theme="aurora"] { --bg:#181223; --panel:#251c35; --deep:#1d162b; --edge:#655476; --accent:#c4a2ff; --teal:#a0dcec; --text:#f4edff; --muted:#c4b2d8; --green:#addda8; --yellow:#e8d28e; --red:#ffaaa8; --wave-bg:#1d162b; --wave-grid:#48385c; --wave-1:#9edbef; --wave-2:#efbb8e; --wave-3:#d2b5ff; --wave-4:#a7e0c3; --wave-5:#eee1ac; --wave-6:#f2add9; }
+:root[data-theme="ember"] { --bg:#21140e; --panel:#302018; --deep:#271911; --edge:#795b45; --accent:#ffb273; --teal:#d9d39a; --text:#fff0df; --muted:#d4b9a2; --green:#bdd995; --yellow:#f3d17f; --red:#ffaba0; --wave-bg:#271911; --wave-grid:#553c2d; --wave-1:#f5c88c; --wave-2:#f7ac91; --wave-3:#d5b8ed; --wave-4:#c0dbaa; --wave-5:#ede09a; --wave-6:#edb8c1; }
+:root[data-theme="paper"] { --bg:#f4efe4; --panel:#fffaf0; --deep:#f1eadc; --edge:#b5a68f; --accent:#8f4225; --teal:#216b78; --text:#302a22; --muted:#675b4a; --green:#3b692d; --yellow:#7b590c; --red:#ad3730; --wave-bg:#f1eadc; --wave-grid:#d4c8b4; --wave-1:#216b78; --wave-2:#93501f; --wave-3:#765192; --wave-4:#4b712d; --wave-5:#806011; --wave-6:#965272; }
+:root[data-theme="contrast"] { --bg:#000000; --panel:#070707; --deep:#0b0b0b; --edge:#8a8a8a; --accent:#ffe800; --teal:#5df4ff; --text:#ffffff; --muted:#d0d0d0; --green:#a0ff8a; --yellow:#ffe800; --red:#ffaca7; --wave-bg:#000000; --wave-grid:#5b5b5b; --wave-1:#5df4ff; --wave-2:#ffc58a; --wave-3:#d6bdff; --wave-4:#a0ff8a; --wave-5:#ffe800; --wave-6:#ffb7e0; }
+
+/* Bright palettes also cover controls whose original studio colors were fixed. */
+:root[data-theme-tone="light"] button.primary,
+:root[data-theme-tone="light"] .play-button { color:#fff; }
+:root[data-theme-tone="light"] .status-row.error #status,
+:root[data-theme-tone="light"] #modal-error { color:var(--red)!important; }
+:root[data-theme-tone="light"] #modal-content code { color:var(--teal); }
+:root[data-theme-tone="light"] #signal-stats,
+:root[data-theme-tone="light"] .track-name button,
+:root[data-theme-tone="light"] .track-fader output,
+:root[data-theme-tone="light"] .transport-clock output { color:var(--text); }
+:root:not([data-theme="studio"]) h1>span,
+:root:not([data-theme="studio"]) .tempo-actions button,
+:root:not([data-theme="studio"]) .transport .icon-button { color:var(--muted); }
+:root[data-theme="contrast"] button,
+:root[data-theme="contrast"] input,
+:root[data-theme="contrast"] select,
+:root[data-theme="contrast"] textarea { border-color:var(--edge); }
+
+.theme-gallery { display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:9px; margin:15px 0 18px; }
+.theme-card { display:flex; flex-direction:column; align-items:stretch; gap:6px; min-width:0; padding:10px; white-space:normal; text-align:left; }
+.theme-card strong { font-size:12px; }
+.theme-card small { color:var(--muted); font-size:11px; font-weight:400; }
+.theme-swatches { display:flex; align-items:center; gap:7px; height:29px; padding:6px 8px; border:1px solid var(--edge); border-radius:3px; background:var(--theme-preview-bg); }
+.theme-swatches i { display:block; width:18px; height:12px; border-radius:2px; background:var(--theme-preview-accent); }
+.theme-swatches i:last-child { flex:1; height:3px; background:var(--theme-preview-wave); }
+.theme-card[aria-pressed="true"] { outline:2px solid var(--teal); outline-offset:1px; }
+@media(max-width:600px) { .theme-gallery { grid-template-columns:repeat(2,minmax(0,1fr)); } .theme-card { min-height:104px; } }

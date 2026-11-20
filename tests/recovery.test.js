@@ -24,8 +24,8 @@ function fixture(overrides = {}) {
 }
 
 test('clear invalidates a snapshot still being serialized and future edits can save again', async () => {
-  const pending = deferred(), state = fixture({ snapshot: () => pending.promise });
-  state.writer.schedule(); const saving = state.fire();
+  const pending = deferred(), entered = deferred(), state = fixture({ snapshot: () => { entered.resolve(); return pending.promise; } });
+  state.writer.schedule(); const saving = state.fire(); await entered.promise;
   assert.deepEqual(await state.writer.clear(), { cleared: true });
   assert.equal(state.stored(), null);
   pending.resolve({ name: 'The recovery copy the user removed' }); await saving;
@@ -63,9 +63,9 @@ test('repeated edits coalesce before serialization and clear cancels the pending
 });
 
 test('superseded snapshots cannot overwrite a newer recovery copy or report stale success', async () => {
-  const old = deferred(), current = deferred(); let calls = 0;
-  const state = fixture({ snapshot: () => (++calls === 1 ? old.promise : current.promise) });
-  state.writer.schedule(); const first = state.fire();
+  const old = deferred(), current = deferred(), entered = deferred(); let calls = 0;
+  const state = fixture({ snapshot: () => { entered.resolve(); return ++calls === 1 ? old.promise : current.promise; } });
+  state.writer.schedule(); const first = state.fire(); await entered.promise;
   state.writer.schedule(); const second = state.fire();
   current.resolve({ name: 'Current edit' }); await second;
   old.resolve({ name: 'Previous edit' }); await first;
@@ -74,8 +74,8 @@ test('superseded snapshots cannot overwrite a newer recovery copy or report stal
 });
 
 test('batch cancellation invalidates an in-flight snapshot and ignores its late error', async () => {
-  const pending = deferred(), state = fixture({ snapshot: () => pending.promise });
-  state.writer.schedule(); const saving = state.fire(); state.writer.cancel();
+  const pending = deferred(), entered = deferred(), state = fixture({ snapshot: () => { entered.resolve(); return pending.promise; } });
+  state.writer.schedule(); const saving = state.fire(); await entered.promise; state.writer.cancel();
   pending.reject(new Error('Previous project was disposed')); await saving;
   assert.equal(state.stored().name, 'Earlier recovery');
   assert.deepEqual(state.states.map(event => event.state), ['pending']);
@@ -97,15 +97,37 @@ test('failed writes do not poison later clears or saves, and clear errors reach 
 });
 
 test('saves queued behind an older write are discarded if a newer edit replaces them', async () => {
-  const entered = deferred(), release = deferred(), saved = []; let writes = 0;
-  const state = fixture({ save: async project => {
+  const entered = deferred(), release = deferred(), saved = []; let writes = 0, current = 'Snapshot 1';
+  const state = fixture({ snapshot: async () => ({ name: current }), save: async project => {
     if (++writes === 1) { entered.resolve(); await release.promise; }
     saved.push(project.name);
   } });
   state.writer.schedule(); const first = state.fire(); await entered.promise;
-  state.writer.schedule(); const second = state.fire(); await Promise.resolve();
-  state.writer.schedule(); const third = state.fire(); await Promise.resolve();
+  current = 'Snapshot 2'; state.writer.schedule(); const second = state.fire(); await Promise.resolve();
+  current = 'Snapshot 3'; state.writer.schedule(); const third = state.fire(); await Promise.resolve();
   release.resolve(); await Promise.all([first, second, third]);
   assert.deepEqual(saved, ['Snapshot 1', 'Snapshot 3']);
   assert.equal(state.states.filter(event => event.state === 'saved').length, 1);
+});
+
+test('slow storage does not accumulate full project snapshots while newer edits supersede them', async () => {
+  const entered = deferred(), release = deferred(), saved = [];
+  let current = 0, snapshots = 0;
+  const state = fixture({
+    snapshot: async () => { snapshots++; return { revision: current }; },
+    save: async project => {
+      if (project.revision === 0) { entered.resolve(); await release.promise; }
+      saved.push(project.revision);
+    },
+  });
+  state.writer.schedule(); const pending = [state.fire()]; await entered.promise;
+  for (current = 1; current <= 1000; current++) {
+    state.writer.schedule(); pending.push(state.fire()); await Promise.resolve();
+  }
+  current = 1000;
+  const duringWrite = snapshots;
+  release.resolve(); await Promise.all(pending);
+  assert.equal(duringWrite, 1, 'a blocked write must not retain a serialized audio project per edit');
+  assert.equal(snapshots, 2, 'serialize only the latest edit once storage catches up');
+  assert.deepEqual(saved, [0, 1000]);
 });

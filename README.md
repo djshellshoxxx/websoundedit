@@ -156,7 +156,7 @@ On macOS, Command substitutes for Control. Audio remains silent until playback o
 ```bash
 npm test
 npm run build
-npx playwright install chromium
+npx playwright install --with-deps chromium firefox webkit
 npm run test:e2e
 ```
 

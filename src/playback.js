@@ -339,9 +339,15 @@ export class Playback {
     if (this._playing && this._metronome) this._scheduleMetronome();
   }
   setLoop(enabled, { start = this._loopStart, end = this._loopEnd } = {}) {
-    start = bounded(start, 0, 0, this._duration, 'Loop start');
-    end = bounded(end, this._duration, 0, this._duration, 'Loop end');
-    if (enabled && end <= start) throw new RangeError('Loop end must follow loop start.');
+    // A stopped transport may be armed before it has a source, or for a
+    // different selection. Only an active source constrains its loop range;
+    // play() validates staged bounds again against the next source's PCM.
+    const minimum = this._playing ? 0 : -this._timelineOffset;
+    const maximum = this._playing ? this._duration : Infinity;
+    start = bounded(start, 0, minimum, maximum, 'Loop start');
+    end = bounded(end, this._duration, minimum, maximum, 'Loop end');
+    const pendingEmpty = !this._playing && start === end && this._timelineOffset + end === 0;
+    if (enabled && end <= start && !pendingEmpty) throw new RangeError('Loop end must follow loop start.');
     let position = this._playing ? this._audioPositionAt(this._context.currentTime) : this._position - this._timelineOffset;
     this._loop = Boolean(enabled);
     this._loopStart = start; this._loopEnd = end;
@@ -382,7 +388,12 @@ export class Playback {
     this._buffer = null;
     this._plan = null;
     this.onMeter?.({ left: 0, right: 0, clipped: false });
-    if (reset) { this._position = 0; this._timelineOffset = 0; }
+    if (reset) {
+      this._position = 0;
+      this._loopStart += this._timelineOffset;
+      this._loopEnd += this._timelineOffset;
+      this._timelineOffset = 0;
+    }
   }
   async dispose() {
     this.stop();

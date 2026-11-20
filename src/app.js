@@ -1,6 +1,7 @@
 import packageInfo from '../package.json' with { type: 'json' };
 import './style.css';
 import './creative-ui.css';
+import './themes.css';
 import './beta-ui.css';
 import './mobile.css';
 import { RackPanel } from './rack-ui.js';
@@ -39,6 +40,7 @@ const duration=audio=>(audio?.channels?.[0]?.length||0)/(audio?.sampleRate||4800
 const fmt=n=>Number.isFinite(n)?n.toFixed(1):'−∞';
 const colors=['#5ed8e6','#f1a362','#c3a2ef','#9adf83','#f0cf68','#ef94b6'];
 function trackColorAt(index){return getComputedStyle(document.documentElement).getPropertyValue(`--wave-${index%6+1}`).trim()||colors[index%colors.length];}
+$('#theme-select').innerHTML=Object.entries(THEMES).map(([id,title])=>`<option value="${id}">${title}</option>`).join('');
 const engine=new EngineClient();
 let state=null, registry=[], audioById=new Map(), preview=null, compareOriginal=false, previewTimer, previewSerial=0, busy=0, initialising=true;
 let view={start:0,duration:8}, cursor=0, selectionDrag=null, demo=true, loop=false, metronome=false, detailMode='spectrum';
@@ -143,7 +145,9 @@ function attachTimeline(canvas){let active=null;const track=state.tracks.find(t=
   canvas.addEventListener('pointerdown',e=>{if(e.button!==0||active)return;const time=at(e),clip=[...track.clips].reverse().find(c=>time>=c.start&&time<=c.start+c.duration);if(!clip){cursor=Math.max(0,quantize(time));updateClock();drawPlayhead();return;}e.preventDefault();canvas.focus({preventScroll:true});stopPlayback(false);discardPreview(false);let local=clamp(quantize(time)-clip.start,0,clip.duration);const previous=state.selection?.clipId===clip.id?state.selection:null;const pxPerSecond=canvas.clientWidth/view.duration;let handle=previous&&Math.abs((local-previous.start)*pxPerSecond)<9?'start':previous&&Math.abs((local-previous.end)*pxPerSecond)<9?'end':null;active={clip,pointerId:e.pointerId,initialCursor:cursor,anchor:local,move:e.altKey,moveStart:time,initialStart:clip.start,handle,previous};cursor=clip.start+local;selectionDrag={selection:previous};canvas.setPointerCapture(e.pointerId);updateClock();drawWaveforms();});
   canvas.addEventListener('pointermove',e=>{if(!active||e.pointerId!==active.pointerId)return;const time=at(e),c=active.clip;if(active.move){c.start=Math.max(0,quantize(active.initialStart+time-active.moveStart));drawWaveforms();return;}let local=clamp(quantize(time)-c.start,0,c.duration);let start=active.handle==='start'?local:active.handle==='end'?active.previous.start:Math.min(active.anchor,local);let end=active.handle==='end'?local:active.handle==='start'?active.previous.end:Math.max(active.anchor,local);if(end<start)[start,end]=[end,start];selectionDrag={selection:{trackId:track.id,clipId:c.id,start,end,channels:selectedChannelScope()}};$('#selection-start').value=start.toFixed(3);$('#selection-end').value=end.toFixed(3);$('#selection-length').textContent=`${(end-start).toFixed(3)}s`;drawWaveforms();});
   canvas.addEventListener('pointerup',e=>{if(!active||e.pointerId!==active.pointerId)return;const a=active,sel=selectionDrag?.selection;active=null;selectionDrag=null;safe(async()=>{await core('project.select',{trackId:track.id,clipId:a.clip.id},{quiet:true});if(a.move){await core('clip.update',{clipId:a.clip.id,start:a.clip.start});return;}if(sel&&sel.end-sel.start>1/state.sampleRate&&sel.clipId===a.clip.id){await core('selection.set',sel,{quiet:true});status(`Selected ${(sel.end-sel.start).toFixed(3)}s · drag handles or type IN / OUT for precision.`);}else{await core('selection.clear',{}, {quiet:true});status('Cursor placed. Press S to split; drag to select audio.');}});});
-  const cancelGesture=e=>{if(!active||e.pointerId!==active.pointerId)return;if(active.move)active.clip.start=active.initialStart;cursor=active.initialCursor;active=null;selectionDrag=null;renderSession();};
+  // Batch ownership sends an unscoped Event; native pointer events must still
+  // match the pointer that owns the gesture.
+  const cancelGesture=e=>{if(!active||(e.pointerId!==undefined&&e.pointerId!==active.pointerId))return;if(active.move)active.clip.start=active.initialStart;cursor=active.initialCursor;active=null;selectionDrag=null;renderSession();};
   canvas.addEventListener('pointercancel',cancelGesture);canvas.addEventListener('lostpointercapture',cancelGesture);
   canvas.addEventListener('dblclick',e=>safe(async()=>{const time=at(e),clip=track.clips.find(c=>time>=c.start&&time<=c.start+c.duration);if(clip){await core('selection.set',{clipId:clip.id,start:0,end:clip.duration,channels:'all'},{quiet:true});cursor=clip.start;updateClock();}}));
   canvas.addEventListener('contextmenu',e=>{e.preventDefault();safe(()=>openTrack(track.id));});

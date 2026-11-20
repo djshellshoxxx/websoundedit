@@ -49,3 +49,30 @@ test('a second touch cannot take over or finish the active waveform gesture', ()
   f.send('pointercancel');
   assert.equal(f.clip.start, 0);
 });
+
+test('batch ownership cancels the active drag with an unscoped pointercancel event', () => {
+  const f = fixture();
+  f.send('pointerdown', { altKey: true });
+  f.send('pointermove', { clientX: 300 });
+  assert.equal(f.clip.start, 2);
+  // setBatchActivity dispatches a plain Event, which has no pointerId.
+  f.send('pointercancel', { pointerId: undefined });
+  assert.equal(f.clip.start, 0);
+  assert.equal(f.context.cursor, .5);
+  assert.equal(f.context.selectionDrag, null);
+  f.send('pointermove', { clientX: 400 });
+  f.send('pointerup');
+  assert.equal(f.clip.start, 0);
+});
+
+test('another pointer cannot cancel the active gesture', () => {
+  const f = fixture();
+  f.send('pointerdown', { altKey: true });
+  f.send('pointermove', { clientX: 300 });
+  f.send('pointercancel', { pointerId: 2 });
+  f.send('lostpointercapture', { pointerId: 2 });
+  assert.equal(f.clip.start, 2);
+  assert.notEqual(f.context.selectionDrag, null);
+  f.send('pointercancel');
+  assert.equal(f.clip.start, 0);
+});

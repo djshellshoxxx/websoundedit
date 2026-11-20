@@ -43,6 +43,11 @@ export class RecoveryScheduler {
   async _capture(revision) {
     if (revision !== this.revision) return;
     try {
+      // Defer expensive audio serialization until storage is ready. Waiting
+      // callbacks retain only a revision, so a slow write cannot accumulate
+      // obsolete portable projects for every edit that passes the debounce.
+      await this.writes;
+      if (revision !== this.revision) return;
       const project = await this.snapshot();
       if (revision !== this.revision) return;
       await this._enqueue(async () => {

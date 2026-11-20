@@ -1,4 +1,4 @@
-import { THEMES } from './creative-ui.js';
+import { THEMES, THEME_INFO } from './themes.js';
 import { CHANNEL_LAYOUTS } from './channel-layout.js';
 import { escapeHTML, option, bytesLabel } from './ui-utils.js';
 
@@ -37,6 +37,11 @@ export class OptionsPanel {
     const preferences = this.getPreferences();
     body.innerHTML = `<p>These preferences change the workbench without replacing the open project.</p><div class="form-grid"><label>Theme<select id="options-theme">${Object.entries(THEMES).map(([id, title]) => option(id, title, this.getTheme())).join('')}</select></label><label class="checkbox-field"><input id="options-tooltips" type="checkbox"${preferences.tooltips ? ' checked' : ''}> Show guidance on hover and keyboard focus</label></div><p class="field-hint">Turning tips off preserves accessible names, form labels and the full guide. Device access and active connections are never restored from settings.</p><div class="inline-buttons"><button id="options-save">Save settings JSON</button><button id="options-load">Load settings JSON</button><a class="button-link" href="#help/navigation">Open the illustrated guide ↗</a></div>`;
     body.querySelector('#options-theme').onchange = event => this.safe(() => this.execute('ui.theme.set', { theme: event.target.value }));
+    const gallery = document.createElement('div');
+    gallery.className = 'theme-gallery'; gallery.setAttribute('role', 'group'); gallery.setAttribute('aria-label', 'Theme gallery');
+    gallery.innerHTML = Object.entries(THEME_INFO).map(([id, theme]) => `<button class="theme-card" data-theme-choice="${id}" aria-pressed="${id === this.getTheme()}" style="--theme-preview-bg:${theme.background};--theme-preview-accent:${theme.accent};--theme-preview-wave:${theme.wave}"><span class="theme-swatches" aria-hidden="true"><i></i><i></i></span><strong>${theme.title}</strong><small>${theme.description}</small></button>`).join('');
+    body.querySelector('.form-grid').after(gallery);
+    gallery.addEventListener('click', event => { const button = event.target.closest('[data-theme-choice]'); if (button) this.safe(() => this.execute('ui.theme.set', { theme: button.dataset.themeChoice })); });
     body.querySelector('#options-tooltips').onchange = event => this.safe(() => this.execute('ui.tooltips.set', { enabled: event.target.checked }));
     const importOptions = document.createElement('section');
     importOptions.innerHTML = `<h4>Imported file speaker layout</h4><label>Source layout declaration<select id="options-import-layout" data-help="surround" data-guide="Auto reads the file's speaker mask. Declare 5.1 or 7.1 only when you know an unidentified source's speaker order; this does not convert channels.">${[['auto', 'Auto — read file layout'], ['5.1', 'Declare 5.1 — FL, FR, FC, LFE, BL, BR'], ['7.1', 'Declare 7.1 — FL, FR, FC, LFE, BL, BR, SL, SR']].map(([id, label]) => option(id, label, preferences.import.layout)).join('')}</select></label><p class="field-hint">For manual file imports. Auto rejects unidentified surround instead of silently downmixing it. An explicit declaration must match the channel count and known speaker mask; it never converts the source. Return to Auto for ordinary imports. Macro/API imports pass their own layout explicitly.</p>`;
