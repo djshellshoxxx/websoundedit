@@ -78,9 +78,10 @@ runs:
         echo 'PULSE_SINK=websoundedit_ci' >> "$GITHUB_ENV"
         pactl info | tee test-results/audio-backend/server.txt
         pactl list short sinks | tee test-results/audio-backend/sinks.txt
-    - name: Desktop and mobile browser editing, worklets, capture, codecs, accessibility and help screenshots
+    - name: Chromium, Firefox and WebKit desktop and mobile browser tests
       if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.browsers.outcome == 'success' }}
       shell: bash
+      # One invocation keeps every project's traces, screenshots and reports.
       run: npm run test:e2e
     - name: Save all verification evidence
       if: always()

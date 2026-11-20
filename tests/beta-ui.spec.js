@@ -1,5 +1,6 @@
 import packageInfo from '../package.json' with { type: 'json' };
 import { test, expect } from '@playwright/test';
+import { storageTest } from './native-storage.js';
 import { readFile } from 'node:fs/promises';
 import { encodeWav, decodeWav } from '../src/wav.js';
 
@@ -169,7 +170,7 @@ test('actual worklet loop capture creates one layer with independent stop, mute 
   await page.locator('[data-action="performance"]').click();await expect(page.locator('[data-loop-layer]')).toHaveCount(1);await page.locator('[data-layer-action="mute"]').click();await expect(page.locator('[data-layer-action="mute"]')).toHaveAttribute('aria-pressed','true');await page.locator('[data-layer-action="stop"]').click();await expect(page.locator('[data-layer-action="play"]')).toBeEnabled();
   await page.locator('[data-layer-action="remove"]').click();await expect(page.locator('[data-loop-layer]')).toHaveCount(0);await expect.poll(()=>page.evaluate(()=>websoundedit.getState().tracks.length)).toBe(3);expect(errors).toEqual([]);
 });
-test('actual OPFS master recording exports committed frames and range import remains bounded', async ({ page }) => {
+storageTest('actual OPFS master recording exports committed frames and range import remains bounded', async ({ page }) => {
   const errors=await boot(page);await page.locator('#play-button').click();await expect(page.locator('#play-button')).toHaveClass(/playing/);
   const started=await page.evaluate(()=>websoundedit.execute('recorder.start',{source:'master',name:'Browser archive',maxSeconds:2}));
   await expect.poll(()=>page.evaluate(()=>websoundedit.live.getState().recorder.frames)).toBeGreaterThan(4000);

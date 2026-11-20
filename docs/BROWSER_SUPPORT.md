@@ -6,11 +6,15 @@ WebSoundEdit uses one responsive application for desktop, tablet and phone. Open
 
 | Project | Engine or device profile | Coverage |
 | --- | --- | --- |
-| `chromium` | Chromium | Complete browser suite: formats, editing, recording, macros/batches, presets, themes, live display and help |
-| `firefox` | Firefox | Shared editing/effects, portable projects, ten-format checks, scripting/batches, presets/themes, live worklets/display and repeated-operation stress |
-| `webkit` | WebKit | The same common checks in the engine used by Safari |
+| `chromium` | Chromium | All shared desktop specs, plus the simulated microphone fixture |
+| `firefox` | Firefox | All shared desktop specs: editing/effects, formats, native worklets and OPFS recording/recovery, macros/batches, presets/themes, live display, Audacity/REAPER interchange, help and repeated-operation stress |
+| `webkit` | WebKit | The same shared desktop suite in the engine used by Safari |
 | `mobile-chromium` | Pixel 7 touch profile | 320/390-pixel phone, tablet and landscape layouts; editing; Options/Help/macros/export |
 | `mobile-webkit` | iPhone 13 touch profile | The same mobile journeys in WebKit |
+
+Desktop specs are discovered automatically, so new shared tests run in all three engines. The mobile suite uses its own projects. Only `tests/microphone.chromium.spec.js` is limited to Chromium because its simulated input fixture uses Chromium-specific launch flags; native live-audio and OPFS assertions stay in the shared suite. The published-site checks also run in all three desktop engines after deployment and are intentionally skipped in a local build-only run.
+
+Native OPFS recording tests use a fresh temporary WebKit profile because this runner's ephemeral private contexts reject `navigator.storage.getDirectory()` before application code runs. Each profile is closed and removed after its test, while Chromium and Firefox keep their ordinary isolated contexts. The fixture preserves the real storage, worklet, PCM, reload/recovery and export assertions, along with the runner's configured options and failure artifacts.
 
 Chromium exercises the engine shared by Chrome and Edge. The automated WebKit build exercises Safari's engine, rather than a physical iPhone or the macOS Safari application. Actual executed results belong to the workflow at the tested commit; a configured test is not evidence that it passed.
 
@@ -52,6 +56,6 @@ npx playwright install --with-deps chromium firefox webkit
 npm run test:e2e
 ```
 
-Use `npx playwright test --project=firefox` (or another project name) for a focused run. Test artifacts include responsive screenshots and `browser-stress.json` with measured operations and UI heartbeat counts. Hardware input, physical-device latency and long-duration real-device capture require separate device testing.
+Use `npx playwright test --project=firefox` (or another project name) for a focused run. The `beta-verification-evidence` artifact includes the machine-readable `test-results/browser-results.json` with each project's actual results, the HTML report, failure traces/screenshots, responsive screenshots and `browser-stress.json` with measured operations and UI heartbeat counts. Hardware input, physical-device latency and long-duration real-device capture require separate device testing.
 
 On a Linux host without a sound device, Firefox needs a functioning system audio backend to run a real-time `AudioContext`. The CI action starts PulseAudio with a 48 kHz stereo virtual output sink, then runs the same real PCM/worklet assertions. This provides an audio clock for headless testing; it neither mocks Web Audio nor verifies a physical interface. Backend diagnostics are retained with the verification artifacts. See [scripting and batch behavior](SCRIPTING.md) and [the user guide](USER_GUIDE.md) for the supported workflows and their limits.

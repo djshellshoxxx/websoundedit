@@ -47,6 +47,8 @@ jobs:
           name: publication-evidence
           path: |
             test-results/browser/published-*/
+            test-results/browser-results.json
+            playwright-report/
             dist/build.json
           retention-days: 30
   release:

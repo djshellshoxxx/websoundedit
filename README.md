@@ -178,7 +178,19 @@ npx playwright install --with-deps chromium firefox webkit
 npm run test:e2e
 ```
 
-The GitHub Actions workflow runs measurable DSP, state, API and browser tests before deploying `dist/`. Browser results and screenshots are retained as an artifact. Enable repository **Settings → Pages → Source: GitHub Actions** once. That site-administration setting cannot be created by the workflow's default `GITHUB_TOKEN`; see [GitHub's configure-pages action](https://github.com/actions/configure-pages/blob/main/action.yml).
+The default browser run includes desktop Chromium, Firefox and WebKit, plus the mobile Chromium and WebKit layout projects. All three desktop projects discover shared `tests/*.spec.js` files automatically. The mobile suite runs in its own projects; Chromium additionally runs `*.chromium.spec.js` simulated-device fixtures. Native playback, worklets, OPFS recording/recovery, editing, codecs, project interchange and guide checks run in all three desktop engines. The simulated microphone test uses Chromium-specific launch flags; it does not qualify physical input hardware. WebKit automation covers the browser engine, not an installed Safari or physical iPhone.
+
+To run or list one engine locally:
+
+```bash
+npm run test:e2e -- --project=firefox
+npm run test:e2e -- --project=webkit
+npm run test:e2e -- --project=firefox --project=webkit --list
+```
+
+Linux needs a working audio output for native `AudioContext` tests. CI starts a clocked PulseAudio null sink at 48 kHz; headless local runs need a working system output or the same virtual-device setup from `.github/actions/verify/action.yml`.
+
+The GitHub Actions workflow installs all three engines and runs measurable DSP, state, API and browser tests before deploying `dist/`. A failing browser fails the verification gate. Per-project traces, screenshots, the HTML report and `test-results/browser-results.json` are retained in `beta-verification-evidence`. The post-deployment `published.spec.js` check also runs in all three desktop engines; it is skipped when no published base URL is supplied. Enable repository **Settings → Pages → Source: GitHub Actions** once. That site-administration setting cannot be created by the workflow's default `GITHUB_TOKEN`; see [GitHub's configure-pages action](https://github.com/actions/configure-pages/blob/main/action.yml).
 
 The detailed test plan is in [ACCEPTANCE.md](docs/ACCEPTANCE.md). See workflow run results for the current verified commit; the existence of a test case is not a claim that an untested browser supports it.
 
