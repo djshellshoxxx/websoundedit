@@ -64,6 +64,36 @@ function byteUsage(projects) {
   }
   return bytes;
 }
+// Portable projects encode every clip separately, including shared immutable PCM.
+// Admission for new editing tools must also allow the saved project to reopen.
+function portablePcmBytes(project, exceptClip = null) {
+  let bytes = 0;
+  for (const track of project.tracks) for (const clip of track.clips) if (clip !== exceptClip) {
+    for (const channel of clip.audio.channels) bytes += channel.byteLength;
+  }
+  return bytes;
+}
+function nearestZeroCrossing(audio, frame, indices, radius, minimum, maximum, edge) {
+  const length = audio.channels[0].length;
+  const crosses = candidate => indices.every(index => {
+    const channel = audio.channels[index];
+    if (candidate === 0) return channel[0] === 0;
+    if (candidate === length) return channel[length - 1] === 0;
+    const left = channel[candidate - 1], right = channel[candidate];
+    // Selection end is exclusive: keep the exact zero as the last included
+    // sample, or as the first included sample at the start. A zero followed by
+    // a loud sample must not count as an already-clean start boundary.
+    return (edge === 'start' ? right === 0 : left === 0) || left !== 0 && right !== 0 && (left < 0) !== (right < 0);
+  });
+  for (let distance = 0; distance <= radius; distance++) {
+    const left = frame - distance, right = frame + distance;
+    // Ties prefer the earlier boundary. Test each channel separately: summing
+    // anti-phase channels would incorrectly label every position as silence.
+    if (left >= minimum && left <= maximum && crosses(left)) return left;
+    if (distance && right >= minimum && right <= maximum && crosses(right)) return right;
+  }
+  return frame;
+}
 function projectDuration(p) { let end = 0; for (const t of p.tracks) for (const c of t.clips) end = Math.max(end, c.start + audioDuration(c.audio)); return end; }
 function clipInfo(c, trackId) { return { id: c.id, clipId: c.id, trackId, name: c.name, start: c.start, duration: audioDuration(c.audio), sampleRate: c.audio.sampleRate, channels: c.audio.channels.length, layout: audioLayout(c.audio), frames: c.audio.channels[0].length, keyAnalysis: c.keyAnalysis ? copyJSON(c.keyAnalysis) : null }; }
 function trackInfo(t) { return { id: t.id, name: t.name, gainDb: t.gainDb, pan: t.pan, mute: t.mute, solo: t.solo, clips: t.clips.map(c => clipInfo(c, t.id)) }; }
@@ -166,8 +196,11 @@ export const COMMANDS = Object.freeze([
   command('track.add', 'Create an empty track', { name: 'Track' }, true), command('track.update', 'Set name, gain, pan, mute or solo', { trackId: 'track-id', gainDb: 0, pan: 0, mute: false, solo: false }, true), command('track.remove', 'Remove a track and its clips', { trackId: 'track-id' }, true),
   command('clip.add', 'Import PCM as a clip, creating a track if needed', { trackId: null, name: 'Audio', start: 0, audio: {} }, true), command('clip.update', 'Move or rename a clip', { clipId: 'clip-id', start: 0, name: 'Clip' }, true), command('clip.remove', 'Remove a clip', { clipId: 'clip-id' }, true),
   command('clip.duplicate', 'Duplicate a clip', { clipId: 'clip-id', start: 0, newTrack: false }, true), command('clip.split', 'Split at a clip-relative time', { clipId: 'clip-id', at: 1 }, true), command('clip.getAudio', 'Read a copy of unprocessed clip PCM', { clipId: 'clip-id' }),
+  command('clip.extractChannels', 'Extract speaker-labeled mono tracks, muted by default, while retaining the source', { clipId: 'clip-id' }, true),
   command('selection.set', 'Select a clip-relative interval and channels', { clipId: 'clip-id', start: 0, end: 1, channels: 'all' }), command('selection.clear', 'Clear the current selection'),
+  command('selection.zeroCrossing', 'Move selection edges to nearby shared zero crossings without changing audio', { radiusMs: 5 }),
   command('edit.copy', 'Copy selected audio internally'), command('edit.cut', 'Copy and remove selected audio', {}, true), command('edit.paste', 'Insert clipboard audio at a clip-relative time', { at: 0 }, true), command('edit.delete', 'Remove selected audio', {}, true), command('edit.trim', 'Keep only selected audio', {}, true),
+  command('edit.insertSilence', 'Insert a precise duration of silence into every channel of a clip', { at: 0, duration: 1 }, true),
   command('effect.apply', 'Apply an effect to a selection or clip', { effect: 'gain', params: { db: 0 }, target: null }, true), command('effect.preview', 'Return the changed whole clip without committing', { effect: 'gain', params: { db: 0 }, target: null }),
   ...effects.map(([effect, description, parameters]) => command(`effect.${effect}`, description, { ...parameters, target: null }, true)),
   command('analysis.bpm', 'Estimate tempo and confidence', { minBpm: 60, maxBpm: 200 }), command('analysis.silence', 'Find quiet regions', { thresholdDb: -45, minDuration: 0.25, padding: 0.02 }), command('analysis.stats', 'Measure amplitude, DC and stereo correlation'),
@@ -271,6 +304,60 @@ export class AudioEditor {
     const track = params.trackId ? this._track(params.trackId) : this._addTrack({ name: params.trackName || params.name });
     const clip = { id: id('clip'), name: name(params.name, 'Audio clip'), start: number(params.start, 0, 0, LIMITS.timelineSeconds, 'Clip start'), audio };
     track.clips.push(clip); this._select(track, clip); return clipInfo(clip, track.id);
+  }
+  _insertSilence(params) {
+    const { track, clip } = this._clip(params.clipId, params.trackId), audio = clip.audio;
+    const selection = this.project.selection?.clipId === clip.id ? this.project.selection : null;
+    if ((params.channels ?? selection?.channels ?? 'all') !== 'all') fail('Insert silence requires All channels.');
+    const rate = audio.sampleRate, length = audio.channels[0].length;
+    const at = number(params.at, selection?.start ?? 0, 0, audioDuration(audio), 'Insertion position');
+    const seconds = number(params.duration, 1, 0, LIMITS.timelineSeconds, 'Silence duration');
+    const position = Math.round(at * rate), inserted = Math.round(seconds * rate), frames = length + inserted;
+    if (inserted < 1) fail('Silence duration must contain at least one sample.');
+    if (clip.start + frames / rate > LIMITS.timelineSeconds) fail('Inserted silence would exceed the 10-minute timeline.', 'RESOURCE_LIMIT');
+    if (portablePcmBytes(this.project, clip) + frames * audio.channels.length * 4 > LIMITS.projectBytes) fail('Inserted silence would exceed the 256 MiB project PCM limit.', 'RESOURCE_LIMIT');
+    // Allocate only the final clip, after admission. No full-size temporary
+    // silence buffer or intermediate splice copies are needed.
+    clip.audio = { sampleRate: rate, ...layoutMetadata(audio), channels: audio.channels.map(channel => {
+      const output = new Float32Array(frames);
+      output.set(channel.subarray(0, position));
+      output.set(channel.subarray(position), position + inserted);
+      return output;
+    }) };
+    clip.keyAnalysis = null;
+    this._select(track, clip);
+    this.project.selection = { trackId: track.id, clipId: clip.id, start: position / rate, end: (position + inserted) / rate, channels: 'all' };
+    return { ...clipInfo(clip, track.id), insertedFrames: inserted };
+  }
+  _zeroCrossing(params) {
+    const target = this._target(params, { requireSelection: true }), audio = target.clip.audio, rate = audio.sampleRate;
+    const radius = Math.floor(number(params.radiusMs, 5, 0, 50, 'Zero-crossing search radius') * rate / 1000);
+    const first = Math.round(target.start * rate), last = Math.round(target.end * rate);
+    const start = nearestZeroCrossing(audio, first, target.indices, radius, 0, last - 1, 'start');
+    const end = nearestZeroCrossing(audio, last, target.indices, radius, start + 1, audio.channels[0].length, 'end');
+    this._select(target.track, target.clip);
+    this.project.selection = { trackId: target.track.id, clipId: target.clip.id, start: start / rate, end: end / rate, channels: target.channels };
+    return { ...this.project.selection };
+  }
+  _extractChannels(params) {
+    const { track, clip } = this._clip(params.clipId, params.trackId), audio = clip.audio, layout = audioLayout(audio), count = audio.channels.length;
+    if (count === 1) fail('This clip is already mono.');
+    if (this.project.tracks.length + count > LIMITS.tracks || this.project.tracks.reduce((total, item) => total + item.clips.length, 0) + count > LIMITS.clips) fail('Extracting channels would exceed the track or clip limit.', 'RESOURCE_LIMIT');
+    if (portablePcmBytes(this.project) + audio.channels[0].byteLength * count > LIMITS.projectBytes) fail('Extracted channels would exceed the 256 MiB portable project PCM limit.', 'RESOURCE_LIMIT');
+    const tracks = audio.channels.map((channel, index) => {
+      const label = suffixedName(clip.name, ` [${layout} ${CHANNEL_LAYOUTS[layout].channels[index]}]`);
+      const stem = this._addTrack({ name: label });
+      stem.gainDb = track.gainDb; stem.pan = layout === 'stereo' ? index === 0 ? -1 : 1 : 0;
+      // Keep the existing mix unchanged. These are independent editing stems,
+      // not a claim that centered mono tracks reproduce surround routing.
+      stem.mute = true;
+      stem.clips.push({ id: id('clip'), name: label, start: clip.start, keyAnalysis: null, audio: { sampleRate: audio.sampleRate, layout: 'mono', channels: [channel] } });
+      return stem;
+    });
+    // PCM is immutable, so each stem can share its source channel safely until
+    // the next edit. Public reads already return copies.
+    this._select(tracks[0], tracks[0].clips[0]);
+    return { sourceClipId: clip.id, tracks: tracks.map(trackInfo) };
   }
   async _effect(params, preview = false) {
     const effect = params.effect;
@@ -472,6 +559,7 @@ export class AudioEditor {
       }
       case 'track.remove': { const t = this._track(params.trackId); p.tracks = p.tracks.filter(x => x.id !== t.id); this._repairSelection(); return true; }
       case 'clip.add': return this._addClip(params);
+      case 'clip.extractChannels': return this._extractChannels(params);
       case 'clip.getAudio': { const { clip } = this._clip(params.clipId, params.trackId); return { sampleRate: clip.audio.sampleRate, ...layoutMetadata(clip.audio), channels: clip.audio.channels.map(c => c.slice()) }; }
       case 'clip.update': { const { track, clip } = this._clip(params.clipId, params.trackId); if (own(params, 'name')) clip.name = name(params.name); if (own(params, 'start')) clip.start = number(params.start, undefined, 0, LIMITS.timelineSeconds, 'Clip start'); if (params.destinationTrackId && params.destinationTrackId !== track.id) { const destination = this._track(params.destinationTrackId); track.clips = track.clips.filter(c => c.id !== clip.id); destination.clips.push(clip); this._select(destination, clip); if (p.selection?.clipId === clip.id) p.selection.trackId = destination.id; return clipInfo(clip, destination.id); } return clipInfo(clip, track.id); }
       case 'clip.remove': { const { track, clip } = this._clip(params.clipId, params.trackId); track.clips = track.clips.filter(c => c.id !== clip.id); this._repairSelection(); return true; }
@@ -484,6 +572,8 @@ export class AudioEditor {
         p.selection = { trackId: track.id, clipId: clip.id, start: target.start, end: target.end, channels: target.channels }; return { ...p.selection };
       }
       case 'selection.clear': p.selection = null; return true;
+      case 'selection.zeroCrossing': return this._zeroCrossing(params);
+      case 'edit.insertSilence': return this._insertSilence(params);
       case 'edit.copy': { const target = this._target(params); this.clipboard = this._selectedAudio(target); return { duration: audioDuration(this.clipboard), channels: this.clipboard.channels.length }; }
       case 'edit.cut':
       case 'edit.delete': { const target = this._target(params, { requireSelection: true }); if (target.channels !== 'all') fail('Cut and delete require All channels; use Silence for one channel.'); if (method === 'edit.cut') this.clipboard = this._selectedAudio(target); const audio = spliceAudio(target.clip.audio, target.start, target.end, null); if (!audio.channels[0].length) { target.track.clips = target.track.clips.filter(c => c.id !== target.clip.id); } else { target.clip.audio = audio; target.clip.keyAnalysis = null; } p.selection = null; this._repairSelection(); return true; }

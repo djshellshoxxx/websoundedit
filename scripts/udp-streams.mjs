@@ -12,6 +12,7 @@ import { nativeCapabilities } from './node-codecs.mjs';
 
 const layouts=['mono','stereo','5.1','7.1'];
 const rates=[8000,12000,16000,22050,24000,32000,44100,48000,88200,96000,192000];
+const ENCODER_FLUSH_MS=10000,UDP_FLUSH_MS=2000;
 export const STREAM_PROFILES=Object.freeze([
   {id:'s16le',label:'Raw 16-bit PCM, little endian',format:'s16le',codec:'pcm_s16le',rates,layouts,raw:true},
   {id:'f32le',label:'Raw 32-bit float PCM, little endian',format:'f32le',codec:'pcm_f32le',rates,layouts,raw:true},
@@ -70,7 +71,7 @@ export class UdpStreams {
     const native=await(this.capabilityPromise??=this.getCapabilities());
     return{enabled:this.destinations.length>0,destinations:this.destinations.map(({id,label})=>({id,label})),
       profiles:STREAM_PROFILES.filter(p=>p.raw||native.nativeFFmpeg&&native.formats.includes(p.capability)).map(({id,label,rates,layouts,raw})=>({id,label,rates,layouts,...(raw&&!native.nativeFFmpeg?{resampling:false}:{} )})),
-      nativeFFmpeg:native.nativeFFmpeg,limits:{streams:1,packetBytes:256*1024,encoderQueueBytes:2*1024*1024,udpQueuePackets:128,udpPacketBytes:1316,idleSeconds:15},
+      nativeFFmpeg:native.nativeFFmpeg,limits:{streams:1,packetBytes:256*1024,encoderQueueBytes:2*1024*1024,udpQueuePackets:128,udpPacketBytes:1316,idleSeconds:15,encoderFlushSeconds:ENCODER_FLUSH_MS/1000,udpFlushSeconds:UDP_FLUSH_MS/1000},
       transport:'Unencrypted UDP datagrams; loss is observable but not retransmitted.',input:'Interleaved little-endian float32 PCM.'};
   }
   async execute(method,params={},context={}){
@@ -184,11 +185,13 @@ export class UdpStreams {
     session.stopPromise=(async()=>{
       if(session.child){
         session.child.stdin.end();
-        const timer=setTimeout(()=>session.child.kill('SIGKILL'),2000);
+        // Final codec/container work can outlast two seconds under CPU load.
+        // Keep a finite deadline while allowing a valid tail to finish first.
+        const timer=setTimeout(()=>session.child.kill('SIGKILL'),ENCODER_FLUSH_MS);
         await session.childDone;clearTimeout(timer);
       }
       if(session.pending.length){if(session.packets.length<128)session.packets.push(session.pending);else session.stats.udpDroppedPackets++;session.pending=Buffer.alloc(0);this._send(session);}
-      const until=Date.now()+2000;
+      const until=Date.now()+UDP_FLUSH_MS;
       while((session.packets.length||session.sending)&&Date.now()<until)await new Promise(resolve=>setTimeout(resolve,5));
       session.stats.udpDroppedPackets+=session.packets.length;session.packets.length=0;session.closed=true;
       try{session.socket.close();}catch{}

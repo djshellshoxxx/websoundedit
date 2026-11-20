@@ -13,6 +13,7 @@ WebSoundEdit is a client-side audio editor and a shared JavaScript audio engine.
 ## What it does
 
 - **Edit a selected sound:** waveform drag selection, exact time inputs, per-channel selection, cut/copy/paste/delete/trim/split, reverse, fades, gain, and undo/redo.
+- **Edit precisely:** insert silence at an exact clip time, snap selection boundaries to shared zero crossings, and extract stereo/surround channels into labeled mono editing tracks. Extraction retains the source and mutes new stems by default.
 - **Arrange tracks:** multiple tracks and clips, clip movement, duplicate, track gain/pan/mute/solo, markers, snapping and zoom.
 - **Shape the audio:** independent pitch shift and time stretch, varispeed, four-band parametric EQ, compressor, lookahead sample-peak limiter, peak normalization, polarity inversion, fractional time alignment, channel swap/mono conversion and DC removal.
 - **Find and change rhythm:** BPM detection with confidence and manual/tap/half/double correction; beat-grid offset; metronome; easy selection playback and looping; loop creation with optional join crossfades.
@@ -22,7 +23,7 @@ WebSoundEdit is a client-side audio editor and a shared JavaScript audio engine.
 - **See the change:** actual processed waveform preview with original overlay, sample detail, FFT spectrum, EQ response and ducking envelope. The display uses the DSP coefficients and real PCM, including mixer gain/panning.
 - **Save and automate:** portable project JSON with embedded float PCM, settings JSON, IndexedDB recovery, command palette, a keyboard shortcut for every UI feature, and named API methods for every effect.
 - **Record and layer:** explicit input acquisition, sample-clock loop capture and independent live layers. Long recordings write bounded chunks to an OPFS disk archive, with pause/resume, recoverable partial takes, range import and streaming WAV/RF64 export where supported.
-- **Build a creative chain:** Effects beside Tools offers echo, delay, reverb, chorus, flanger, phaser, distortion, tremolo, filter, tape, stutter and bitcrusher. Add up to 12 stages, drag to reorder, bypass, and set a wet/dry knob for every instance. Keyboard and move buttons provide equivalent controls.
+- **Build a creative chain:** Effects beside Tools offers echo, delay, reverb, chorus, flanger, phaser, distortion, tremolo, filter, tape, stutter, bitcrusher and a signal-triggered noise gate. Add up to 12 stages, drag to reorder, bypass, and set a wet/dry knob for every instance. Keyboard and move buttons provide equivalent controls.
 - **Control two parameters:** bind the XY pad to any two continuous rack parameters, including wet/dry. MIDI CC learning can control those parameters or the XY axes.
 - **Identify samples:** detect the key of a selected sample or every sample; key labels, confidence and consistent colors accompany the waveform. Set a manual override for uncertain material.
 - **Make room and choose a look:** collapse the whole Shape the sound inspector to widen the arrangement; choose Studio, Daylight, Midnight or Terminal themes.
@@ -138,6 +139,8 @@ The control hierarchy is an inference from documented Audacity and Ableton workf
 | Play selection | Shift Space |
 | Loop / metronome | L / M |
 | Split / fit / selection zoom | S / F / Z |
+| Insert silence / zero crossings / extract channels | Ctrl Shift I / Shift Z / Ctrl Shift U |
+| Add noise gate to rack | E K (sequential keys) |
 | Undo / redo | Ctrl Z / Ctrl Shift Z |
 | Import / export | Ctrl O / Ctrl E |
 | Save selection | Ctrl Shift E |

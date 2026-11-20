@@ -62,6 +62,50 @@ test('audit: nonzero encoder exit during flush is visible in the stopped result'
   } finally { await streams.dispose(); }
 });
 
+test('audit: a slow successful encoder flush preserves its tail instead of being killed after two seconds', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let kills = 0;
+  const streams = new UdpStreams({ destinations: [destination], getCapabilities: async () => ({ nativeFFmpeg: true, formats: ['opus'] }), socketFactory: () => { const socket = new SyntheticSocket(); socket.send = (_bytes, callback) => callback(null); return socket; }, spawnEncoder: () => {
+    const child = new EventEmitter(); child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+    child.kill = signal => { kills++; child.emit('close', null, signal); return true; };
+    child.stdin.once('finish', () => setTimeout(() => { child.stdout.emit('data', Buffer.from('tail')); child.emit('close', 0, null); }, 2500));
+    queueMicrotask(() => child.emit('spawn')); return child;
+  } });
+  try {
+    await streams.start({ ...rawStart, profile: 'opus' });
+    const stopping = streams.stop();
+    await new Promise(resolve => setImmediate(resolve));
+    t.mock.timers.tick(2500);
+    const stopped = await stopping;
+    assert.equal(kills, 0); assert.equal(stopped.error, null);
+    assert.equal(stopped.sentBytes, 4); assert.equal(stopped.active, false);
+  } finally { await streams.dispose(); }
+});
+
+test('audit: an unresponsive encoder still has a finite advertised flush deadline', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let kills = 0, socket;
+  const streams = new UdpStreams({ destinations: [destination], getCapabilities: async () => ({ nativeFFmpeg: true, formats: ['opus'] }), socketFactory: () => (socket = new SyntheticSocket()), spawnEncoder: () => {
+    const child = new EventEmitter(); child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+    child.kill = signal => { kills++; child.emit('close', null, signal); return true; };
+    queueMicrotask(() => child.emit('spawn')); return child;
+  } });
+  try {
+    await streams.start({ ...rawStart, profile: 'opus' });
+    const stopping = streams.stop();
+    const seconds = (await streams.capabilities()).limits.encoderFlushSeconds;
+    assert.equal(seconds, 10);
+    t.mock.timers.tick(seconds * 1000 - 1); assert.equal(kills, 0);
+    t.mock.timers.tick(1);
+    const stopped = await stopping;
+    assert.equal(kills, 1); assert.match(stopped.error || '', /SIGKILL|Encoder/);
+    assert.equal(stopped.active, false); assert.equal(socket.closed, true);
+  } finally {
+    // Also release a failing baseline's synthetic encoder before ending the test.
+    t.mock.timers.tick(10000); await streams.dispose();
+  }
+});
+
 test('audit: an abandoned HTTP stream start releases its pending socket', async () => {
   const gate = deferred(), socket = new SyntheticSocket(gate), streams = new UdpStreams({ destinations: [destination], getCapabilities: async () => capabilities, socketFactory: () => socket });
   const workbench = new NodeWorkbench({ streams });

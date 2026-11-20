@@ -1,6 +1,8 @@
+import packageInfo from '../package.json' with { type: 'json' };
 import './style.css';
 import './creative-ui.css';
 import './beta-ui.css';
+import './mobile.css';
 import { RackPanel } from './rack-ui.js';
 import { normalizeRackSettings } from './rack-config.js';
 import { CreativeTools, applyTheme, THEMES } from './creative-ui.js';
@@ -12,7 +14,8 @@ import { drawTrack, drawRuler, drawDetail } from './visuals.js';
 import { analyzeAudio, sliceAudio } from './dsp.js';
 import { decodeAudioFile, encodeAudio, FORMATS, loadCodecs, codecCapabilities, setCodecReporter } from './codecs.js';
 import { Playback } from './playback.js';
-import { saveRecovery, loadRecovery, clearRecovery } from './storage.js';
+import { loadRecovery } from './storage.js';
+import { RecoveryScheduler } from './recovery.js';
 import { CommandRuntime } from './command-runtime.js';
 import { LiveAudioRuntime, LIVE_COMMANDS } from './live-audio.js';
 import { CompanionBridge, COMPANION_COMMANDS } from './companion.js';
@@ -38,7 +41,7 @@ const colors=['#5ed8e6','#f1a362','#c3a2ef','#9adf83','#f0cf68','#ef94b6'];
 function trackColorAt(index){return getComputedStyle(document.documentElement).getPropertyValue(`--wave-${index%6+1}`).trim()||colors[index%colors.length];}
 const engine=new EngineClient();
 let state=null, registry=[], audioById=new Map(), preview=null, compareOriginal=false, previewTimer, previewSerial=0, busy=0, initialising=true;
-let view={start:0,duration:8}, cursor=0, selectionDrag=null, demo=true, loop=false, metronome=false, detailMode='spectrum', recoveryTimer, recoveryDisabled=false;
+let view={start:0,duration:8}, cursor=0, selectionDrag=null, demo=true, loop=false, metronome=false, detailMode='spectrum';
 let activePanel='shape';
 let commandRuntime=null,liveAudio=null,companion=null,routes=null,guidance=null,helpPanel=null,optionsPanel=null,macroPanel=null,performancePanel=null,fileIO=null,exportPanel=null;
 let processingMode='selection',offlineRack=null,liveRackTarget='master',liveRackChain=[],liveRackRevision=0,liveRefreshPending=false;
@@ -67,7 +70,7 @@ function selectedTrack(){return state?.tracks.find(t=>t.id===state.selectedTrack
 function ensureClip(){const c=selectedClip();if(!c)throw new Error('Import audio or select a clip first.');return c;}
 function ensureSelection(){if(!state?.selection)throw new Error('Drag over a waveform or enter IN and OUT times to select a region first.');return state.selection;}
 function isMutating(method){return registry.find(c=>c.method===method)?.mutates||['history.undo','history.redo'].includes(method);}
-function changesAudio(method){return /^(clip\.(add|remove|duplicate|split)|edit\.(cut|paste|delete|trim)|effect\.(?!preview)|audio\.generate|project\.(new|load)|history\.|loop\.create|recipe\.run)/.test(method);}
+function changesAudio(method){return /^(clip\.(add|remove|duplicate|split|extractChannels)|edit\.(cut|paste|delete|trim|insertSilence)|effect\.(?!preview)|audio\.generate|project\.(new|load)|history\.|loop\.create|recipe\.run)/.test(method);}
 function disconnectProjectMidi(){creative.stop();creative.midi.disconnect();creative.learnTarget=null;macroPanel?.disarm();}
 function prepareRecipeReplacement(params){
   const steps=params?.commands||params?.steps||params?.recipe?.commands||params?.recipe?.steps||params?.recipe;
@@ -95,7 +98,7 @@ async function coreRaw(method,params={}, {quiet=false,refresh=true,preservePrevi
   if(['project.new','project.load'].includes(method)||recipeReplacement){pendingRackUpdate=null;liveRackRevision++;if(processingMode==='live')await setProcessingMode('selection',{notify:false});stopRecordingStream();await liveAudio?.resetProject();await companion?.disconnect();}
   if(method==='project.update'&&params.outputLayout&&params.outputLayout!==state.outputLayout){pendingRackUpdate=null;liveRackRevision++;await liveAudio?.resetProject({preserveSettings:true});await companion?.disconnect();}
   if(method==='track.remove')await liveAudio?.releaseTrack(params.trackId||state.selectedTrackId);
-  const mutates=isMutating(method), selectionChanges=['selection.set','selection.clear','project.select'].includes(method);
+  const mutates=isMutating(method), selectionChanges=['selection.set','selection.clear','selection.zeroCrossing','project.select'].includes(method);
   if((mutates||selectionChanges)&&!(method==='track.remove'&&params.trackId&&params.trackId!==state.selectedTrackId))creative?.sampler.stop();
   if(selectionChanges&&playback.playing)stopPlayback(false);
   if((mutates||selectionChanges)&&!preservePreview)discardPreview(false);
@@ -124,6 +127,7 @@ function renderSession(){if(!state)return;$('#project-name').value=state.name;$(
   const c=selectedClip(),s=state.selection;const sampleKey=c?.keyAnalysis;$('#sample-key-badge').textContent=sampleKey?.key||(sampleKey?'Uncertain':'Not analyzed');$('#sample-key-badge').style.setProperty('--key-color',sampleKey?.color||'#7c8795');$('#selection-label').textContent=s?'SELECTED REGION':'WHOLE CLIP';$('#selected-clip-label').textContent=c?.name||'Select a clip';$('#selection-start').value=(s?.start||0).toFixed(3);$('#selection-end').value=(s?.end??c?.duration??0).toFixed(3);$('#selection-length').textContent=`${(s?s.end-s.start:c?.duration||0).toFixed(3)}s`;updateChannelScope();
   $('#scope-note').textContent=s?`Applies only to ${s.start.toFixed(3)}–${s.end.toFixed(3)}s of “${c?.name}” · ${channelScopeLabel(s.channels,c)}.`:`Applies to the whole selected clip${c?` “${c.name}”`:''}. Select a region to process only part of it.`;
   $$('[data-action="history.undo"]').forEach(b=>b.disabled=!state.canUndo);$$('[data-action="history.redo"]').forEach(b=>b.disabled=!state.canRedo);$$('[data-action="edit.paste"]').forEach(b=>b.disabled=!state.hasClipboard);$('#apply-effect').disabled=!c;
+  $$('[data-action="edit.insertSilence"]').forEach(button=>button.disabled=!c);$$('[data-action="selection.zeroCrossing"]').forEach(button=>button.disabled=!s);$$('[data-action="clip.extractChannels"]').forEach(button=>button.disabled=!c||c.channels<2);
   clampView();drawWaveforms();drawDetailView();updateClock();updateTabs();
 }
 function panLabel(value){return Math.abs(value)<.01?'C':`${Math.round(Math.abs(value)*100)}${value<0?'L':'R'}`;}
@@ -136,10 +140,11 @@ function updateClock(){const n=Math.max(0,cursor),minutes=Math.floor(n/60),secon
 function drawMeter({left=0,right=0,clipped=false}={}){const canvas=$('#meter-canvas'),ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;ctx.fillStyle='#0e131a';ctx.fillRect(0,0,w,h);for(const [i,value] of [left,right].entries()){const db=value>0?20*Math.log10(value):-60;const gradient=ctx.createLinearGradient(0,0,w,0);gradient.addColorStop(0,'#4fb6c4');gradient.addColorStop(.7,'#e8532a');gradient.addColorStop(.95,'#f2c14e');ctx.fillStyle=gradient;ctx.fillRect(0,i*11,clamp((db+60)/60,0,1)*w,7);}const peak=Math.max(left,right);$('#peak-meter-value').textContent=`${fmt(peak>0?20*Math.log10(peak):-Infinity)} dB`;if(clipped||peak>1){$('.master-meter').classList.add('clipping');$('#clip-label').textContent='CLIPPED';}}
 function quantize(t){return $('#snap').checked?Math.round((t-state.beatOffset)/(60/state.bpm*+$('#snap-grid').value))*(60/state.bpm*+$('#snap-grid').value)+state.beatOffset:t;}
 function attachTimeline(canvas){let active=null;const track=state.tracks.find(t=>t.id===canvas.dataset.trackId);const at=e=>{const r=canvas.getBoundingClientRect();return view.start+clamp((e.clientX-r.left)/r.width,0,1)*view.duration;};
-  canvas.addEventListener('pointerdown',e=>{if(e.button!==0)return;const time=at(e),clip=[...track.clips].reverse().find(c=>time>=c.start&&time<=c.start+c.duration);if(!clip){cursor=Math.max(0,quantize(time));updateClock();drawPlayhead();return;}e.preventDefault();canvas.focus({preventScroll:true});stopPlayback(false);discardPreview(false);let local=clamp(quantize(time)-clip.start,0,clip.duration);const previous=state.selection?.clipId===clip.id?state.selection:null;const pxPerSecond=canvas.clientWidth/view.duration;let handle=previous&&Math.abs((local-previous.start)*pxPerSecond)<9?'start':previous&&Math.abs((local-previous.end)*pxPerSecond)<9?'end':null;active={clip,anchor:local,move:e.altKey,moveStart:time,initialStart:clip.start,handle,previous};cursor=clip.start+local;selectionDrag={selection:previous};canvas.setPointerCapture(e.pointerId);updateClock();drawWaveforms();});
-  canvas.addEventListener('pointermove',e=>{if(!active)return;const time=at(e),c=active.clip;if(active.move){c.start=Math.max(0,quantize(active.initialStart+time-active.moveStart));drawWaveforms();return;}let local=clamp(quantize(time)-c.start,0,c.duration);let start=active.handle==='start'?local:active.handle==='end'?active.previous.start:Math.min(active.anchor,local);let end=active.handle==='end'?local:active.handle==='start'?active.previous.end:Math.max(active.anchor,local);if(end<start)[start,end]=[end,start];selectionDrag={selection:{trackId:track.id,clipId:c.id,start,end,channels:selectedChannelScope()}};$('#selection-start').value=start.toFixed(3);$('#selection-end').value=end.toFixed(3);$('#selection-length').textContent=`${(end-start).toFixed(3)}s`;drawWaveforms();});
-  canvas.addEventListener('pointerup',()=>{if(!active)return;const a=active,sel=selectionDrag?.selection;active=null;selectionDrag=null;safe(async()=>{await core('project.select',{trackId:track.id,clipId:a.clip.id},{quiet:true});if(a.move){await core('clip.update',{clipId:a.clip.id,start:a.clip.start});return;}if(sel&&sel.end-sel.start>1/state.sampleRate&&sel.clipId===a.clip.id){await core('selection.set',sel,{quiet:true});status(`Selected ${(sel.end-sel.start).toFixed(3)}s · drag handles or type IN / OUT for precision.`);}else{await core('selection.clear',{}, {quiet:true});status('Cursor placed. Press S to split; drag to select audio.');}});});
-  canvas.addEventListener('pointercancel',()=>{active=null;selectionDrag=null;drawWaveforms();});
+  canvas.addEventListener('pointerdown',e=>{if(e.button!==0||active)return;const time=at(e),clip=[...track.clips].reverse().find(c=>time>=c.start&&time<=c.start+c.duration);if(!clip){cursor=Math.max(0,quantize(time));updateClock();drawPlayhead();return;}e.preventDefault();canvas.focus({preventScroll:true});stopPlayback(false);discardPreview(false);let local=clamp(quantize(time)-clip.start,0,clip.duration);const previous=state.selection?.clipId===clip.id?state.selection:null;const pxPerSecond=canvas.clientWidth/view.duration;let handle=previous&&Math.abs((local-previous.start)*pxPerSecond)<9?'start':previous&&Math.abs((local-previous.end)*pxPerSecond)<9?'end':null;active={clip,pointerId:e.pointerId,initialCursor:cursor,anchor:local,move:e.altKey,moveStart:time,initialStart:clip.start,handle,previous};cursor=clip.start+local;selectionDrag={selection:previous};canvas.setPointerCapture(e.pointerId);updateClock();drawWaveforms();});
+  canvas.addEventListener('pointermove',e=>{if(!active||e.pointerId!==active.pointerId)return;const time=at(e),c=active.clip;if(active.move){c.start=Math.max(0,quantize(active.initialStart+time-active.moveStart));drawWaveforms();return;}let local=clamp(quantize(time)-c.start,0,c.duration);let start=active.handle==='start'?local:active.handle==='end'?active.previous.start:Math.min(active.anchor,local);let end=active.handle==='end'?local:active.handle==='start'?active.previous.end:Math.max(active.anchor,local);if(end<start)[start,end]=[end,start];selectionDrag={selection:{trackId:track.id,clipId:c.id,start,end,channels:selectedChannelScope()}};$('#selection-start').value=start.toFixed(3);$('#selection-end').value=end.toFixed(3);$('#selection-length').textContent=`${(end-start).toFixed(3)}s`;drawWaveforms();});
+  canvas.addEventListener('pointerup',e=>{if(!active||e.pointerId!==active.pointerId)return;const a=active,sel=selectionDrag?.selection;active=null;selectionDrag=null;safe(async()=>{await core('project.select',{trackId:track.id,clipId:a.clip.id},{quiet:true});if(a.move){await core('clip.update',{clipId:a.clip.id,start:a.clip.start});return;}if(sel&&sel.end-sel.start>1/state.sampleRate&&sel.clipId===a.clip.id){await core('selection.set',sel,{quiet:true});status(`Selected ${(sel.end-sel.start).toFixed(3)}s · drag handles or type IN / OUT for precision.`);}else{await core('selection.clear',{}, {quiet:true});status('Cursor placed. Press S to split; drag to select audio.');}});});
+  const cancelGesture=e=>{if(!active||e.pointerId!==active.pointerId)return;if(active.move)active.clip.start=active.initialStart;cursor=active.initialCursor;active=null;selectionDrag=null;renderSession();};
+  canvas.addEventListener('pointercancel',cancelGesture);canvas.addEventListener('lostpointercapture',cancelGesture);
   canvas.addEventListener('dblclick',e=>safe(async()=>{const time=at(e),clip=track.clips.find(c=>time>=c.start&&time<=c.start+c.duration);if(clip){await core('selection.set',{clipId:clip.id,start:0,end:clip.duration,channels:'all'},{quiet:true});cursor=clip.start;updateClock();}}));
   canvas.addEventListener('contextmenu',e=>{e.preventDefault();safe(()=>openTrack(track.id));});
 }
@@ -240,12 +245,42 @@ function applySettings({value,nextShortcuts,rackSettings,midiMappings,midiAction
   activePanel=value.activePanel==='effects'?'effects':EFFECT_UI[effectPanel.effect].category;
   setInspector(settings.inspectorCollapsed,{persist:false});discardPreview();persistSettings();updateTabs();drawWaveforms();
 }
-function scheduleRecovery(){if(recoveryDisabled||macroPanel?.isBatchRunning())return;clearTimeout(recoveryTimer);$('#save-state').textContent='Unsaved file · recovery pending';recoveryTimer=setTimeout(async()=>{try{const project=await engine.execute('project.save');if(macroPanel?.isBatchRunning())return;project.settings={...project.settings,ui:portableSettings(),...(liveAudio?{live:liveAudio.getSettings()}: {})};await saveRecovery(project);$('#save-state').textContent='Recovery saved on this device';}catch(error){$('#save-state').textContent='Recovery unavailable · save project';status(`Browser recovery could not be saved: ${error.message}`);}},1600);}
+const recoveryWriter=new RecoveryScheduler({snapshot:()=>getProjectSnapshot(),onState:(state,error)=>{
+  $('#save-state').textContent=({pending:'Unsaved file · recovery pending',saved:'Recovery saved on this device',cleared:'Recovery copy cleared · save project',error:'Recovery unavailable · save project'})[state];
+  if(error)status(`Browser recovery could not be saved: ${error.message}`);
+}});
+function scheduleRecovery(){if(!macroPanel?.isBatchRunning())recoveryWriter.schedule();}
 function fitView(){view={start:0,duration:Math.max(2,state?.duration||8)*1.015};clampView();drawWaveforms();}
 function zoom(factor,selection=false){if(selection){const s=ensureSelection(),c=selectedClip();view.start=Math.max(0,c.start+s.start-(s.end-s.start)*.05);view.duration=Math.max(.005,(s.end-s.start)*1.1);}else{const center=cursor>=view.start&&cursor<=view.start+view.duration?cursor:view.start+view.duration/2;const old=view.duration;view.duration=clamp(old/factor,.005,600);view.start=Math.max(0,center-(center-view.start)/old*view.duration);}clampView();drawWaveforms();}
 function openModal(title,html,onReady){$('#modal-title').textContent=title;$('#modal-content').innerHTML=html;if(!$('#modal').open)$('#modal').showModal();onReady?.($('#modal-content'));}
 function closeModal(){$('#modal').close();}
 function field(label,id,value,type='number',extra=''){return `<label>${label}<input id="${id}" type="${type}" value="${escapeHTML(value)}" ${extra}></label>`;}
+function openInsertSilence(){
+  const clip=ensureClip(),at=clamp(cursor-clip.start,0,clip.duration);
+  openModal('Insert silence',`<p>Add time to <strong>${escapeHTML(clip.name)}</strong>. Silence is inserted into all ${clip.channels} channel${clip.channels===1?'':'s'}; later samples in this clip move together. Other clips keep their positions.</p><form id="insert-silence-form"><div class="form-grid">${field('Insert at (clip seconds)','silence-at',at,'number',`min="0" max="${clip.duration}" step="any" required`)}${field('Duration (seconds)','silence-duration',1,'number',`min="${1/clip.sampleRate}" max="600" step="any" required`)}</div><p class="field-hint">Times snap to the nearest audio sample. The inserted region becomes selected. Undo restores the original clip.</p><div class="modal-actions"><button class="primary" type="submit">Insert silence</button></div></form>`,()=>{
+    $('#insert-silence-form').addEventListener('submit',event=>{event.preventDefault();if(!event.currentTarget.reportValidity())return;void safe(async()=>{
+      const result=await core('edit.insertSilence',{clipId:clip.id,at:+$('#silence-at').value,duration:+$('#silence-duration').value,channels:'all'});
+      closeModal();cursor=clip.start+state.selection.start;fitView();updateClock();status(`Inserted ${result.insertedFrames} samples of silence across all channels. Undo is available.`);
+    });});
+  });
+}
+function openZeroCrossing(){
+  const clip=ensureClip(),selection=clone(ensureSelection());
+  openModal('Snap selection to zero crossings',`<p>Find the nearest shared zero crossing for each edge of the selected region in <strong>${escapeHTML(clip.name)}</strong>. Only the selected channels are inspected; their timing stays aligned.</p><form id="zero-crossing-form"><div class="form-grid">${field('Search radius (milliseconds)','zero-crossing-radius',5,'number','min="0" max="50" step="any" required')}</div><p class="field-hint">An edge with no shared crossing stays unchanged. Use a single channel selection when channel crossings differ. Audio samples are not changed; fades can smooth a remaining edit click.</p><div class="modal-actions"><button class="primary" type="submit">Snap selection</button></div></form>`,()=>{
+    $('#zero-crossing-form').addEventListener('submit',event=>{event.preventDefault();if(!event.currentTarget.reportValidity())return;void safe(async()=>{
+      const result=await core('selection.zeroCrossing',{target:selection,radiusMs:+$('#zero-crossing-radius').value});
+      closeModal();cursor=clip.start+result.start;updateClock();drawPlayhead();
+      status(result.start===selection.start&&result.end===selection.end?'Selection unchanged: edges already cross zero or no shared crossing was found in this radius.':`Selection aligned to nearby shared zero crossings: ${result.start.toFixed(6)}–${result.end.toFixed(6)} seconds.`);
+    });});
+  });
+}
+function openExtractChannels(){
+  const clip=ensureClip();if(clip.channels<2)throw new Error('This clip is already mono.');
+  const labels=CHANNEL_LAYOUTS[clip.layout||layoutForChannels(clip.channels)].channels;
+  openModal('Extract channels to mono tracks',`<p>Extract all ${clip.channels} channels of <strong>${escapeHTML(clip.name)}</strong> into separate, speaker-labeled tracks: ${labels.map(escapeHTML).join(', ')}.</p><p>The source stays intact. New tracks start <strong>muted</strong> to preserve your mix. Turn off their M button and use Solo to audition a channel. Each stem starts at the source clip’s timeline position.</p><p class="field-hint">These are independent editing stems. Surround speaker routing and source live effects are not copied. One Undo removes the extracted tracks.</p><div class="modal-actions"><button id="extract-channels-confirm" class="primary">Create mono tracks</button></div>`,()=>{
+    $('#extract-channels-confirm').onclick=()=>safe(async()=>{const result=await core('clip.extractChannels',{clipId:clip.id});closeModal();status(`Extracted ${result.tracks.length} muted mono tracks. Unmute and solo a stem to audition it; the source is unchanged.`);});
+  });
+}
 async function exportAudio(options={}){return commandRuntime.execute('file.export',options,{origin:'api'});}
 function openExport(scope='mix',trackId){return exportPanel.open({scope,trackId});}
 function openLoop(){const c=ensureClip(),s=state.selection,length=s?s.end-s.start:c.duration,bars=length*state.bpm/60/state.beatsPerBar;openModal('Make a loop.',`<p>Use the selected region as a loop, or select a whole number of beats first. The original stays available when you create a new loop track.</p><div class="info-note">Source: ${length.toFixed(3)} seconds · ${(length*state.bpm/60).toFixed(2)} beats · ${bars.toFixed(2)} bars at ${state.bpm} BPM.</div><div class="form-grid">${field('Number of repetitions','loop-repeats',4,'number','min="1" max="64" step="1"')}${field('Join crossfade (ms)','loop-crossfade',0,'number','min="0" max="500" step="1"')}${field('Loop name','loop-name',`${c.name} loop`,'text')}<label>Placement<select id="loop-place"><option value="new">New track</option><option value="same">Same track</option></select></label></div><div class="info-note">0 ms preserves beat-exact timing. Crossfades overlap adjacent copies, shortening each join by the chosen overlap. Use short source fades to keep an exact beat grid.</div><div class="modal-actions"><button id="loop-play">Loop selection</button><button id="loop-region">Select one bar at cursor</button><button id="loop-save">Save region</button><button id="loop-create" class="primary">Create loop</button></div>`,()=>{$('#loop-play').onclick=()=>safe(async()=>{if(!state.selection)await selectAll();loop=true;$('#loop-button').setAttribute('aria-pressed','true');closeModal();await play('selection');});$('#loop-region').onclick=()=>safe(async()=>{const start=clamp(cursor-c.start,0,c.duration),end=Math.min(c.duration,start+60/state.bpm*state.beatsPerBar);if(end<=start)throw new Error('Place the cursor before the end of the clip.');await core('selection.set',{clipId:c.id,start,end,channels:'all'});openLoop();});$('#loop-save').onclick=()=>safe(()=>{if(!state.selection)return selectAll().then(()=>openExport('selection'));openExport('selection');});$('#loop-create').onclick=()=>safe(async()=>{await core('loop.create',{repeats:+$('#loop-repeats').value,crossfadeMs:+$('#loop-crossfade').value,newTrack:$('#loop-place').value==='new',name:$('#loop-name').value});closeModal();fitView();status('Loop created. The original clip remains available.');});});}
@@ -394,6 +429,10 @@ register('panel.effects','Creative effects rack','g h',()=>{activePanel='effects
 register('view.inspector','Collapse or expand sound tools','g z',()=>setInspector(!settings.inspectorCollapsed));
 register('options','Open Options','',openSettings);register('macros','Macros and batch processing','ctrl+shift+m',()=>macroPanel.open());register('performance','Live performance and recording','g p',()=>performancePanel.open());
 register('settings','Options and keyboard shortcuts','ctrl+,',openSettings);register('api','API & JSON recipe runner','g i',openAPI);register('help','Quick guide','f1',openHelp);
+register('edit.insertSilence','Insert silence into selected clip','ctrl+shift+i',openInsertSilence);
+register('selection.zeroCrossing','Snap selection to zero crossings','shift+z',openZeroCrossing);
+register('clip.extractChannels','Extract channels to mono tracks','ctrl+shift+u',openExtractChannels);
+register('effect.noiseGate','Add a noise gate to the effects rack','e k',()=>{activePanel='effects';setInspector(false);updateTabs();rackPanel.add('noiseGate');});
 
 let commandMatches=[],commandIndex=0;
 function openCommands(){$('#command-search').value='';commandIndex=0;filterCommands();$('#command-palette').showModal();$('#command-search').focus();}
@@ -461,7 +500,7 @@ async function exportRecording(params){macroPanel?.assertInteractive();if(window
 function interactive(operation){macroPanel?.assertInteractive();return operation();}
 const batchNavigationActions=new Set(['commands','macros','performance','options','settings','help','api','panel.midi','panel.projects','panel.keys','panel.metadata','track.settings','panel.edit','shortcuts','view.zoomIn','view.zoomOut','view.fit','view.zoomSelection','view.selection','view.spectrum','view.scope']);
 function gateBatchUI(event){if(!macroPanel?.isBatchRunning())return;const target=event.target;if(event.type==='keydown'&&(['Tab','Escape'].includes(event.key)||(event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'))return;if(target.closest?.('a[href],[data-view-close],[data-view-back],[data-macro-stop],[data-batch-cancel],[data-batch-progress],#modal-close,#command-search,[data-command-id],#help-search,#view-scroll'))return;const action=target.closest?.('[data-action]')?.dataset.action;if(action&&batchNavigationActions.has(action))return;if(!target.closest?.('button,input,select,textarea,canvas,[tabindex],[draggable]')&&event.type!=='keydown'&&event.type!=='drop')return;event.preventDefault();event.stopImmediatePropagation();if(['click','keydown','beforeinput','change','drop'].includes(event.type))status('A batch is using this session. Stop the batch or wait for restoration before making changes.',true);}
-function setBatchActivity(active){$('#batch-ownership-banner').hidden=!active;document.body.dataset.batchBusy=String(active);if(active){clearTimeout(recoveryTimer);rackPanel.cancelGesture();for(const canvas of $$('.track-waveform'))canvas.dispatchEvent(new Event('pointercancel'));pendingRackUpdate=null;liveRackRevision++;stopRecordingStream();creative.stop();discardPreview();}else{persistSettings();scheduleRecovery();}}
+function setBatchActivity(active){$('#batch-ownership-banner').hidden=!active;document.body.dataset.batchBusy=String(active);if(active){recoveryWriter.cancel();rackPanel.cancelGesture();for(const canvas of $$('.track-waveform'))canvas.dispatchEvent(new Event('pointercancel'));pendingRackUpdate=null;liveRackRevision++;stopRecordingStream();creative.stop();discardPreview();}else{persistSettings();scheduleRecovery();}}
 function registerWorkbenchCommand(method,label,schema,handler,{recordable=true,category='Workbench',replace=false}={}){commandRuntime.register({method,id:method,label,description:label,category,schema,recordable,capabilities:['browser'],undoable:false},handler,{replace});}
 function initializeWorkbench(){
   routes=new WorkbenchRoutes({onError:error=>safe(()=>Promise.reject(error))});
@@ -489,7 +528,7 @@ function initializeWorkbench(){
   registerWorkbenchCommand('ui.help','Open the workbench guide',object({chapter:{type:'string',maxLength:40}}),params=>helpPanel.open(params.chapter||'navigation'),{recordable:false,replace:true});
   registerWorkbenchCommand('ui.file.export','Open export options',object({scope:{enum:['mix','track','clip','selection','stems']},trackId:{type:'string'},format:{type:'string'}}),params=>exportPanel.open(params),{recordable:false,replace:true});
   registerWorkbenchCommand('ui.play','Audition the requested scope with its current preview',object({scope:{enum:['mix','clip','selection']}}),params=>play(params.scope||'mix'),{recordable:false});
-  registerWorkbenchCommand('ui.recovery.clear','Clear the local editor recovery snapshot',empty,async()=>{clearTimeout(recoveryTimer);await clearRecovery();return {cleared:true};},{recordable:false});
+  registerWorkbenchCommand('ui.recovery.clear','Clear the local editor recovery snapshot',empty,()=>recoveryWriter.clear(),{recordable:false});
   registerWorkbenchCommand('ui.effect','Choose a selection effect',object({effect:{enum:Object.keys(EFFECT_UI)}}),params=>showEffect(params.effect),{recordable:false});
   registerWorkbenchCommand('view.zoomSelection','Zoom to the selected region without changing it',empty,()=>{zoom(1,true);return clone(view);});
   registerWorkbenchCommand('view.zoom','Zoom around the cursor',object({factor:{type:'number',minimum:.01,maximum:100}}),params=>{zoom(params.factor||1);return clone(view);});
@@ -508,7 +547,7 @@ function initializeWorkbench(){
   liveAudio.subscribe(event=>{const live=liveAudio.getState();if(event.type==='error')status(event.message||event.error?.message||'Live audio reported an error.',true);if(event.type==='capture'&&event.trackId)void safe(refreshLiveProject);if(event.type==='state'&&live.transport){if(/^transport\./.test(event.method||'')){cursor=live.transport.position;loop=live.transport.loop;metronome=live.transport.metronome;$('#loop-button').setAttribute('aria-pressed',String(loop));$('#metronome-button').setAttribute('aria-pressed',String(metronome));updateClock();drawPlayhead();}$('#play-button').textContent=live.transport.playing?'Ⅱ':'▶';$('#play-button').classList.toggle('playing',live.transport.playing);}});
 }
 
-const api={version:'1.0.0-beta.1',ready:null,
+const api={version:packageInfo.version,ready:null,
   execute:async(method,params={})=>{await api.ready;return commandRuntime.execute(method,params,{origin:'api'});},
   commands:()=>({core:clone(registry),ui:[...actions.values()].map(({id,label})=>({method:`ui.${id}`,description:label,shortcut:shortcutFor(actions.get(id))})),all:commandRuntime?.commands()||[]}),
   commandCatalog:()=>commandRuntime?.commands()||[],

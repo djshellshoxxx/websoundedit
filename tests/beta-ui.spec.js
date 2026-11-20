@@ -1,3 +1,4 @@
+import packageInfo from '../package.json' with { type: 'json' };
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { encodeWav, decodeWav } from '../src/wav.js';
@@ -5,7 +6,7 @@ import { encodeWav, decodeWav } from '../src/wav.js';
 async function boot(page, hash = '') {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto('/' + hash); await page.waitForFunction(() => Boolean(window.websoundedit?.ready)); await page.evaluate(() => websoundedit.ready);
-  expect(await page.evaluate(() => websoundedit.version)).toBe('1.0.0-beta.1'); return errors;
+  expect(await page.evaluate(() => websoundedit.version)).toBe(packageInfo.version); return errors;
 }
 test('Options and help routes retain the project, theme and global guidance opt-out', async ({ page }) => {
   const errors = await boot(page, '#options/general');

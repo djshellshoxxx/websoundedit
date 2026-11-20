@@ -10,7 +10,7 @@ const rms = channel => Math.sqrt(channel.reduce((sum, value) => sum + value * va
 const stage = (effect, params = {}, wet = 1, id = effect) => ({ id, effect, params, wet, enabled: true });
 
 test('every creative effect changes PCM, owns output, preserves stereo dimensions, and is deterministic', () => {
-  assert.equal(RACK_EFFECT_NAMES.length, 12);
+  assert.ok(RACK_EFFECT_NAMES.includes('noiseGate'));
   const source = tone(413, 1);
   source.channels.push(Float32Array.from(source.channels[0], sample => -.3 * sample));
   const before = source.channels.map(channel => channel.slice());

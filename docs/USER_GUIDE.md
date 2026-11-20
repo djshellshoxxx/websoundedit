@@ -57,9 +57,19 @@ Pitch shift and time stretch aim to change pitch and duration independently. Spe
 
 Undo and Redo restore editor state within the bounded history. Downloading an export, sending a MIDI message, capturing an archive or broadcasting packets is an external action; editor Undo does not reverse it.
 
+### Precise silence, zero crossings and channel extraction
+
+**Insert silence…** in the edit toolbar opens an exact clip-relative position and a duration in seconds. The default position is the playhead, clamped to the selected clip. The command inserts silence into every channel and moves later samples in that clip together; other clips keep their timeline positions. The inserted region becomes selected. This is useful for adding a lead-in, preserving a pause or leaving room for delay/reverb tails. Times round to whole audio samples. Undo restores the original in one step.
+
+**Zero crossing…** beside the selection fields searches near each edge for a shared zero crossing across the selected channels. The default radius is 5 ms and the maximum is 50 ms. The nearest candidate wins; equal-distance candidates favor the earlier time. An edge with no shared crossing stays unchanged, and a selection never becomes empty. The tool inspects channels separately so opposite-polarity stereo cannot cancel into a false silent boundary. Choose one channel to use that channel’s crossings. This only adjusts the selection; short fades remain useful if an edit still clicks.
+
+**Extract channels…** creates one speaker-labeled mono track for each channel of the whole selected clip, retaining the source and exact source placement. The new tracks start muted so the current mix does not double. Unmute a stem with its **M** button and use **Solo** to audition it. Stereo stems pan left/right; surround stems are centered for independent editing and preserve their FL/FR/FC/LFE/BL/BR/SL/SR labels. This operation does not copy source live effects or recreate native surround speaker routing. One Undo removes all extracted tracks. Admission checks ensure the expanded project remains within track, clip and portable PCM limits.
+
+Shortcuts: **Ctrl/⌘ Shift I** inserts silence, **Shift Z** opens zero-crossing selection, and **Ctrl/⌘ Shift U** extracts channels.
+
 ## 4. Build an ordered effects rack
 
-Open **Shape the sound → Effects**. Add echo, delay, reverb, chorus, flanger, phaser, distortion, tremolo, filter, tape, stutter or bitcrusher. A rack can contain up to twelve stages, including repeated instances of the same effect.
+Open **Shape the sound → Effects**. Add echo, delay, reverb, chorus, flanger, phaser, distortion, tremolo, filter, tape, stutter, bitcrusher or noise gate. A rack can contain up to twelve stages, including repeated instances of the same effect.
 
 Audio flows from top to bottom. Drag a stage by its grip, use the up/down buttons, or focus the grip and use Up/Down/Home/End. The stable stage ID keeps its XY and automation references attached when reordered. Bypass retains settings while skipping that stage.
 
@@ -77,10 +87,19 @@ Every stage has its own wet/dry control. Zero percent passes the stage's incomin
 | Tape coloration | Drive, slow wow, faster flutter and warmth. |
 | Short repeated fragments | Stutter: slices per beat, gate length and edge fade. |
 | Digital texture | Bitcrusher: bit depth and sample hold. |
+| Noise between phrases | Noise gate: threshold, hysteresis, closed level, attack, hold and release. |
 
 For a stutter edit, select the passage to transform, add Stutter and set the tempo. The effect repeats the first beat-divided slice within that selected range. It does not move unrelated samples.
 
 Echo/reverb/delay do not append hidden tails beyond a selection or export boundary. Include trailing silence in a source/range when a tail needs space.
+
+### Signal-triggered noise gate
+
+Choose **Noise gate** in the Effects rack, or press **E K** to add one. Set **Open threshold** just above the background noise, then audition the quiet and loud portions. **Close hysteresis** places the closing threshold below the opening threshold to avoid rapid chatter. **Hold** keeps the gate open through brief gaps. **Attack** and **Release** smooth the gain changes; they are one-pole time constants, and the effect has no lookahead. A fast attack preserves the start of a phrase; slower release preserves its fade.
+
+**Closed level** controls attenuation when closed: −80 dB is very quiet; 0 dB leaves the signal unchanged. **Linked** detection uses the largest absolute sample across the selected channels and applies the same gain to all of them, preserving their balance. **Independent** gives each channel its own detector and envelope. A gate reduces noise between phrases; it does not remove noise underneath a louder voice or instrument.
+
+The gate works in selection previews, undoable Apply, live racks, automation and explicit live rendering. Selection and live processing share the same envelope implementation and preserve clip duration. As with other effects, saved PCM includes the change after Apply, or after an explicit live-effects render.
 
 ### XY control
 
@@ -217,6 +236,8 @@ The optional local HTTP API is a separate runtime from an already-open Pages tab
 ## 14. Recovery, limits and verification
 
 Browser recovery is a convenience for the current device. Save portable session JSON and export archive recordings when you need an independent copy. **Clear recovery** deliberately removes the browser's editor-recovery record; it does not stand in for deleting a recording archive.
+
+Clear recovery cancels unfinished snapshots and waits for any older save already being written in this editor. Once it finishes, that older save cannot recreate the cleared copy. Editing again can create a new recovery copy normally.
 
 | Area | Principal bound or dependency |
 | --- | --- |

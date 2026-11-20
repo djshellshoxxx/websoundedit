@@ -1,0 +1,96 @@
+/* Touch layouts share the desktop editor, project data and commands. */
+@media (max-width: 800px) {
+  .app-header nav, .tool-group, .view-tools, .inline-buttons { flex-wrap: wrap; }
+  .session-heading > div, .transport > div, .tool-group, .view-tools { min-width: 0; }
+  .workspace-view-header > div { min-width: 0; }
+  .workspace-view-header h2 { overflow-wrap: anywhere; }
+  .visual-caption { flex-wrap: wrap; }
+  .visual-caption > span:first-child { max-width: 100%; }
+}
+
+@media (max-width: 600px) {
+  /* Override compact desktop targets consistently across dynamically built panels. */
+  body button, body select, body input:not([type=checkbox]):not([type=range]),
+  body .button-link, body .workspace-nav a { min-height: 44px !important; }
+  body button { min-width: 44px; }
+  body input:not([type=checkbox]), body select, body textarea { font-size: 16px !important; }
+  body input[type=range] { min-height: 44px !important; height: 44px; }
+  body input[type=checkbox] { width: 20px; height: 20px; min-height: 20px; }
+  .snap-control, .workspace-page label:has(input[type=checkbox]) { min-height: 44px; }
+  button, .button-link { white-space: normal; overflow-wrap: anywhere; }
+  .app-header { padding: 12px; gap: 12px; }
+  .app-header nav { display: grid; grid-template-columns: 44px repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .app-header nav button { min-width: 0; padding: 6px; font-size: 11px; }
+  .app-header nav .command-trigger { margin: 0; }
+  .session-heading { flex-direction: column; gap: 12px; }
+  .session-heading > div, .project-name-row { width: 100%; max-width: 100%; }
+  #project-name { width: 100%; max-width: 100%; font-size: 22px !important; }
+  .session-meta { flex-direction: row; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: 10px; }
+  .session-meta #save-state { max-width: none; text-align: left; }
+  .session-meta .text-button { margin-left: auto; }
+  .transport { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 12px; }
+  .transport-buttons { grid-column: 1 / -1; display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px 44px; gap: 8px; }
+  .transport-buttons .icon-button, .transport-buttons .play-button { width: 100%; height: 44px; }
+  .transport-clock { min-width: 0; }
+  .speed-field { order: initial; margin: 0; justify-self: end; }
+  .speed-field select { width: 80px; }
+  .transport-toggles { grid-column: 1 / -1; order: initial; padding-top: 12px; }
+  .transport-toggles button { min-width: 0; font-size: 11px; }
+  .tempo-control { grid-column: 1 / -1; order: initial; display: flex; flex-wrap: wrap; gap: 8px 12px; width: 100%; max-width: none; margin: 0; }
+  .tempo-control input { width: 75px; }
+  .tempo-actions { flex: 1; min-width: 190px; gap: 4px; }
+  .tempo-actions button { flex: 1; padding: 4px; }
+  .creative-toolbar { padding: 12px; }
+  .creative-toolbar > div { gap: 8px; }
+  .theme-picker { flex: 1; min-width: 0; }
+  .theme-picker select { min-width: 0; }
+  .tool-group { flex-wrap: wrap; gap: 4px; }
+  .tool-group button { font-size: 12px; padding: 6px 10px; }
+  .view-tools { justify-content: flex-start; gap: 6px; }
+  .view-tools select { min-width: 85px; }
+  .timeline-label { flex-wrap: wrap; }
+  .ruler-row, .track-row { grid-template-columns: minmax(0, 1fr); }
+  .ruler-row { height: auto; }
+  .track-ruler-label { min-height: 44px; border-right: 0; }
+  .track-row { min-height: 0; }
+  .track-header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 12px; border-right: 0; border-bottom: 1px solid var(--edge); padding: 10px 12px; }
+  .track-row.active .track-header { padding-left: 9px; }
+  .track-name { min-width: 0; }
+  .track-name button { max-width: 100%; font-size: 12px; }
+  .track-mix-buttons { justify-content: end; }
+  .track-mix-buttons button { font-size: 11px; }
+  .track-mix-buttons > span { display: none; }
+  .track-fader { min-height: 44px; height: auto; grid-template-columns: 22px minmax(0, 1fr) 30px; font-size: 9px; }
+  .track-direct-actions { grid-column: 1 / -1; gap: 8px; }
+  .track-direct-actions [data-track-export] { flex: 0 1 auto; font-size: 11px; padding-inline: 12px; }
+  .track-direct-actions [data-track-close] { min-width: 44px; }
+  .track-canvas-wrap { min-height: 132px; }
+  .track-waveform { height: 132px; }
+  .timeline-scroll { min-height: 52px; height: auto; }
+  .selection-bar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .selection-title, .selection-bar .channel-label { grid-column: 1 / -1; margin-left: 0 !important; }
+  .selection-bar input, .selection-bar select { width: 100%; max-width: 100%; }
+  .selection-bar label { min-width: 0; font-size: 10px; }
+  .selection-length { min-width: 0; font-size: 10px; }
+  .selection-bar button:last-child { margin-left: 0; }
+  .module-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .control-heading { flex-wrap: wrap; }
+  .two-controls { grid-template-columns: minmax(0, 1fr); }
+  .rack-stage-heading { grid-template-columns: 44px minmax(0, 1fr) 80px; }
+  .rack-stage-actions { flex-wrap: wrap; }
+  .preview-buttons { max-width: none; }
+  .preview-controls > .primary kbd { display: none; }
+  .workspace-view-header { padding-inline: 12px; gap: 8px; }
+  .workspace-view-header h2 { font-size: 18px; }
+  .workspace-view-header > button { flex-shrink: 0; }
+  .workspace-view-header > [data-view-back] { max-width: 76px; }
+  .workspace-page, .help-article { padding-inline: 14px; }
+  .modal-header { gap: 12px; }
+  .modal-header h2 { min-width: 0; overflow-wrap: anywhere; }
+  #modal-content { padding: 16px; }
+  .inline-buttons, .modal-actions { gap: 8px; }
+  .shortcut-row { flex-wrap: wrap; }
+  .shortcut-row input { width: 100%; }
+  .status-row #status { max-width: 100%; overflow-wrap: anywhere; }
+  footer { padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+}

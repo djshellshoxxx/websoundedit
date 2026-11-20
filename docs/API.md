@@ -135,6 +135,7 @@ The authoritative runtime registry is `await editor.execute('commands.list')`, t
 | `clip.remove` | `{clipId?,trackId?}`. |
 | `clip.duplicate` | `{clipId?,start?,newTrack?}`; default position is immediately after the source. |
 | `clip.split` | `{clipId?,at}`; at is clip-relative and inside the clip. Returns `{left,right}` metadata; selects the right half. |
+| `clip.extractChannels` | `{clipId?,trackId?}`; retains a multichannel source and creates one muted, speaker-labeled mono track per channel at its original start. Returns `{sourceClipId,tracks}` and selects the first stem. Stereo stems pan left/right; surround stems are centered editing copies. Source live effects are not copied. One undo step; checks track/clip and portable PCM budgets before adding any tracks. |
 | `clip.getAudio` | `{clipId?}`; returns a copy of raw clip PCM, without mixer gain/pan. |
 | `markers.add` | `{time,name?}`; timeline seconds. |
 | `markers.remove` | `{markerId}`. |
@@ -147,9 +148,11 @@ New edits after Undo discard Redo. History is bounded to 30 edits and 256 MiB of
 | --- | --- |
 | `selection.set` | `{clipId?,trackId?,start,end,channels:'all'|'left'|'right'}`; clamps to clip bounds then rejects an empty result. |
 | `selection.clear` | Removes the interval; the clip remains active. |
+| `selection.zeroCrossing` | `{radiusMs?:5,target?,channels?}`; requires a nonempty current or explicit range. Moves each edge to the nearest shared crossing of its selected channels within 0–50 ms (earlier time wins ties); an unfound edge stays unchanged. Returns the new selection, preserves nonempty bounds and creates no PCM/history edit. |
 | `edit.copy` | Optional `target`; copies the selection or active clip into the internal clipboard. |
 | `edit.cut` | Optional `target`; requires a selected range and all channels, then removes that range. |
 | `edit.paste` | `{clipId?,trackId?,at?}`; inserts clipboard PCM at a clip-relative time; defaults to selection start or clip end. Creates a clip if no clip is active. |
+| `edit.insertSilence` | `{clipId?,trackId?,at?,duration?:1,channels?:"all"}`; inserts zero samples in every channel, rounding position/duration to the nearest sample. Defaults to selection start or clip start. Rejects a partial-channel scope unless `channels:"all"` is explicit; does not replace the selection. Selects the inserted region, returns clip metadata plus `insertedFrames`, and is one undoable edit. PCM and timeline admission precede allocation. |
 | `edit.delete` | Requires a selected range and all channels. Use `effect.silence` to mute one channel instead. |
 | `edit.trim` | Keeps the selected range. Defaults to preserving its timeline location; `keepTimelinePosition:false` keeps the old clip start. |
 | `loop.create` | `{repeats?,crossfadeMs?,newTrack?,name?,start?,target?}`; copies/repeats the selection as a new clip. Default newTrack is true. |
@@ -429,3 +432,29 @@ All paths retain exact Host/Origin validation and Bearer authentication. The ser
 `file.import`, `file.export`, `file.exportStems`, `macro.validate`, `macro.run`, `macro.batch`, `macro.cancel`, `macro.status`, `macro.record.start`, `macro.record.stop`, `stream.start`, `stream.stop` and `stream.status` are available through `/v1/execute`. The Node runtime advertises browser capture/transport commands as unavailable. Filesystem paths cannot be supplied by an HTTP request or macro. Explicit CLI arguments are the operator's file selection.
 
 A workbench retains at most 128 input aliases / 256 MiB and 128 output artifacts / 128 MiB. Download and remove retained artifacts to reclaim memory, or use the CLI's bounded sequential file sink. `file.input.remove` and `file.artifact.remove` release retained data. The server admits at most eight active/queued normal jobs with a 512 MiB aggregate reservation. See [Companion](COMPANION.md) for live UDP setup and its separate bounded queues.
+
+
+### Noise gate (`effect.noiseGate`)
+
+Available both as a named selection effect and as `noiseGate` in an ordered or live rack. Parameters are validated by the same command/rack schemas. Defaults:
+
+```js
+await editor.execute('effect.noiseGate', {
+  thresholdDb: -40, hysteresisDb: 6, floorDb: -80,
+  attackMs: 2, holdMs: 40, releaseMs: 120,
+  channelMode: 'linked', wet: 1
+});
+```
+
+| Parameter | Range and meaning |
+| --- | --- |
+| `thresholdDb` | −96…0 dBFS; absolute sample-peak opening threshold. |
+| `hysteresisDb` | 0…24 dB; the closing threshold is `thresholdDb - hysteresisDb`. |
+| `floorDb` | −96…0 dB; closed attenuation, with 0 dB exactly transparent. |
+| `attackMs` | 0…100 ms; one-pole opening time constant, with 0 immediate. |
+| `holdMs` | 0…1000 ms; keeps the gate open for this many samples after the detector falls below its closing threshold. |
+| `releaseMs` | 1…2000 ms; one-pole closing time constant. |
+| `channelMode` | `linked` (maximum absolute sample detector, common gain) or `independent` (per-channel detector/gain). |
+| `wet` | 0…1; linear input/output blend, default 1. |
+
+The effect starts closed at the requested range boundary, has no lookahead and preserves duration. A linked detector operates on the channels included in the effect target. Nonselected channels and samples outside the target remain exact. Live rack stage IDs retain gate history through parameter updates and reordering; fresh live-settings renders start with an empty/closed state. There are no per-frame allocations or duration-sized detector buffers.

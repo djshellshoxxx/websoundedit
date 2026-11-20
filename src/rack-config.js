@@ -41,6 +41,12 @@ export const RACK_EFFECTS = Object.freeze({
   bitcrusher: effect('Bitcrusher', 'Reduce bit depth and hold samples for digital grit.', { bits: 8, hold: 4 }, [
     field('bits', 'Bit depth', 2, 16, 1, 'bits', { integer: true }), field('hold', 'Sample hold', 1, 64, 1, 'samples', { integer: true }),
   ]),
+  noiseGate: effect('Noise gate', 'Reduce noise between phrases using a signal-triggered gate. Linked channels keep their balance; this does not remove noise underneath louder audio.', { thresholdDb: -40, hysteresisDb: 6, floorDb: -80, attackMs: 2, holdMs: 40, releaseMs: 120, channelMode: 'linked' }, [
+    field('thresholdDb', 'Open threshold', -96, 0, 1, 'dBFS'), field('hysteresisDb', 'Close hysteresis', 0, 24, 0.5, 'dB'),
+    field('floorDb', 'Closed level', -96, 0, 1, 'dB'), field('attackMs', 'Attack', 0, 100, 0.1, 'ms'),
+    field('holdMs', 'Hold', 0, 1000, 1, 'ms'), field('releaseMs', 'Release', 1, 2000, 1, 'ms'),
+    { key: 'channelMode', label: 'Channel detector', type: 'select', options: ['linked', 'independent'] },
+  ], 1),
 });
 
 const clone = value => JSON.parse(JSON.stringify(value));

@@ -203,5 +203,11 @@ export async function publishWiki({env=process.env, sourceDir=DEFAULT_SOURCE, te
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
   try {console.log(JSON.stringify(await publishWiki(), null, 2));}
-  catch (error) {console.error((error.code || 'WIKI_FAILED') + ': ' + (error.code?.startsWith('WIKI_') ? error.message : 'Wiki publication failed; no success was recorded.')); process.exitCode = 1;}
+  catch (error) {
+    const code = error.code?.startsWith('WIKI_') ? error.code : 'WIKI_FAILED';
+    const message = code === 'WIKI_FAILED' ? 'Wiki publication failed; no success was recorded.' : error.message;
+    console.log(JSON.stringify({status:'failed', code, message}, null, 2));
+    console.error(code + ': ' + message);
+    process.exitCode = 1;
+  }
 }

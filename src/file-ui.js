@@ -49,6 +49,10 @@ export class BrowserFileIO {
     return result;
   }
   async export(params = {}, context = {}) {
+    const { result, name } = await this._encodeExport(params, context);
+    return this.emit(result, name, params.download !== false, context);
+  }
+  async _encodeExport(params, context) {
     this.assertAccess('export', context);
     context.signal?.throwIfAborted(); const state = this.getState(), scope = params.scope || 'mix', format = params.format || 'wav';
     const trackId = params.trackId || (scope === 'track' ? state.selectedTrackId : undefined);
@@ -69,7 +73,7 @@ export class BrowserFileIO {
       const audio = await (params.live ? this.executeLive('live.render', render, context) : this.executeCore('audio.render', render));
       context.signal?.throwIfAborted(); result = await encodeAudio(audio, { ...params, metadata: state.metadata || {} });
     }
-    context.signal?.throwIfAborted(); return this.emit(result, scope === 'selection' ? `${name}-selection` : name, params.download !== false, context);
+    context.signal?.throwIfAborted(); return { result, name: scope === 'selection' ? `${name}-selection` : name };
   }
   async exportStems(params = {}, context = {}) {
     this.assertAccess('exportStems', context);
@@ -77,16 +81,15 @@ export class BrowserFileIO {
     if (!ids.length || ids.length > 64 || new Set(ids).size !== ids.length || ids.some(id => !state.tracks.some(track => track.id === id))) throw new Error('Choose one to 64 unique available tracks for stems.');
     if (['session', 'aup3', 'aup', 'reaper'].includes(params.format)) throw new Error('Stems contain rendered audio. Save a session separately to preserve editable structure.');
     const files = Object.create(null), used = new Set(), warnings = []; let total = 0;
-    // Do not feed each internal stem into an outer batch output collection.
-    const collection = this.collection; this.collection = null;
-    try {
-      for (const trackId of ids) {
-        context.signal?.throwIfAborted(); const track = state.tracks.find(item => item.id === trackId);
-        const result = await this.export({ ...params, scope: 'track', trackId, download: false, respectMute: params.respectMute === true, respectSolo: params.respectSolo === true, start: 0, ...(params.align !== false ? { end: state.duration } : {}) }, context);
-        total += result.bytes.byteLength; if (total > MAX_EXPORT_COLLECTION_BYTES) throw new Error(`Stem ZIP exceeds ${bytesLabel(MAX_EXPORT_COLLECTION_BYTES)}. Export fewer tracks or individual files.`);
-        files[uniqueFilename(track.name, result.ext, used)] = result.bytes; warnings.push(...result.warnings || []);
-      }
-    } finally { this.collection = collection; }
+    // Internal renders bypass emit without changing the shared collection. A
+    // batch can acquire file ownership while a previous export is awaiting an
+    // encoder; that rejected export must not overwrite the batch's collection.
+    for (const trackId of ids) {
+      context.signal?.throwIfAborted(); const track = state.tracks.find(item => item.id === trackId);
+      const { result } = await this._encodeExport({ ...params, scope: 'track', trackId, respectMute: params.respectMute === true, respectSolo: params.respectSolo === true, start: 0, ...(params.align !== false ? { end: state.duration } : {}) }, context);
+      total += result.bytes.byteLength; if (total > MAX_EXPORT_COLLECTION_BYTES) throw new Error(`Stem ZIP exceeds ${bytesLabel(MAX_EXPORT_COLLECTION_BYTES)}. Export fewer tracks or individual files.`);
+      files[uniqueFilename(track.name, result.ext, used)] = result.bytes; warnings.push(...result.warnings || []);
+    }
     context.signal?.throwIfAborted(); const bytes = zipSync(files, { level: 0 });
     if (bytes.length > MAX_EXPORT_COLLECTION_BYTES) throw new Error('The stem archive exceeds its output size limit. Export fewer tracks.');
     return this.emit({ bytes, ext: 'zip', mime: 'application/zip', warnings, tracks: ids.length }, params.name || `${state.name}-stems`, params.download !== false, context);

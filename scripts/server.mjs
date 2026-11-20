@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Opt-in loopback API. It never reads a request-supplied filesystem path. */
 import { createServer } from 'node:http';
+import packageInfo from '../package.json' with { type: 'json' };
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -51,7 +52,7 @@ export function createApiServer({ editor = new AudioEditor(), workbench: supplie
   const native = () => capabilitiesPromise ??= nativeCapabilities().catch(error => { capabilitiesPromise = null; throw error; });
   const workbench = suppliedWorkbench || new NodeWorkbench({ editor, destinations, getCapabilities: native });
   editor = workbench.editor;
-  const capabilities = async () => ({ ...await native(), apiVersion: 1, applicationVersion: '1.0.0-beta.1', streaming: await workbench.streams.capabilities(), macros: { language:'WebSoundEdit Macro 1', supported:true }, files: { suppliedInputs:128,inputBytes:256*1024*1024,retainedArtifacts:128,artifactBytes:128*1024*1024 } });
+  const capabilities = async () => ({ ...await native(), apiVersion: 1, applicationVersion: packageInfo.version, streaming: await workbench.streams.capabilities(), macros: { language:'WebSoundEdit Macro 1', supported:true }, files: { suppliedInputs:128,inputBytes:256*1024*1024,retainedArtifacts:128,artifactBytes:128*1024*1024 } });
   let jobs = Promise.resolve();
   const serialize = task => { const next = jobs.then(task); jobs = next.catch(() => {}); return next; };
   const server = createServer(async (request, response) => {

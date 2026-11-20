@@ -51,11 +51,11 @@ runs:
       if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
       shell: bash
       run: npm run build
-    - name: Install Chromium
-      id: chromium
+    - name: Install Chromium, Firefox and WebKit
+      id: browsers
       if: ${{ !cancelled() && steps.build.outcome == 'success' }}
       shell: bash
-      run: npx playwright install --with-deps chromium
+      run: npx playwright install --with-deps chromium firefox webkit
     - name: Native Audacity open, render, save and reimport
       if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.audio-dependencies.outcome == 'success' }}
       shell: bash
@@ -64,8 +64,8 @@ runs:
       if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.audio-dependencies.outcome == 'success' && steps.reaper-runtime.outcome == 'success' }}
       shell: bash
       run: xvfb-run -a node scripts/verify-reaper.mjs test-results/reaper-native
-    - name: Browser editing, worklets, capture, codecs, accessibility and help screenshots
-      if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.chromium.outcome == 'success' }}
+    - name: Desktop and mobile browser editing, worklets, capture, codecs, accessibility and help screenshots
+      if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.browsers.outcome == 'success' }}
       shell: bash
       run: npm run test:e2e
     - name: Save all verification evidence

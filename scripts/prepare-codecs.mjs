@@ -1,12 +1,8 @@
-import { mkdir, copyFile, readFile, writeFile, readdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { mkdir, copyFile, writeFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { execFileSync } from 'node:child_process';
-const version=JSON.parse(await readFile('package.json','utf8')).version;
-let commit=process.env.GITHUB_SHA || null;
-if(!commit&&existsSync('.git'))try{commit=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();}catch{/* Source archives also build without Git installed. */}
+import { buildMetadata } from './build-metadata.mjs';
 await mkdir('public',{recursive:true});
-await writeFile('public/build.json',JSON.stringify({version,commit,builtAt:new Date().toISOString()})+'\n');
+await writeFile('public/build.json',JSON.stringify(buildMetadata())+'\n');
 await mkdir('public/codecs', { recursive: true });
 // Same-origin, single-thread FFmpeg does not require SharedArrayBuffer or COOP/COEP.
 for (const file of ['ffmpeg-core.js', 'ffmpeg-core.wasm']) await copyFile(resolve('node_modules/@ffmpeg/core/dist/esm', file), resolve('public/codecs', file));
