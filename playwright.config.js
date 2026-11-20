@@ -5,7 +5,7 @@ const chromiumOptions = {
   ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {}),
   args: ['--disable-dev-shm-usage'],
 };
-const sharedBrowserTests = /(?:cross-browser|editor|rack-ui|creative-ui|ui-baseline|essential-features|transport-loop|presets-themes|formats)\.spec\.js$/;
+const sharedBrowserTests = /(?:cross-browser|editor|rack-ui|creative-ui|ui-baseline|essential-features|transport-loop|presets-themes|scripting|live-visualizer|formats)\.spec\.js$/;
 
 export default defineConfig({
   testDir: './tests',

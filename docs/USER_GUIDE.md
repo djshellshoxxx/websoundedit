@@ -2,7 +2,7 @@
 
 WebSoundEdit combines sample editing, multitrack arrangement and live performance in one browser workbench. The waveform editor contains a bounded editable session. Long recordings use a separate disk archive. Native project saves preserve the editable session; rendered audio exports contain the sound you choose to print.
 
-[Open WebSoundEdit](https://djshellshoxxx.github.io/websoundedit/) · [Macro guide](MACROS.md) · [API reference](API.md) · [Audacity compatibility](AUDACITY.md) · [REAPER compatibility](REAPER.md) · [Verification](VERIFICATION.md)
+[Open WebSoundEdit](https://djshellshoxxx.github.io/websoundedit/) · [Scripting and batch audio](SCRIPTING.md) · [Action recorder and macros](MACROS.md) · [API reference](API.md) · [Browser support](BROWSER_SUPPORT.md) · [Audacity compatibility](AUDACITY.md) · [REAPER compatibility](REAPER.md) · [Verification](VERIFICATION.md)
 
 ## 1. Find your way around
 
@@ -18,9 +18,9 @@ Use **Ctrl K** to search workbench actions. On macOS, Command substitutes for Co
 
 | Section | What it controls |
 | --- | --- |
-| General & theme | Studio, Daylight, Midnight and Terminal themes; guidance preference; settings import/export. |
-| Audio input | Microphone/interface or display-audio source, device, physical channel indices, gain and processing requests. |
-| Audio output | Actual monitoring output device and monitoring layout, distinct from the rendered project layout. |
+| General & theme | Ten-theme gallery and selector; guidance preference; settings import/export. |
+| Audio input | Microphone/interface or display-audio source, device rescan, physical channel indices, gain, processing requests and reported rate/latency. |
+| Audio output | Actual monitoring output device, available device picker and monitoring layout, distinct from the rendered project layout. |
 | Channel layout | Project render layout and explicit canonical speaker order. |
 | MIDI & pedals | Device ports, sample note triggers, continuous CC mappings and locally armed command/macro actions. |
 | Keyboard shortcuts | Reassign workbench actions without duplicating bindings. |
@@ -30,6 +30,8 @@ Use **Ctrl K** to search workbench actions. On macOS, Command substitutes for Co
 | Help & recovery | Linked guidance and an explicit recovery-clear action. |
 
 The quick theme selector and Options theme choice stay synchronized. Device IDs and requested preferences may be saved, but a saved file does not grant permissions, start input/recording, reconnect a companion or arm triggers.
+
+The ten palettes are **Studio**, **Daylight**, **Midnight**, **Terminal**, **Graphite**, **Ocean**, **Aurora**, **Ember**, **Paper** and **High contrast**. Daylight and Paper provide cool and warm light workspaces; the other palettes provide dark alternatives. Select a gallery card or use either theme selector. Changing the appearance preserves project audio, selection and effect settings.
 
 ## 2. Import, select and zoom a sample
 
@@ -66,6 +68,26 @@ Undo and Redo restore editor state within the bounded history. Downloading an ex
 **Extract channels…** creates one speaker-labeled mono track for each channel of the whole selected clip, retaining the source and exact source placement. The new tracks start muted so the current mix does not double. Unmute a stem with its **M** button and use **Solo** to audition it. Stereo stems pan left/right; surround stems are centered for independent editing and preserve their FL/FR/FC/LFE/BL/BR/SL/SR labels. This operation does not copy source live effects or recreate native surround speaker routing. One Undo removes all extracted tracks. Admission checks ensure the expanded project remains within track, clip and portable PCM limits.
 
 Shortcuts: **Ctrl/⌘ Shift I** inserts silence, **Shift Z** opens zero-crossing selection, and **Ctrl/⌘ Shift U** extracts channels.
+
+### Audio presets: cleanup, vocals and mastering
+
+Open **Audio presets** from the workbench. Use **Find a preset** and **Category** to filter the 32 recipes. Select a recipe to read its processing order, source requirements and limitations, then **Audition**, **A/B** and **Apply**. The selected region and channels define its scope; clearing the region processes the whole selected clip. Apply preserves duration and creates one undo entry.
+
+| Category | Available recipes |
+| --- | --- |
+| Cleanup | Repair clipped peaks; Remove DC offset; Reduce low rumble; Soften high-frequency hiss; Gentle room-noise gate; Firm room-noise gate. |
+| Vocals | Vocal isolation · stereo center; Instrumental isolation · stereo sides; Vocal removal · center reduction; Gentle de-esser; Focused de-esser; Vocal presence. |
+| Instruments | Bass definition; Drum punch; Acoustic clarity; Smooth piano. |
+| Compression | Gentle bus compression; Vocal leveling compression; Punchy drum compression; Dense speech compression. |
+| Limiting | Auto limiter; Transparent peak limiter; Fast peak limiter; Headroom limiter. |
+| Mastering | Balanced mastering start; Warm mastering start; Clear mastering start; Louder mastering start. |
+| Creative | Telephone voice; Warm tape color; Spacious chorus; Rhythmic pulse. |
+
+The three vocal/instrumental center recipes require an original **stereo clip with both channels selected**. Vocal isolation extracts the shared center into both channels and focuses its frequency range. Instrumental isolation extracts stereo difference information: centered bass and drums can disappear along with vocals, and its opposite-polarity outputs **cancel when summed to mono**. Vocal removal reduces a band-limited center while retaining center bass and out-of-band highs. These operations use stereo center/side math rather than AI source separation. They cannot guarantee isolated vocals or instruments; panned voices and stereo reverberation may remain.
+
+**Repair clipped peaks** targets short, flat, near-full-scale plateaus with unclipped shoulders, up to 4 ms. Successful repair reserves −1 dBFS sample-peak headroom. Clean audio stays unchanged when no repair is made; long, edge or heavily distorted clipping cannot be reconstructed reliably. **De-essers** dynamically attenuate a high-frequency band, so audition bright instruments as well as speech.
+
+**Auto limiter** measures selected PCM RMS, adds at most 6 dB toward −18 dBFS RMS and limits sample peaks to −1 dBFS. It leaves silence and material below −60 dBFS RMS unboosted; the gain cap or peak ceiling can prevent reaching the RMS target. Mastering and compression presets provide fixed starting points for listening and adjustment. Their RMS/sample-peak targets do not certify integrated LUFS or intersample true-peak compliance. Use the individual tools or rack when you need editable processor parameters.
 
 ## 4. Build an ordered effects rack
 
@@ -113,11 +135,27 @@ Ordinary committed source edits made while using Live mode affect the next playb
 
 To print a live rack, choose **Render current live effects** in Export. The renderer uses a snapshot of the settings and automation with effect history initially empty at the requested start. To preserve the feedback/history of an already-running performance, capture the program with the long recorder instead.
 
-## 5. Key detection and waveform colors
+## 5. Key detection, colors and live signal
 
 **Detect key** analyzes the selected sample. **Sample keys** can analyze all samples and lets you override an uncertain estimate. Written tonic/mode labels and confidence accompany the colors; color alone is never the musical identifier.
 
 Short, noisy, percussive or mixed-key material may be uncertain. Confidence is a heuristic, not a transcription guarantee. Major and minor labels remain distinct even when they share a tonic color. The waveform also uses color to reveal signal magnitude and frequency character, with theme-dependent contrast.
+
+### Full-color live display
+
+At the bottom of the workbench, **See what you hear** follows the active audio signal. **Waveform** is the initial view. Use **Display** to choose:
+
+| Display | How to read it |
+| --- | --- |
+| Waveform | Separate colored channel traces show sample amplitude over milliseconds. Narrow peaks remain visible at the available screen resolution. |
+| Waterfall | Logarithmic frequency runs left to right; height and color show spectral level, with older frames behind the newest frame. |
+| Spectrogram | Time runs left to right, logarithmic frequency bottom to top, and color shows spectral level from −96 to 0 dB. |
+
+Choose **Program output** for the program signal after live effects and before monitoring downmix, or **Active audio input** for an input you already started in Options. The visualizer never starts a microphone or transport by itself. Input can be inspected with monitoring off. Program metronome clicks are monitoring-only and are not part of this signal.
+
+**Freeze** retains the current display while audio continues; **Resume** starts a fresh visual history. Reduced-motion preferences start animation paused. The panel suspends its analysis while hidden or outside the viewport, then starts a fresh history when it returns. Changing display mode does not change audio, rack settings or transport.
+
+Frequency views combine channel power rather than summing signed samples, so opposite-polarity stereo remains visible. Frequency resolution is finite, and the history uses a bounded rolling window. The level readout is a sampled live observation; it is not a LUFS meter or a true-peak compliance measurement.
 
 ## 6. Save a session, a track, a mix or stems
 
@@ -141,6 +179,12 @@ Independent track/stem export includes gain/pan and ignores mute and other-track
 **Raw / committed PCM without mix controls** bypasses gain/pan. It includes already-applied sample edits. **Committed audio + mix controls** is the normal rendered sound. **Render current live effects** additionally prints the current live rack and automation. Raw and live are separate choices.
 
 Choose an explicit output layout to convert channel arrangement. Otherwise use the project render layout for mixed exports; raw source rendering preserves its source-channel behavior. Encoder support is checked against the actual shipped/runtime codec. WAV supports 16/24-bit PCM and 32-bit float. Float WAV preserves sample headroom that an integer file cannot represent without clipping.
+
+### Audio file types
+
+Import and export support **WAV, MP3, FLAC, Ogg Vorbis, Opus, M4A/AAC, raw AAC, AIFF, ALAC and WMA v2**, subject to the available decoder/encoder and its supported channel layouts. ALAC uses an M4A container, while Opus exports use 48 kHz. WAV encoding is built in; other encoders load on demand from the application's own files. Import tries browser decoding and the bundled fallback as appropriate, reading the actual contents rather than trusting a filename extension.
+
+Changing a lossy file to FLAC or WAV does not restore lost detail. A large file can exceed the decoded-memory limit even when its compressed size is small. Batch audio uses the same codecs and checks, and can produce several formats per input with a script.
 
 ### Metadata
 
@@ -172,9 +216,15 @@ Standard MIDI File import supports format 0/1 with PPQ timing and tempo maps, wi
 
 **Audio input** can request a microphone/interface or a browser display-audio picker. Physical input channels use zero-based indices, for example `0, 1`. Start input is explicit; merely visiting Options reads available device names without starting capture.
 
+To use a USB or built-in interface, connect it, open **Audio devices** or **Options → Audio input**, and choose **Rescan devices**. Select the input device and channel indices, then **Start input** and grant the browser's permission. Device names can remain hidden until permission is granted. Changing the chosen device or channels requires Start input again; **Apply gain / processing** updates supported controls on an active input. **Stop input** releases the acquired tracks.
+
 Input monitoring starts off. Enable it deliberately when you want to hear the source through the selected output. Input gain and monitor gain are separate. Echo cancellation, noise suppression and automatic gain are requests that the browser/device may or may not honor. Their music-oriented default is off.
 
 A display picker may not provide system/tab audio. In that case the app reports the missing capability and closes all acquired media tracks. Device removal, denied permission and unavailable output selection remain visible. Saved device IDs are preferences, not permission grants.
+
+In **Audio output**, rescan and select an output, choose the monitoring layout, then **Apply output routing**. **Choose output device…** appears when the browser offers a permission-bearing output picker. If output selection is unavailable, use the operating system's default output selector. WebSoundEdit uses browser audio APIs and the operating-system audio route; it cannot take exclusive ASIO/WASAPI control, install drivers or change a sound card's hardware buffer settings.
+
+The device panel distinguishes project, audio-engine and acquired-input sample rates. It also displays browser-reported processing/output latency estimates and reported capture processing. An absent value is shown as unreported; these values are not a measured input-to-output round trip. Available channels and routing must be checked on the actual device.
 
 | Layout | Canonical channel order |
 | --- | --- |
@@ -215,13 +265,43 @@ The configured maximum recording limits are 24 hours and 512 GiB, also constrain
 
 Use **Macros → Record actions** to capture successful editing commands, then edit the same canonical text in Script or Visual steps. Visual mode supports simple command sequences; scripts with loops and conditions remain intact in Script mode.
 
+### Scripts, randomization and results
+
+**Macros → Edit & run** provides six editable examples: normalize a batch to WAV; make WAV/FLAC/MP3 copies; export six repeatable sample variations; build a seeded nested-loop sound bank; measure/clean/normalize conditionally; and explore arrays, shuffle and nested iteration. Loading an example changes the draft; read its description before running an example that creates a project or edits audio.
+
+The language supports `let`, reassignment, arithmetic, conditions, arrays/objects, nested `repeat`, `while` and `for…of`, plus `break` and `continue`. Its **35 built-in tools** provide random numbers and choices, array construction/copying/sorting/shuffling, math and text conversion. Every call accepts an argument object. Array helpers return copies, so assign the result to retain a change. The **Random, arrays & math** reference lists signatures.
+
+```js
+random.seed({seed: "my-variations"});
+let rows = [];
+for (gain of [-9, -6, -3]) {
+  let row = [];
+  repeat (2) {
+    row = array.append({values: row, value: {
+      gainDb: gain, variation: random.int({min: 1, max: 8})
+    }});
+  }
+  rows = array.append({values: rows, value: row});
+}
+```
+
+An explicit seed makes the run repeatable. `random.float` excludes its upper bound; `random.int` includes both endpoints. A batch executes each input separately, so a fixed seed gives every file the same sequence; seed from `input.stem` for repeatable filename-based variation. This random generator is for creative work, not cryptographic keys.
+
+After a normal run, expand **Run result and variables** or use **Download result JSON**. A long on-screen preview is explicitly shortened; the download contains the full retained result. Loops share one bounded operation/iteration budget and yield so Stop can be handled between operations. A stopped ordinary macro retains completed edits for Undo.
+
 **Record timing** preserves pauses with waits. **Live performance → Automation** sets time/value points on a specific stage parameter for a repeatable audio-clock sweep. Select the target, stage and parameter, enter step/linear points and use **Set lane**. Clearing target automation affects that chosen rack.
+
+### Quick batch conversion
+
+Open **Batch audio** or **Macros → Batch files** and select **Convert audio / apply a preset**. Choose one of the ten audio formats, an optional preset and optional −1 dBFS sample-peak normalization, then supply files and run. **View the generated script** shows the commands. The recipe exports raw clip PCM, preserving source channels without mix panning, at the current project's sample rate; codec layout limits still apply. A script can instead loop over formats and export several versions per input.
 
 **Batch files** gives each supplied input a cleared editor, reports per-file progress/errors and restores the original browser session once after completion or cancellation. Outputs remain bounded; split larger batches or use the local CLI. A locally armed after-import macro can trim, normalize, convert and export manually imported audio. Importing project/settings/script definitions never arms it, and macro/batch imports do not recursively invoke it.
 
+The draft is retained while the batch runs. Choose whether to continue after a file error, inspect the per-file results, and download completed files individually or as a collected ZIP. Cancellation retains completed outputs and restores the original project. Up to 128 supplied aliases, 256 MiB input bytes and 128 MiB collected exports remain subject to the separate decoded-audio limits.
+
 While a browser batch runs, a banner explains that it owns the session. Editing, MIDI controls and outside imports or exports are paused until the original project has been restored; API callers receive `BUSY` for those operations. You can browse help, inspect progress or close the macro view and use **Stop batch** in the editor. Let any earlier file operation finish before starting a batch. Ordinary **Run** macros keep the editor interactive for performance use. Batch scripts use the actual effect, project and file commands instead of UI action wrappers.
 
-The [macro guide](MACROS.md) includes validated cleanup, conversion, automation and loop-layer scripts, plus language and cancellation details. The same operations are discoverable through `websoundedit.commandCatalog()` and canonical `websoundedit.execute(method, params)` calls.
+The [scripting and batch guide](SCRIPTING.md) contains the complete data-tool reference, nested-loop examples, seed behavior and execution bounds. The [macro guide](MACROS.md) adds action recording, automation, triggers and loop-layer workflows. The same operations are discoverable through `websoundedit.commandCatalog()` and canonical `websoundedit.execute(method, params)` calls.
 
 ## 13. Stream through the local companion
 

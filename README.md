@@ -4,7 +4,7 @@
 
 [Open the editor](https://djshellshoxxx.github.io/websoundedit/) · [Product specification](docs/PRODUCT_SPEC.md) · [API reference](docs/API.md) · [Workflow research](docs/RESEARCH.md) · [Release verification](docs/VERIFICATION.md)
 
-**1.0 beta workbench:** [user guide](docs/USER_GUIDE.md) · [macros and batch](docs/MACROS.md) · [beta specification](docs/specs/BETA_1_0.md) · [Audacity](docs/AUDACITY.md) · [REAPER](docs/REAPER.md)
+**1.0 beta workbench:** [user guide](docs/USER_GUIDE.md) · [scripting, randomization and batch](docs/SCRIPTING.md) · [action recorder and macros](docs/MACROS.md) · [browser support](docs/BROWSER_SUPPORT.md) · [beta specification](docs/specs/BETA_1_0.md) · [Audacity](docs/AUDACITY.md) · [REAPER](docs/REAPER.md)
 
 WebSoundEdit is a client-side audio editor and a shared JavaScript audio engine. The website runs on GitHub Pages. Its optional CLI and authenticated loopback HTTP companion let scripts edit local audio with the same implementation. Audio is processed on the user's device.
 
@@ -16,22 +16,24 @@ WebSoundEdit is a client-side audio editor and a shared JavaScript audio engine.
 - **Edit precisely:** insert silence at an exact clip time, snap selection boundaries to shared zero crossings, and extract stereo/surround channels into labeled mono editing tracks. Extraction retains the source and mutes new stems by default.
 - **Arrange tracks:** multiple tracks and clips, clip movement, duplicate, track gain/pan/mute/solo, markers, snapping and zoom.
 - **Shape the audio:** independent pitch shift and time stretch, varispeed, four-band parametric EQ, compressor, lookahead sample-peak limiter, peak normalization, polarity inversion, fractional time alignment, channel swap/mono conversion and DC removal.
+- **Start with a preset:** 32 searchable recipes cover cleanup, stereo center/side vocal processing, de-essing, instrument shaping, compression, limiting, mastering starting points and creative color. Preview, audition, compare and Apply through the same undoable edit path.
 - **Find and change rhythm:** BPM detection with confidence and manual/tap/half/double correction; beat-grid offset; metronome; easy selection playback and looping; loop creation with optional join crossfades.
 - **Duck or gate:** beat-synchronized volume envelopes, drawn shape nodes, depth and timing controls, compressor mode, and genuine audio-triggered sidechain from another track.
 - **Clean up:** silence detection with region inspection and optional silence removal.
 - **Make new sounds:** beat slicing/reordering, deterministic granular textures/freeze, and tone/noise/sweep/drum generation. The initial demo is synthesized locally.
 - **See the change:** actual processed waveform preview with original overlay, sample detail, FFT spectrum, EQ response and ducking envelope. The display uses the DSP coefficients and real PCM, including mixer gain/panning.
+- **Watch the live signal:** a full-color display at the bottom switches between Waveform, Waterfall and Spectrogram. Choose program output after effects or an already-active input; Freeze pauses only the display. Separate waveform channels and power-linked spectra keep opposite-polarity stereo visible.
 - **Save and automate:** portable project JSON with embedded float PCM, settings JSON, IndexedDB recovery, command palette, a keyboard shortcut for every UI feature, and named API methods for every effect.
 - **Record and layer:** explicit input acquisition, sample-clock loop capture and independent live layers. Long recordings write bounded chunks to an OPFS disk archive, with pause/resume, recoverable partial takes, range import and streaming WAV/RF64 export where supported.
 - **Build a creative chain:** Effects beside Tools offers echo, delay, reverb, chorus, flanger, phaser, distortion, tremolo, filter, tape, stutter, bitcrusher and a signal-triggered noise gate. Add up to 12 stages, drag to reorder, bypass, and set a wet/dry knob for every instance. Keyboard and move buttons provide equivalent controls.
 - **Control two parameters:** bind the XY pad to any two continuous rack parameters, including wet/dry. MIDI CC learning can control those parameters or the XY axes.
 - **Identify samples:** detect the key of a selected sample or every sample; key labels, confidence and consistent colors accompany the waveform. Set a manual override for uncertain material.
-- **Make room and choose a look:** collapse the whole Shape the sound inspector to widen the arrangement; choose Studio, Daylight, Midnight or Terminal themes.
+- **Make room and choose a look:** collapse the whole Shape the sound inspector to widen the arrangement; choose Studio, Daylight, Midnight, Terminal, Graphite, Ocean, Aurora, Ember, Paper or High contrast. The ten-theme gallery and quick selector stay synchronized.
 - **Connect MIDI:** select controller inputs/outputs, trigger the selected sample from notes, learn knob mappings, and receive/send transport. Import Standard MIDI Files as simple synthesized tracks and export their retained note timing.
 - **Exchange sessions:** open/save supported native Audacity `.aup3`, legacy `.aup` plus `_data`, and genuine REAPER `.rpp` plus media ZIPs. Save one track or a full session, export independent aligned stems, and edit format-supported metadata.
 - **Perform live:** shared AudioWorklet racks, track/master targets, timeline automation, XY control and MIDI voices continue through live parameter changes. Export an explicit live-settings render or record the actual running program.
-- **Automate workflows:** record successful actions, optionally retain their timing, edit visual steps or bounded `.wsemacro` scripts, run isolated file batches and explicitly arm local shortcuts/import triggers/pedals.
-- **Choose channels and devices:** mono, stereo, 5.1 and 7.1 project/render layouts, named speaker selections, separate input/output preferences and actual capability reporting.
+- **Automate workflows:** record successful actions, optionally retain their timing, or write bounded `.wsemacro` scripts with nested loops, arrays, conditions and 35 random/array/math/text helpers. Use seeded randomization, six editable examples and downloadable run results. Quick batch conversion applies an optional preset and normalization before exporting to one of ten audio formats; script batches can create multiple formats per input.
+- **Choose channels and devices:** mono, stereo, 5.1 and 7.1 project/render layouts, named speaker selections, separate input/output preferences, device rescanning and reported rate/latency diagnostics. USB and built-in interfaces use the browser's operating-system audio route and explicit permission controls.
 - **Find guidance:** addressable Options and Help views, contextual hover/focus tips with a global off switch, themes and mobile layouts.
 - **Stream deliberately:** connect the optional authenticated loopback companion, choose one of its configured destinations and advertised PCM/encoded UDP profiles, and inspect real bounded-stream status.
 
@@ -47,6 +49,20 @@ WebSoundEdit is a client-side audio editor and a shared JavaScript audio engine.
 
 Creative effects preserve duration. Echo, delay and reverb tails stop at the end of the processed interval. Include trailing silence in the clip/selection when a tail needs additional space. Selection-mode XY changes edit a draft; Live-mode XY changes update the running rack. Use timeline automation for repeatable sweeps or the recorder to capture the performed sound.
 
+### Cleanup, vocal and mastering presets
+
+Open **Audio presets**, search or choose a category, then select a recipe. Its description, processing order and limitations appear beside the preview. Presets process the selected interval/channels, or the whole selected clip when no interval is selected; **Apply** creates one undo entry. The same fixed recipes work in scripts through `effect.preset({presetId: "auto-limiter"})`.
+
+Vocal isolation, instrumental isolation and vocal removal use **stereo center/side processing**. They require a stereo clip with both channels selected. Centered instruments can remain with centered vocals, panned vocals and reverberation can survive removal, and the side-only instrumental result cancels when summed to mono. These are local stereo techniques, not AI stem separation.
+
+Clipped-peak repair conservatively interpolates short flat peaks with usable shoulders; it cannot reconstruct arbitrary distortion or the original lost recording. De-essers attenuate a high-frequency band dynamically and can also soften cymbals. Auto limiter measures PCM RMS, bounds its gain increase and catches sample peaks. Compression, limiting and mastering recipes are starting points for audition: they do not measure LUFS or oversampled true peaks. [Preset catalog and exact limits](docs/API.md#named-cleanup-vocal-and-mastering-presets).
+
+### Batch conversion and scripting
+
+Open **Batch audio → Convert audio / apply a preset**, choose a format, optional preset and optional −1 dBFS peak normalization, then supply files. **View the generated script** exposes the exact recipe. Files run sequentially in temporary sessions; the original project and script draft are restored. Download completed outputs individually or as a collected ZIP.
+
+**Macros → Edit & run** adds nested `repeat`, `while` and `for…of` loops, immutable array helpers, a per-run seeded random generator and math/text tools. The six examples cover WAV normalization, three-format exports, repeatable sample variations, a nested-loop sound bank, conditional cleanup and an array workbench. Inspect **Run result and variables** or download the complete result JSON. [Language, examples, tool reference and limits](docs/SCRIPTING.md).
+
 ### MIDI behavior
 
 MIDI hardware access is requested only by **MIDI → Connect MIDI**, without SysEx. It requires a browser that implements Web MIDI and explicit device permission; file import/export works independently. MIDI note 60 plays the selected sample at original pitch, with other notes transposing it, and note-off releases it. Playback is limited to eight sample voices. **Stop all notes** clears voices and sends all-notes-off to the selected output.
@@ -60,6 +76,8 @@ MIDI file import accepts format 0/1 with PPQ timing and tempo maps. It renders n
 WAV export is built in (16/24-bit PCM and 32-bit float). Opus uses a small, dedicated **libopus WASM** encoder at full complexity with Ogg packaging and exact end trimming. MP3, FLAC, Ogg Vorbis, AAC, M4A/AAC, AIFF, ALAC and legacy WMA use a lazily loaded, self-hosted **single-thread FFmpeg WASM** core. The app queries the shipped encoder build before enabling a format. Actual native import support varies by browser; FFmpeg provides a fallback. Opus exports use 48 kHz. The optional Node companion uses an installed native `ffmpeg` binary for non-WAV formats.
 
 Converting lossy audio to a lossless container does not recover discarded information. Integer exports can clip float samples above full scale; 32-bit float WAV preserves headroom. For a file-only conversion, export the clip with **Raw / committed PCM without mix controls** selected. CLI conversion without a recipe preserves original channels and sample rate.
+
+The quick batch converter uses the current project's sample rate and raw clip export to preserve source channels without mixer panning. Each codec still enforces its supported layouts. Browser-native decoding and the bundled fallback cover the ten listed audio choices; unsupported or malformed input reports an error. Batch resource limits still apply.
 
 ## Run locally
 

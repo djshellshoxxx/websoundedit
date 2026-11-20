@@ -4,6 +4,8 @@ import './creative-ui.css';
 import './themes.css';
 import './beta-ui.css';
 import './mobile.css';
+import './live-visualizer.css';
+import { LiveVisualizer } from './live-visualizer.js';
 import { RackPanel } from './rack-ui.js';
 import { PresetPanel } from './preset-ui.js';
 import { AUDIO_PRESETS } from './presets.js';
@@ -44,6 +46,9 @@ const colors=['#5ed8e6','#f1a362','#c3a2ef','#9adf83','#f0cf68','#ef94b6'];
 function trackColorAt(index){return getComputedStyle(document.documentElement).getPropertyValue(`--wave-${index%6+1}`).trim()||colors[index%colors.length];}
 $('#theme-select').innerHTML=Object.entries(THEMES).map(([id,title])=>`<option value="${id}">${title}</option>`).join('');
 const engine=new EngineClient();
+let liveVisualizer=null;
+window.addEventListener('pagehide',event=>{if(event.persisted)liveVisualizer?.setPageSuspended(true);else liveVisualizer?.dispose();});
+window.addEventListener('pageshow',event=>{if(event.persisted)liveVisualizer?.setPageSuspended(false);});
 let state=null, registry=[], audioById=new Map(), preview=null, compareOriginal=false, previewTimer, previewSerial=0, busy=0, initialising=true;
 let view={start:0,duration:8}, cursor=0, selectionDrag=null, demo=true, loop=false, metronome=false, detailMode='spectrum';
 let activePanel='shape';
@@ -475,7 +480,7 @@ $('#view-scroll').addEventListener('input',e=>{view.start=(Math.max(state?.durat
 let dragDepth=0;document.addEventListener('dragenter',e=>{if(e.dataTransfer.types.includes('Files')){e.preventDefault();dragDepth++;$('#drop-overlay').hidden=false;}});document.addEventListener('dragleave',e=>{if(--dragDepth<=0){dragDepth=0;$('#drop-overlay').hidden=true;}});document.addEventListener('dragover',e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault();});document.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;$('#drop-overlay').hidden=true;const files=[...e.dataTransfer.files];if(files.length)safe(()=>importFiles(files));});
 const resize=new ResizeObserver(()=>{drawWaveforms();drawDetailView();effectPanel.redraw();});resize.observe($('.workbench'));
 setCodecReporter(message=>{status(message);if($('#export-progress'))$('#export-progress').textContent=message;});
-window.addEventListener('pagehide',()=>{stopRecordingStream();macroPanel?.cancel();void companion?.disconnect();void liveAudio?.dispose();playback.stop();creative.close();});
+window.addEventListener('pagehide',event=>{stopRecordingStream();macroPanel?.cancel();void companion?.disconnect();if(event.persisted)void liveAudio?.resetProject({preserveSettings:true});else void liveAudio?.dispose();playback.stop();creative.close();});
 $('#modal').addEventListener('close',()=>{creative.learnTarget=null;});
 
 function selectedChannelScope(){const value=$('#channel-scope').value;if(value.startsWith('indices:'))return value.slice(8).split(',').map(Number);return value;}
@@ -519,6 +524,7 @@ function initializeWorkbench(){
   routes=new WorkbenchRoutes({onError:error=>safe(()=>Promise.reject(error))});
   commandRuntime=new CommandRuntime({coreExecute:coreRaw,coreCommands:registry,getState:()=>state});
   liveAudio=new LiveAudioRuntime({engine,playback});liveAudio.setMidiPanic(()=>creative.sampler.stop());creative.sampler.setAudioRoute(liveAudio.midiRoute());
+  liveVisualizer=new LiveVisualizer($('#live-visualizer'),{getSource:source=>liveAudio.getVisualizationSource(source),subscribe:listener=>liveAudio.subscribe(listener)});
   companion=new CompanionBridge({live:liveAudio});
   const liveCapabilities=liveAudio.capabilities();
   for(const descriptor of LIVE_COMMANDS)commandRuntime.register({...descriptor,available:descriptor.capabilities.every(key=>liveCapabilities[key]!==false)},async(params,context)=>{const result=await liveAudio.execute(descriptor.method,params,context);if(/^(loop\.(capture\.(stop|toggle)|track\.remove)|recordings\.importRange)$/.test(descriptor.method))await refreshLiveProject();if(descriptor.method==='transport.set'){state=engine.getState();$('#tempo').value=state.bpm;$('#playback-rate').value=String(liveAudio.getState().transport.rate);updateClock();drawWaveforms();scheduleRecovery();}return result;});

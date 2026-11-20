@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test';
-test.use({launchOptions:{args:['--disable-dev-shm-usage','--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream']},permissions:['microphone']});
+test.use({
+  launchOptions: {
+    ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {}),
+    args: ['--disable-dev-shm-usage', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+  },
+  permissions: ['microphone'],
+});
 async function boot(page){const errors=[];page.on('pageerror',error=>errors.push(error.message));await page.goto('/');await page.waitForFunction(()=>!!window.websoundedit?.ready);await page.evaluate(()=>websoundedit.ready);return errors;}
 test('real production worklets run live effects without interrupting transport and persist recoverable audio to OPFS',async({page})=>{
   const errors=await boot(page);

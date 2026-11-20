@@ -43,7 +43,9 @@ export class BrowserFileIO {
     this.assertAccess('export', context);
     if (this.collection) {
       if (this.collection.total + result.bytes.byteLength > this.collection.limit) throw new Error(`Collected outputs exceed ${bytesLabel(this.collection.limit)}. Use individual downloads or a smaller batch.`);
-      const unique = uniqueFilename(name, result.ext, this.collection.used); this.collection.total += result.bytes.byteLength; this.collection.files.push({ name: unique, ...result });
+      // Encoder metadata uses `name` for its format label. The collection owns
+      // the artifact filename; applying it last also preserves ZIP uniqueness.
+      const unique = uniqueFilename(name, result.ext, this.collection.used); this.collection.total += result.bytes.byteLength; this.collection.files.push({ ...result, name: unique });
       if (this.collection.download) this.download(result.bytes, unique, result.mime);
     } else if (download) this.download(result.bytes, `${safeFilename(name)}.${result.ext}`, result.mime);
     return result;

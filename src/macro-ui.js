@@ -1,5 +1,7 @@
 import { zipSync } from 'fflate';
-import { MacroRunner, parseMacro, validateMacro, stepsToMacro, macroToSteps, formatMacro } from './macro.js';
+import { MacroRunner, parseMacro, validateMacro, stepsToMacro, macroToSteps, formatMacro, MACRO_BUILTINS } from './macro.js';
+import { MACRO_EXAMPLES, batchConversionScript } from './macro-examples.js';
+import { FORMATS } from './codecs.js';
 import { escapeHTML, clone, option, bytesLabel } from './ui-utils.js';
 import { safeFilename, MAX_EXPORT_COLLECTION_BYTES } from './file-ui.js';
 
@@ -35,7 +37,7 @@ export const MACRO_UI_COMMANDS = [
   { method: 'macro.cancel', label: 'Stop macro execution', description: 'Cancel a macro or batch after its current atomic command.', schema: schema({}) },
   { method: 'macro.record.start', label: 'Record actions', description: 'Start recording successful semantic actions, optionally preserving elapsed timing.', schema: schema({ timing: { type: 'boolean' } }) },
   { method: 'macro.record.stop', label: 'Finish action recording', description: 'Stop action recording and create canonical macro text.', schema: schema({}) },
-  { method: 'macro.batch', label: 'Run a batch of supplied inputs', description: 'Process supplied file aliases sequentially, restoring the open project afterward.', schema: schema({ macroId: { type: 'string' }, inputIds: { type: 'array', items: { type: 'string' }, maxItems: 128 }, continueOnError: { type: 'boolean' }, download: { type: 'boolean' } }) },
+  { method: 'macro.batch', label: 'Run a batch of supplied inputs', description: 'Process supplied file aliases sequentially with a saved macro, the current draft, or explicit text, restoring the open project afterward.', schema: schema({ macroId: { type: 'string' }, text: { type: 'string', maxLength: 131072 }, inputIds: { type: 'array', items: { type: 'string' }, maxItems: 128 }, continueOnError: { type: 'boolean' }, download: { type: 'boolean' } }) },
 ].map(item => ({ id: item.method, category: 'Macros', recordable: false, undoable: false, capabilities: ['browser.macros'], ...item }));
 
 export class MacroPanel {
@@ -69,10 +71,18 @@ export class MacroPanel {
   validate(text = this.settings.draft) { const ast = parseMacro(text); const result = validateMacro(ast, this.runtime.commands()); if (!result.valid) throw new Error(result.errors.map(error => typeof error === 'string' ? error : error.message || JSON.stringify(error)).join('\n')); return ast; }
   async run(text, variables = {}, context = {}) {
     if (this.running) throw new Error('A macro or batch is already running. Stop it before starting another.');
-    this.validate(text); this.running = true; this.abort = new AbortController();
+    this.validate(text); this.running = true; this.abort = new AbortController(); this.lastRunResult = null; this.lastRunPreview = '';
     const onAbort = () => this.abort?.abort(context.signal?.reason); context.signal?.addEventListener('abort', onAbort, { once: true });
     if (context.signal?.aborted) onAbort();
-    try { return await this.runner.run(text, { variables, signal: this.abort.signal, onEvent: event => this.onProgress(event) }); }
+    try {
+      const result = await this.runner.run(text, { variables, signal: this.abort.signal, onEvent: event => this.onProgress(event) });
+      // API callers may edit their result; keep the displayed/downloaded run
+      // independent so its preview and complete JSON remain consistent.
+      this.lastRunResult = structuredClone(result);
+      const serialized = JSON.stringify(this.lastRunResult, null, 2);
+      this.lastRunPreview = serialized.length > 24000 ? serialized.slice(0, 24000) + '\n… Preview shortened. Download the complete result JSON.' : serialized;
+      return result;
+    }
     finally { context.signal?.removeEventListener('abort', onAbort); this.running = false; this.abort = null; this.updateStatus(); }
   }
   onProgress(event) { this.progress = event.type === 'step' ? `${event.completedSteps} completed · ${event.method}` : event.type === 'complete' ? `Complete · ${event.completedSteps} commands` : event.type === 'error' ? `Stopped after ${event.completedSteps || 0} commands · ${event.error?.message || event.message || 'Execution error'}` : 'Running macro…'; this.updateStatus(); }
@@ -83,9 +93,10 @@ export class MacroPanel {
   async afterManualImport(result, origin = 'ui') { if (!this.onImportArmed || origin !== 'ui' || this.running || !this.settings.onImportId) return; await this.runSavedWithVariables(this.settings.onImportId, { imported: result, inputs: this.fileIO.aliases() }); }
   async runSavedWithVariables(id, variables) { const macro = this.find(id); if (!macro) throw new Error('Choose an available on-import macro.'); return this.run(macro.text, variables); }
   shortcutMatches(sequence) { return this.shortcutsArmed ? this.settings.macros.filter(item => item.shortcut && (item.shortcut === sequence || item.shortcut.startsWith(sequence + ' '))) : []; }
-  async batch({ macroId, inputIds, continueOnError = false, download = false } = {}, context = {}) {
+  async batch({ macroId, text: suppliedText, inputIds, continueOnError = false, download = false } = {}, context = {}) {
     if (this.running) throw new Error('A macro or batch is already running.');
-    const text = (macroId ? this.find(macroId)?.text : this.settings.draft); if (typeof text !== 'string') throw new Error('Choose an available macro.');
+    if (macroId && suppliedText !== undefined) throw new Error('Choose a saved macro or explicit batch text, not both.');
+    const text = suppliedText ?? (macroId ? this.find(macroId)?.text : this.settings.draft); if (typeof text !== 'string') throw new Error('Choose an available macro.');
     const ast = this.validate(text), aliases = this.fileIO.aliases(), inputs = (inputIds || this.batchInputs.map(input => input.id)).map(id => aliases.find(input => input.id === id));
     if (!inputs.length || inputs.length > 128 || inputs.some(input => !input) || new Set(inputs.map(input => input.id)).size !== inputs.length) throw new Error('Supply one to 128 unique input files before running a batch.');
     const wrappers=batchUICommands(ast);if(wrappers.length)throw new Error(`Batch scripts use semantic commands instead of UI action wrappers: ${wrappers.join(', ')}. For example, use effect.gain or file.export.`);
@@ -126,16 +137,18 @@ export class MacroPanel {
     const badge = document.querySelector('#macro-recording-badge'); if (badge) { badge.hidden = !recorder.recording; badge.textContent = `● ${recorder.count} actions`; }
     for (const button of document.querySelectorAll('[data-macro-run]')) button.disabled = this.running;
     for (const button of document.querySelectorAll('[data-macro-stop]')) button.disabled = !this.running;
+    const result = document.querySelector('#macro-run-result'); if (result) result.textContent = this.lastRunPreview || 'Run a script to inspect its variables and last result.';
+    const resultDownload = document.querySelector('#macro-download-result'); if (resultDownload) resultDownload.disabled = !this.lastRunResult || this.running;
   }
   updateBatchResults() {
     const list = document.querySelector('#macro-batch-results'); if (list) list.innerHTML = (this.batchResults || []).map(result => `<li class="${result.success ? 'result-success' : 'result-error'}"><strong>${escapeHTML(result.name)}</strong> — ${result.success ? 'Complete' : escapeHTML(result.error)}</li>`).join('');
     const download = document.querySelector('#macro-batch-download'); if (download) download.disabled = !this.lastOutputs.length || this.running;
   }
   render(container, page = 'editor') {
-    container.innerHTML = `<div class="workspace-split"><nav class="workspace-nav" aria-label="Macro sections">${[['editor', 'Edit & run'], ['record', 'Record actions'], ['batch', 'Batch files'], ['triggers', 'Shortcuts & imports']].map(([id, label]) => `<a href="#macros/${id}"${page === id ? ' aria-current="page"' : ''}>${label}</a>`).join('')}<a href="#help/macros">Macro language guide ↗</a></nav><section class="workspace-page"><div class="macro-status-strip"><output data-macro-recording-status></output><output data-macro-progress role="status"></output><button data-macro-stop>Stop macro</button></div><div id="macro-page"></div></section></div>`;
+    container.innerHTML = `<div class="workspace-split"><nav class="workspace-nav" aria-label="Macro sections">${[['editor', 'Edit & run'], ['record', 'Record actions'], ['batch', 'Batch files'], ['triggers', 'Shortcuts & imports'], ['reference', 'Random, arrays & math']].map(([id, label]) => `<a href="#macros/${id}"${page === id ? ' aria-current="page"' : ''}>${label}</a>`).join('')}<a href="#help/macros">Macro language guide ↗</a></nav><section class="workspace-page"><div class="macro-status-strip"><output data-macro-recording-status></output><output data-macro-progress role="status"></output><button data-macro-stop>Stop macro</button></div><div id="macro-page"></div></section></div>`;
     container.querySelector('[data-macro-stop]').onclick = () => this.cancel();
     const body = container.querySelector('#macro-page');
-    if (page === 'record') this.renderRecorder(body); else if (page === 'batch') this.renderBatch(body); else if (page === 'triggers') this.renderTriggers(body); else this.renderEditor(body);
+    if (page === 'record') this.renderRecorder(body); else if (page === 'batch') this.renderBatch(body); else if (page === 'triggers') this.renderTriggers(body); else if (page === 'reference') this.renderReference(body); else this.renderEditor(body);
     this.updateStatus();
   }
   renderRecorder(body) {
@@ -147,7 +160,18 @@ export class MacroPanel {
   }
   renderEditor(body) {
     body.innerHTML = `<h3>One script. Every workbench action.</h3><div class="form-grid"><label>Saved macro<select id="macro-library">${option('', 'Unsaved draft', this.settings.selectedId)}${this.settings.macros.map(item => option(item.id, item.name, this.settings.selectedId)).join('')}</select></label><label>Name<input id="macro-name" maxlength="120" value="${escapeHTML(this.find(this.settings.selectedId)?.name || 'My macro')}"></label></div><div class="inline-buttons"><button id="macro-save">Save macro</button><button id="macro-new">New draft</button><button id="macro-delete">Delete saved macro</button><button id="macro-load">Import .wsemacro</button><button id="macro-download">Download .wsemacro</button><input type="file" id="macro-file" accept=".wsemacro,text/plain" hidden></div><div class="visual-tabs macro-view-tabs" role="group" aria-label="Macro editing mode"><button id="macro-script-tab" aria-pressed="true">Script</button><button id="macro-visual-tab" aria-pressed="false">Visual steps</button></div><div id="macro-script-area"><label class="sr-only" for="macro-source">Macro source code</label><textarea id="macro-source" class="code-editor" spellcheck="false" maxlength="131072">${escapeHTML(this.settings.draft)}</textarea></div><div id="macro-visual-area" hidden></div><p id="macro-validation" role="status"></p><div class="modal-actions"><button id="macro-format">Format script</button><button id="macro-validate">Validate</button><button data-macro-run id="macro-run" class="primary">Run macro</button></div><p class="field-hint">Programs with variables, conditions or loops stay in Script mode. Visual editing never flattens structured logic.</p>`;
+    const examples = document.createElement('section');
+    examples.innerHTML = `<div class="form-grid"><label>Example library<select id="macro-example">${MACRO_EXAMPLES.map(item => option(item.id, item.title, '')).join('')}</select></label><div><button id="macro-use-example">Replace draft with example</button><a class="button-link" href="#macros/reference">Random, arrays & math reference ↗</a></div></div><p id="macro-example-description" class="field-hint"></p>`;
+    body.querySelector('.macro-view-tabs').before(examples);
     const $ = selector => body.querySelector(selector), source = $('#macro-source');
+    const describeExample = () => { $('#macro-example-description').textContent = MACRO_EXAMPLES.find(item => item.id === $('#macro-example').value)?.description || ''; };
+    $('#macro-example').onchange = describeExample; describeExample();
+    $('#macro-use-example').onclick = () => this.safe(() => {
+      this.assertInteractive(); const example = MACRO_EXAMPLES.find(item => item.id === $('#macro-example').value);
+      if (!example) throw new Error('Choose an available example.');
+      this.settings.selectedId = ''; this.settings.draft = example.text; this.persist(); this.renderEditor(body);
+      this.progress = `${example.title} loaded into the draft. Review it, then Run or use Batch files.`; this.updateStatus();
+    });
     const sync = () => { this.setDraft(source.value); this.persist(); };
     source.addEventListener('input', () => { this.setDraft(source.value); }); source.addEventListener('change', sync);
     $('#macro-library').onchange = () => { const item = this.find($('#macro-library').value); if (item) { this.settings.selectedId = item.id; this.settings.draft = item.text; this.persist(); this.renderEditor(body); } };
@@ -159,8 +183,17 @@ export class MacroPanel {
     $('#macro-validate').onclick = () => this.safe(() => { sync(); this.validate(); $('#macro-validation').textContent = 'Valid syntax, commands and known arguments. Dynamic values are validated when each command runs.'; });
     $('#macro-format').onclick = () => this.safe(() => { source.value = formatMacro(parseMacro(source.value)); sync(); });
     $('#macro-run').onclick = () => this.safe(async () => { sync(); await this.runtime.execute('macro.run', { text: source.value, variables: { inputs: this.fileIO.aliases(), ...(this.fileIO.aliases()[0] ? { input: this.fileIO.aliases()[0] } : {}) } }); });
+    const result = document.createElement('details');
+    result.innerHTML = '<summary>Run result and variables</summary><pre><code id="macro-run-result"></code></pre><button id="macro-download-result">Download result JSON</button>';
+    body.append(result);
+    $('#macro-download-result').onclick = () => this.safe(() => { if (!this.lastRunResult) throw new Error('Run a script first.'); this.download(JSON.stringify(this.lastRunResult, null, 2), 'macro-result.json', 'application/json'); });
+    this.updateStatus();
     $('#macro-script-tab').onclick = () => { $('#macro-script-area').hidden = false; $('#macro-visual-area').hidden = true; $('#macro-script-tab').setAttribute('aria-pressed', 'true'); $('#macro-visual-tab').setAttribute('aria-pressed', 'false'); };
     $('#macro-visual-tab').onclick = () => this.safe(() => { sync(); const steps = macroToSteps(source.value); if (!steps) { $('#macro-validation').textContent = 'This program contains structured logic. Continue in Script mode; no commands have been changed.'; return; } $('#macro-script-area').hidden = true; $('#macro-visual-area').hidden = false; $('#macro-script-tab').setAttribute('aria-pressed', 'false'); $('#macro-visual-tab').setAttribute('aria-pressed', 'true'); this.renderSteps($('#macro-visual-area'), steps, text => { source.value = text; sync(); }); });
+  }
+  renderReference(body) {
+    body.innerHTML = `<h3>Random values, arrays, numbers and text</h3><p>Call these tools with one argument object, just like an editor command. Use <code>let result = tool.name({...});</code> to keep the result. Arrays are copied: use <code>values = array.append({values: values, value: 3});</code> to keep an addition.</p><p>Nested <code>repeat</code>, <code>while</code> and <code>for (item of values)</code> loops share one execution budget. Seed <code>random.seed</code> once to repeat a sequence across runs; it is intended for creative variation.</p><label>Find a scripting tool<input id="macro-tool-search" type="search" placeholder="Random, shuffle, round, text…"></label><div id="macro-tools" class="project-format-options">${MACRO_BUILTINS.map(item => `<article data-macro-tool="${escapeHTML((item.method + ' ' + item.description).toLowerCase())}"><h4><code>${escapeHTML(item.method)}</code></h4><p>${escapeHTML(item.description)}</p><p class="field-hint">Arguments: ${Object.entries(item.schema.properties).map(([name, rule]) => `<code>${escapeHTML(name)}</code>${item.schema.required.includes(name) ? ' (required)' : ' (optional)'}${rule.type ? ' · ' + escapeHTML(rule.type) : ''}`).join('; ') || 'none'}</p></article>`).join('')}</div><a class="button-link" href="#macros/editor">Back to the script and example library ↗</a>`;
+    body.querySelector('#macro-tool-search').oninput = event => { const query = event.target.value.toLowerCase().trim(); body.querySelectorAll('[data-macro-tool]').forEach(row => { row.hidden = !row.dataset.macroTool.includes(query); }); };
   }
   renderSteps(container, steps, onChange) {
     const catalog = this.runtime.commands().filter(item => item.recordable && !item.method.startsWith('macro.'));
@@ -181,10 +214,21 @@ export class MacroPanel {
     body.querySelector('#macro-import-armed').onchange = event => this.safe(() => { if (event.target.checked && !this.find(this.settings.onImportId)) { event.target.checked = false; throw new Error('Choose an on-import macro first.'); } if (event.target.checked) this.validate(this.find(this.settings.onImportId).text); this.onImportArmed = event.target.checked; });
   }
   renderBatch(body) {
-    body.innerHTML = `<h3>Process files in order</h3><p>Each input starts in a cleared project. If your macro has no file.import command, the file is imported first. The current session is restored when the batch ends; completed downloads remain. While the batch owns this session, use progress, help and Stop; editing, MIDI controls and outside file operations resume after restoration. Ordinary Run macros remain interactive.</p><div class="form-grid"><label>Macro<select id="batch-macro">${option('', 'Current draft', '')}${this.settings.macros.map(item => option(item.id, item.name, this.settings.selectedId)).join('')}</select></label><label>Input files<input id="batch-files" type="file" accept="audio/*,.mid,.midi,.json,.aup3,.zip,.rpp" multiple></label></div><p id="batch-input-count">${this.batchInputs.length} files supplied</p><label class="checkbox-field"><input id="batch-continue" type="checkbox"> Continue to the next file after an error</label><label class="checkbox-field"><input id="batch-auto-download" type="checkbox"> Download each output as it completes</label><p class="field-hint">Collected outputs are bounded at ${bytesLabel(MAX_EXPORT_COLLECTION_BYTES)}. Use smaller batches for large audio. No arbitrary paths are read by a script.</p><div class="inline-buttons"><button id="batch-run" data-macro-run class="primary">Run batch</button><button id="macro-batch-download" disabled>Download collected outputs ZIP</button></div><ol id="macro-batch-results" class="batch-results"></ol>`;
-    body.querySelector('#batch-files').onchange = event => this.safe(() => { this.batchInputs = this.fileIO.supply([...event.target.files]); body.querySelector('#batch-input-count').textContent = `${this.batchInputs.length} files supplied`; });
-    body.querySelector('#batch-run').onclick = () => this.safe(() => this.runtime.execute('macro.batch', { ...(body.querySelector('#batch-macro').value ? { macroId: body.querySelector('#batch-macro').value } : {}), inputIds: this.batchInputs.map(input => input.id), continueOnError: body.querySelector('#batch-continue').checked, download: body.querySelector('#batch-auto-download').checked }));
-    body.querySelector('#macro-batch-download').onclick = () => this.safe(() => { const files = Object.fromEntries(this.lastOutputs.map(output => [output.name, output.bytes])); const bytes = zipSync(files, { level: 0 }); if (bytes.length > MAX_EXPORT_COLLECTION_BYTES + 1024 * 1024) throw new Error('Batch ZIP exceeds its output bound.'); this.download(bytes, 'websoundedit-batch.zip', 'application/zip'); });
+    const presets = Array.isArray(this.audioPresets) ? this.audioPresets : [];
+    body.innerHTML = `<h3>Process files in order</h3><p>Each input starts in a cleared project. Choose a conversion recipe or run a script. The open session is restored when the batch ends; completed outputs remain available. Use progress, help and Stop while processing.</p>
+      <label>Batch mode<select id="batch-mode"><option value="macro">Run saved macro or current draft</option><option value="convert">Convert audio / apply a preset</option></select></label>
+      <div id="batch-script-settings"><label>Macro<select id="batch-macro">${option('', 'Current draft', '')}${this.settings.macros.map(item => option(item.id, item.name, this.settings.selectedId)).join('')}</select></label></div>
+      <div id="batch-conversion-settings" hidden><div class="form-grid"><label>Output audio format<select id="batch-format">${FORMATS.map(format => option(format.id, format.name, 'wav')).join('')}</select></label><label>Audio preset<select id="batch-preset">${option('', 'None — convert only', '')}${presets.map(preset => option(preset.id, preset.title, '')).join('')}</select></label></div><label class="checkbox-field"><input id="batch-normalize" type="checkbox"> Peak-normalize each result to −1 dBFS after the preset</label><p class="field-hint">Uses the current project's sample rate. Raw clip export preserves the imported channel layout. Each encoder checks its supported channels and resource limits.</p><details><summary>View the generated script</summary><pre><code id="batch-generated-source"></code></pre></details></div>
+      <label>Input files<input id="batch-files" type="file" accept="audio/*,.wav,.flac,.mp3,.m4a,.ogg,.opus,.aiff,.aif,.wma,.aac,.mid,.midi,.json,.aup3,.zip,.rpp" multiple></label><p id="batch-input-count">${this.batchInputs.length} files supplied</p>
+      <label class="checkbox-field"><input id="batch-continue" type="checkbox"> Continue to the next file after an error</label><label class="checkbox-field"><input id="batch-auto-download" type="checkbox"> Download each output as it completes</label><p class="field-hint">Collected outputs are bounded at ${bytesLabel(MAX_EXPORT_COLLECTION_BYTES)}. Use smaller batches for large audio. Scripts read only the files supplied here. A script without file.import imports the current file automatically.</p><div class="inline-buttons"><button id="batch-run" data-macro-run class="primary">Run batch</button><button id="macro-batch-download" disabled>Download collected outputs ZIP</button></div><ol id="macro-batch-results" class="batch-results"></ol>`;
+    const $ = selector => body.querySelector(selector);
+    const conversion = () => batchConversionScript({ format: $('#batch-format').value, presetId: $('#batch-preset').value, normalize: $('#batch-normalize').checked });
+    const refresh = () => { const converting = $('#batch-mode').value === 'convert'; $('#batch-conversion-settings').hidden = !converting; $('#batch-script-settings').hidden = converting; $('#batch-generated-source').textContent = conversion(); };
+    for (const id of ['batch-mode', 'batch-format', 'batch-preset', 'batch-normalize']) $('#' + id).onchange = () => this.safe(refresh);
+    refresh();
+    $('#batch-files').onchange = event => this.safe(() => { this.batchInputs = this.fileIO.supply([...event.target.files]); $('#batch-input-count').textContent = `${this.batchInputs.length} files supplied`; });
+    $('#batch-run').onclick = () => this.safe(() => this.runtime.execute('macro.batch', { ...($('#batch-mode').value === 'convert' ? { text: conversion() } : $('#batch-macro').value ? { macroId: $('#batch-macro').value } : {}), inputIds: this.batchInputs.map(input => input.id), continueOnError: $('#batch-continue').checked, download: $('#batch-auto-download').checked }));
+    $('#macro-batch-download').onclick = () => this.safe(() => { const files = Object.fromEntries(this.lastOutputs.map(output => [output.name, output.bytes])); const bytes = zipSync(files, { level: 0 }); if (bytes.length > MAX_EXPORT_COLLECTION_BYTES + 1024 * 1024) throw new Error('Batch ZIP exceeds its output bound.'); this.download(bytes, 'websoundedit-batch.zip', 'application/zip'); });
     this.updateBatchResults();
   }
   dispose() { this.cancel(); this.unsubscribe?.(); }

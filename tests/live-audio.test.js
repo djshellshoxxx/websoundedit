@@ -42,6 +42,23 @@ test('ordinary transport shares the live graph; knobs preserve playing sources, 
   await live.releaseTrack(first.trackId);assert.ok(sources[0].stops.length);assert.equal(sources[1].stops.length,0);assert.equal(playback.playing,true);
   await live.execute('transport.pause');assert.equal(playback.playing,false);await live.execute('transport.seek',{position:.25});assert.equal(playback.position,.25);await live.execute('transport.stop');assert.equal(playback.position,0);await live.dispose();
 });
+test('visualization source lookup is silent and follows output, input and project cleanup', async () => {
+  const { engine, live, context } = await fixture();
+  try {
+    assert.equal(live.getVisualizationSource(), null); assert.equal(live.getVisualizationSource('input'), null); assert.equal(live.context, null);
+    await engine.execute('audio.generate', { duration: .1 });
+    await live.execute('transport.play', { scope: 'mix' });
+    const output = live.getVisualizationSource(), connections = output.node.connections.length;
+    assert.equal(output.context, context); assert.equal(output.node, live.masterOutput); assert.equal(output.channels, 2);
+    for (let i = 0; i < 20; i++) live.getVisualizationSource();
+    assert.equal(output.node.connections.length, connections);
+    await live.execute('audio.input.start', { channels: [0, 1] });
+    assert.equal(live.getVisualizationSource('input').node, live.inputNode);
+    assert.equal(live.getVisualizationSource('input').channels, 2);
+    await live.execute('audio.input.stop'); assert.equal(live.getVisualizationSource('input'), null);
+    await live.resetProject(); assert.equal(live.getVisualizationSource(), null);
+  } finally { await live.dispose(); }
+});
 test('a loop can be armed before first play and survives selection, stop, mix and seek transitions', async () => {
   const { engine, live, playback } = await fixture();
   try {

@@ -105,6 +105,20 @@ test('clipping repair skips unsupported long/edge/square peaks and does not alte
   }
 });
 
+test('clean near-full-scale peaks do not trigger repair, rounding changes or whole-clip attenuation', () => {
+  for (const [sampleRate, frequency, phase] of [[8000, 100, .5], [8000, 250, .5], [48000, 1000, .5], [8000, 1, .5], [44100, 6, 0]]) for (const amplitude of [.99, 1]) {
+    // Sampling halfway around a sine maximum produces two exactly equal
+    // adjacent samples without clipping the continuous signal. Slow clean
+    // peaks can also have several samples within the plateau tolerance.
+    const length = Math.max(sampleRate / 10, Math.ceil(2 * sampleRate / frequency));
+    const samples = Float32Array.from({ length }, (_, i) => amplitude * Math.sin(2 * Math.PI * frequency * (i + phase) / sampleRate));
+    const input = audio([samples], sampleRate), result = repairClipping(input);
+    assert.equal(result.repairInfo.repairedPeaks, 0, `${frequency} Hz at ${sampleRate} Hz`);
+    assert.equal(result.repairInfo.appliedGain, 1);
+    assert.deepEqual(result.channels[0], samples);
+  }
+});
+
 test('the repair preset restores curvature and reserves sample-peak headroom with linked gain', async () => {
   const signal = tone(1000, 1.2, SR / 4).map(value => Math.max(-1, Math.min(1, value)));
   const originalRight = tone(250, .3, signal.length), input = audio([signal, originalRight], SR, 'stereo');

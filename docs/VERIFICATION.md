@@ -1,6 +1,6 @@
 # WebSoundEdit release verification
 
-The 1.0 beta verification and audit record is maintained in [BETA_1_0_SUMMARY.md](audits/BETA_1_0_SUMMARY.md). The evidence below is the preserved historical 0.2 record; it does not describe the expanded beta channel/runtime limits.
+The current beta.2 qualification record is [BETA_2_QUALIFICATION_20261119.md](audits/BETA_2_QUALIFICATION_20261119.md). Hosted results belong to the [Actions run on the exact commit](https://github.com/djshellshoxxx/websoundedit/actions). The earlier beta record remains in [BETA_1_0_SUMMARY.md](audits/BETA_1_0_SUMMARY.md). The evidence below is the historical 0.2 record and does not describe the expanded beta limits.
 
 ## Historical 0.2 release
 

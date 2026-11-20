@@ -1,5 +1,7 @@
 /** WebSoundEdit Macro 1: a bounded, interpreted language. No ambient JavaScript. */
 import { validateCommandParams, validateStaticCommandParams, STATIC_UNKNOWN } from './command-schema.js';
+import { MACRO_BUILTINS, isMacroBuiltin, createMacroBuiltins } from './macro-builtins.js';
+export { MACRO_BUILTINS } from './macro-builtins.js';
 
 export const MACRO_LIMITS = Object.freeze({ sourceBytes: 131072, tokens: 30000, nodes: 20000, depth: 48, iterations: 10000, commands: 10000, operations: 200000, valueNodes: 50000, valueBytes: 8 * 1024 * 1024, stringLength: 131072, wallMs: 4 * 60 * 60 * 1000 });
 const FORBIDDEN = new Set(['__proto__', 'prototype', 'constructor', 'caller', 'callee', 'arguments', '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__']);
@@ -65,8 +67,8 @@ export function parseMacro(source, limits = MACRO_LIMITS) {
   for (const [key,value] of Object.entries(limits)) { if (!own(bound,key)||!Number.isSafeInteger(value)||value<1||value>bound[key]) throw new MacroError('Invalid macro limit: '+key); bound[key]=value; }
   const tokens = lex(source, bound); let at = 0, depth = 0, nodes = 0;
   const current = () => tokens[at];
-  const is = value => current().value === value;
-  const take = value => { const token = current(); if (value !== undefined && token.value !== value) throw new MacroError('Expected "' + value + '", found "' + token.value + '".', token); at++; return token; };
+  const is = value => !['string', 'number'].includes(current().type) && current().value === value;
+  const take = value => { const token = current(); if (value !== undefined && !is(value)) throw new MacroError('Expected "' + value + '", found "' + token.value + '".', token); at++; return token; };
   const consume = value => is(value) ? (take(), true) : false;
   const node = (type, fields, token) => { if (++nodes > bound.nodes) throw new MacroError('Macro AST limit exceeded.', token, 'RESOURCE_LIMIT'); return { type, ...fields, loc: token?.loc }; };
   const nested = fn => { if (++depth > bound.depth) throw new MacroError('Macro nesting limit exceeded.', current(), 'RESOURCE_LIMIT'); try { return fn(); } finally { depth--; } };
@@ -103,7 +105,7 @@ export function parseMacro(source, limits = MACRO_LIMITS) {
         if (consume('.')) { const property = identifier(); value = node('MemberExpression', { object: value, property: node('Literal', { value: safeKey(property.value, property) }, property), computed: false }, token); }
         else if (consume('[')) { const property = expression(); take(']'); value = node('MemberExpression', { object: value, property, computed: true }, token); }
         else {
-          const method = commandName(value); if (!method) throw new MacroError('Only named editor commands can be called.', token);
+          const method = commandName(value); if (!method) throw new MacroError('Only named editor commands and macro data tools can be called.', token);
           take('('); const argument = is(')') ? node('ObjectExpression', { properties: [] }, token) : expression(); take(')');
           value = node('CallExpression', { method, argument }, token);
         }
@@ -111,11 +113,11 @@ export function parseMacro(source, limits = MACRO_LIMITS) {
       return value;
     });
   }
-  function unary() { if (['!','-','+'].includes(current().value)) { const token = take(); return nested(() => node('UnaryExpression', { operator: token.value, argument: unary() }, token)); } return primary(); }
+  function unary() { if (current().type === 'punct' && ['!','-','+'].includes(current().value)) { const token = take(); return nested(() => node('UnaryExpression', { operator: token.value, argument: unary() }, token)); } return primary(); }
   function expression(min = 1) {
     return nested(() => {
       let left = unary();
-      while ((precedence[current().value] || 0) >= min) { const token = take(); left = node('BinaryExpression', { operator: token.value, left, right: expression(precedence[token.value] + 1) }, token); }
+      while (current().type === 'punct' && (precedence[current().value] || 0) >= min) { const token = take(); left = node('BinaryExpression', { operator: token.value, left, right: expression(precedence[token.value] + 1) }, token); }
       return left;
     });
   }
@@ -129,7 +131,7 @@ export function parseMacro(source, limits = MACRO_LIMITS) {
     if (consume('for')) { take('('); consume('let'); const name = identifier().value; take('of'); const iterable = expression(); take(')'); return node('ForOfStatement', { name, iterable, body: block() }, token); }
     if (consume('break')) { end(); return node('BreakStatement', {}, token); }
     if (consume('continue')) { end(); return node('ContinueStatement', {}, token); }
-    if (token.type === 'id' && ['=','+=','-=','*=','/='].includes(tokens[at + 1]?.value)) { const name = identifier().value, operator = take().value, value = expression(); end(); return node('AssignmentStatement', { name, operator, value }, token); }
+    if (token.type === 'id' && tokens[at + 1]?.type === 'punct' && ['=','+=','-=','*=','/='].includes(tokens[at + 1]?.value)) { const name = identifier().value, operator = take().value, value = expression(); end(); return node('AssignmentStatement', { name, operator, value }, token); }
     const value = expression(); end(); return node('ExpressionStatement', { expression: value }, token);
   }
   const body = []; while (current().type !== 'eof') body.push(statement());
@@ -236,6 +238,7 @@ function partialConstant(node){
 }
 export function validateMacro(ast, catalog = [], { variables } = {}) {
   const commands = new Map((Array.isArray(catalog) ? catalog : catalog.all || [...(catalog.core || []), ...(catalog.ui || [])]).map(entry => [entry.method || entry.id, entry])); commands.set('wait', WAIT);
+  for (const descriptor of MACRO_BUILTINS) commands.set(descriptor.method, descriptor);
   const errors = []; let count = 0;
   const visit = (node, depth=0, loops=0) => {
     if (!node || typeof node !== 'object' || ++count > MACRO_LIMITS.nodes || depth > MACRO_LIMITS.depth * 3) throw new MacroError('Invalid or excessive macro AST.', node, 'RESOURCE_LIMIT');
@@ -410,14 +413,21 @@ export class MacroRunner {
     const validation=validateMacro(ast,catalog,{variables:Object.keys({...context,...supplied})});
     if(!validation.valid){const first=validation.errors[0];throw Object.assign(new MacroError(first.message,null,first.code),{line:first.line,column:first.column,errors:validation.errors});}
     const root=new Scope(),descriptors=new Map((Array.isArray(catalog)?catalog:catalog.all||[...(catalog.core||[]),...(catalog.ui||[])]).map(entry=>[entry.method||entry.id,entry]));
+    for (const descriptor of MACRO_BUILTINS) descriptors.set(descriptor.method, descriptor);
     for(const [name,value] of Object.entries({...context,...supplied}))root.define(name,value);
     checkHeap(root,bound);
-    const started=Date.now();let operations=0,iterations=0,completedSteps=0,lastResult=null;
+    const started=Date.now();let operations=0,nextYield=128,iterations=0,completedSteps=0,lastResult=null;
+    const builtin = createMacroBuiltins({ limits: bound, charge: cost => {
+      if (controller.signal.aborted) throw Object.assign(new Error('Macro canceled. Completed operations remain applied.'), { code: 'ABORTED' });
+      if (!Number.isSafeInteger(cost) || cost < 0 || (operations += cost) > bound.operations || Date.now() - started > bound.wallMs) throw Object.assign(new Error('Macro execution limit exceeded.'), { code: 'RESOURCE_LIMIT' });
+    } });
     const emit=event=>{try{onEvent({...event,completedSteps});}catch{}};
     const check=async node=>{
       if(controller.signal.aborted)throw new MacroError('Macro canceled. Completed operations remain applied.',node,'ABORTED');
       if(++operations>bound.operations||Date.now()-started>bound.wallMs)throw new MacroError('Macro execution limit exceeded.',node,'RESOURCE_LIMIT');
-    if(operations%128===0){await new Promise(resolve=>setTimeout(resolve,0));if(controller.signal.aborted)throw new MacroError('Macro canceled. Completed operations remain applied.',node,'ABORTED');}
+      // Builtins charge work in batches, so their counters can jump past an
+      // exact multiple. Yield at a threshold so UI cancellation still runs.
+      if(operations>=nextYield){nextYield=operations+128;await new Promise(resolve=>setTimeout(resolve,0));if(controller.signal.aborted)throw new MacroError('Macro canceled. Completed operations remain applied.',node,'ABORTED');}
     };
     const delay=ms=>new Promise((resolve,reject)=>{
       const timer=setTimeout(done,ms);const cancel=()=>{clearTimeout(timer);controller.signal.removeEventListener('abort',cancel);reject(new MacroError('Macro canceled. Completed operations remain applied.',null,'ABORTED'));};
@@ -437,7 +447,12 @@ export class MacroRunner {
         case 'CallExpression':{try{
           if(completedSteps>=bound.commands)throw new MacroError('Macro command limit exceeded.',node,'RESOURCE_LIMIT');
           const params=await evaluate(node.argument,scope);let result;
-          if(node.method==='wait'){
+          // Arguments may contain other calls. Recheck before the outer command
+          // so a nested data tool cannot spend the final slot then start an edit.
+          if(completedSteps>=bound.commands)throw new MacroError('Macro command limit exceeded.',node,'RESOURCE_LIMIT');
+          if(isMacroBuiltin(node.method)) {
+            validateCommandParams(params, descriptors.get(node.method)); result = builtin(node.method, params);
+          } else if(node.method==='wait'){
             validateCommandParams(params,WAIT);if((params.seconds===undefined)===(params.beats===undefined))throw new MacroError('wait needs exactly one of seconds or beats.',node);
             const liveContext=await this.getContext();const bpm=liveContext.state?.bpm??liveContext.project?.bpm??liveContext.bpm??120;
             const seconds=params.seconds??params.beats*60/bpm;if(!Number.isFinite(seconds)||seconds<0||seconds*1000>bound.wallMs-(Date.now()-started))throw new MacroError('Wait exceeds the remaining macro time limit.',node,'RESOURCE_LIMIT');

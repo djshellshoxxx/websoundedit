@@ -34,6 +34,16 @@ export class LiveAudioRuntime extends EventTarget {
     this.engineListener=event=>this._engineChanged(event.detail||{});this.engine.addEventListener?.('state',this.engineListener);this.knownTracks=new Set(this._project().tracks.map(track=>track.id));
   }
   _project(){return this.engine.getState?.()||{sampleRate:48000,outputLayout:'stereo',bpm:120,beatsPerBar:4,beatOffset:0,tracks:[],duration:0,settings:{}};}
+  /** Read-only signal taps; inspecting them never starts audio or asks for a device. */
+  getVisualizationSource(source='master'){
+    if(!['master','input'].includes(source))throw new RangeError('Choose program output or active input.');
+    if(this.disposed||this.resetting||!this.context||this.context.state==='closed')return null;
+    if(source==='input'){
+      const input=this.devices.getState();
+      return this.inputNode&&input.status==='active'?{context:this.context,node:this.inputNode,channels:input.channels.length,layout:input.layout}:null;
+    }
+    return this.masterOutput?{context:this.context,node:this.masterOutput,channels:CHANNEL_LAYOUTS[this.layout].count,layout:this.layout}:null;
+  }
   capabilities(){return{audioWorklet:!!(globalThis.AudioWorkletNode||this.contextFactory&&this.captureFactory!==CaptureTap.create),...this.devices.capabilities(),outputSelection:!!(this.context?.setSinkId||(globalThis.AudioContext||globalThis.webkitAudioContext)?.prototype?.setSinkId),opfs:this.storageState.available,streamingFileExport:!!globalThis.showSaveFilePicker,layouts:Object.keys(CHANNEL_LAYOUTS),limits:LIVE_LIMITS,editor:{maxSeconds:600,maxBytes:256*1024*1024},recording:{maxSeconds:86400,maxBytes:512*1024**3},exportLimits:{...ENCODING_LIMITS},timePitchSurround:false};}
   commands(){return LIVE_COMMANDS.map(command=>copy(command));}
   subscribe(listener){if(typeof listener!=='function')throw new TypeError('Provide a live state listener.');this.listeners.add(listener);return()=>this.listeners.delete(listener);}
@@ -70,7 +80,7 @@ export class LiveAudioRuntime extends EventTarget {
       masterOutput=context.createGain();masterOutput.channelCount=CHANNEL_LAYOUTS[this.layout].count;masterOutput.channelCountMode='explicit';masterOutput.channelInterpretation='discrete';masterInput.connect(masterOutput);
       await manager.setAutomation('master',this.racks.get('master').automation);check();monitorOutput=context.createGain();monitorOutput.gain.value=1;monitorOutput.connect(context.destination);
       this.masterInput=masterInput;this.masterOutput=masterOutput;this.monitorOutput=monitorOutput;this._monitorRouting(this.output.monitorLayout);
-      this.epoch=context.currentTime;manager.setClock({audioTime:context.currentTime,timelineTime:0,rate:1,playing:false},project.bpm);context.onstatechange=()=>this._state('audio.context');return context;
+      this.epoch=context.currentTime;manager.setClock({audioTime:context.currentTime,timelineTime:0,rate:1,playing:false},project.bpm);context.onstatechange=()=>this._state('audio.context');this._state('audio.context');return context;
     })().catch(error=>{manager?.dispose();disconnect(masterOutput);disconnect(monitorOutput);if(this.graphs===manager)this.graphs=null;if(this.contextReady===ready)this.contextReady=null;throw error;});
     this.contextReady=ready;return ready;
   }

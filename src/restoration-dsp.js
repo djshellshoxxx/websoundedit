@@ -58,7 +58,9 @@ export function repairClipping(audio, params = {}) {
       let end = start + 1;
       while (end < n && Math.abs(input[end] * sign - plateau) <= tolerance) end++;
       const width = end - start;
-      if (width >= 2 && width <= maxFrames && start >= 3 && end + 2 < n) {
+      // A clean sampled peak can have two naturally equal adjacent values.
+      // Require a longer plateau before reconstructing and applying headroom.
+      if (width >= 3 && width <= maxFrames && start >= 3 && end + 2 < n) {
         const y0 = sign * input[start - 1], y1 = sign * input[end];
         const p1 = sign * input[start - 2], p2 = sign * input[start - 3];
         const q1 = sign * input[end + 1], q2 = sign * input[end + 2];
@@ -78,6 +80,9 @@ export function repairClipping(audio, params = {}) {
               output[start + i] = sign * value;
             }
             if (changed) { repairedPeaks++; repairedFrames += width; }
+            // Tolerance can also group a clean, slowly varying peak. If the
+            // interpolation found no repair, retain its original PCM exactly.
+            else output.set(input.subarray(start, end), start);
           }
         }
       }
