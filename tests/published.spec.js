@@ -13,6 +13,7 @@ test('the published Pages beta loads its exact modules and completes a real edit
   await api.execute('audio.generate',{duration:.02,frequency:500,amplitude:.25,layout:'5.1'});
   await api.execute('effect.reverse');await api.execute('effect.normalize',{targetDb:-3});
   await api.execute('effect.preset',{presetId:'auto-limiter'});
+  await api.execute('effect.preset',{presetId:'normalize-headroom'});
   const script=await api.execute('macro.run',{text:'random.seed({seed:2026}); let rows=[]; for (a of [1,2]) { let row=[]; for (b of [3,4]) { row=array.append({values:row,value:a+b}); } rows=array.append({values:rows,value:row}); } let value=random.int({min:1,max:4});'});
   const exported=await api.execute('file.export',{scope:'clip',raw:true,format:'flac',download:false});
   const project=await api.execute('project.save');const all=api.commandCatalog();
@@ -24,6 +25,10 @@ test('the published Pages beta loads its exact modules and completes a real edit
  expect(result.rows).toEqual([[4,5],[5,6]]);expect(result.random).toBeGreaterThanOrEqual(1);expect(result.random).toBeLessThanOrEqual(4);
  expect(result.flacMagic).toBe('fLaC');expect(result.flacBytes).toBeGreaterThan(100);expect(result.themes).toBe(10);expect(result.visualizerMode).toBe('waveform');
  await expect(page.locator('#options-tooltips')).toBeVisible();expect(errors).toEqual([]);
+ for(const name of ['SCRIPTING','BROWSER_SUPPORT']){
+  const guide=await page.request.get(new URL(`docs/${name}.md`,process.env.PLAYWRIGHT_BASE_URL).href);
+  expect(guide.ok()).toBe(true);expect((await guide.text()).trim()).toMatch(/^# /);
+ }
  await page.screenshot({path:testInfo.outputPath('published-options.png'),fullPage:true});
  await page.locator('[data-view-close]').click();
  await page.screenshot({path:testInfo.outputPath('published-editor.png'),fullPage:true});

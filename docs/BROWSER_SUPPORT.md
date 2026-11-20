@@ -41,7 +41,7 @@ Tap a waveform to place the cursor, drag to select, or enter exact IN/OUT times.
 
 Touch input suppresses hover tips; the **Quick guide** and Help remain accessible. Keyboard focus and mouse hover still provide guidance when enabled in Options. All desktop tools remain available on the same page.
 
-The ten-theme gallery, searchable 32-preset catalog and batch setup remain reachable on narrow screens. At the bottom, choose Waveform, Waterfall or Spectrogram and Program output or Active audio input. The plot sizes itself to the screen, retains separate waveform channels and stops animation when frozen or out of view. A reduced-motion preference starts it paused. Mobile decoding/encoding still shares the project's memory limits, so a maximum-size desktop session may be unsuitable for a phone.
+The ten-theme gallery, searchable 36-preset catalog and batch setup remain reachable on narrow screens. At the bottom, choose Waveform, Waterfall or Spectrogram and Program output or Active audio input. The plot sizes itself to the screen, retains separate waveform channels and stops animation when frozen or out of view. A reduced-motion preference starts it paused. Mobile decoding/encoding still shares the project's memory limits, so a maximum-size desktop session may be unsuitable for a phone.
 
 ## Reproduce
 

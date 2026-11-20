@@ -16,7 +16,7 @@ WebSoundEdit is a client-side audio editor and a shared JavaScript audio engine.
 - **Edit precisely:** insert silence at an exact clip time, snap selection boundaries to shared zero crossings, and extract stereo/surround channels into labeled mono editing tracks. Extraction retains the source and mutes new stems by default.
 - **Arrange tracks:** multiple tracks and clips, clip movement, duplicate, track gain/pan/mute/solo, markers, snapping and zoom.
 - **Shape the audio:** independent pitch shift and time stretch, varispeed, four-band parametric EQ, compressor, lookahead sample-peak limiter, peak normalization, polarity inversion, fractional time alignment, channel swap/mono conversion and DC removal.
-- **Start with a preset:** 32 searchable recipes cover cleanup, stereo center/side vocal processing, de-essing, instrument shaping, compression, limiting, mastering starting points and creative color. Preview, audition, compare and Apply through the same undoable edit path.
+- **Start with a preset:** 36 searchable recipes cover cleanup, stereo center/side vocal processing, de-essing, instrument shaping, compression, limiting, mastering starting points and creative color. Preview, audition, compare and Apply through the same undoable edit path.
 - **Find and change rhythm:** BPM detection with confidence and manual/tap/half/double correction; beat-grid offset; metronome; easy selection playback and looping; loop creation with optional join crossfades.
 - **Duck or gate:** beat-synchronized volume envelopes, drawn shape nodes, depth and timing controls, compressor mode, and genuine audio-triggered sidechain from another track.
 - **Clean up:** silence detection with region inspection and optional silence removal.

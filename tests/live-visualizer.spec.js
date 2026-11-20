@@ -164,6 +164,24 @@ test('synthetic analyser data drives all color views, bounded frames, mobile fre
   expect(errors).toEqual([]);
 });
 
+test('a frozen signal survives scrolling out of view and back', async ({ page }) => {
+  await syntheticAnalyserPage(page);
+  await page.evaluate(() => { fixture.level = .5; });
+  await page.locator('[data-live-mode]').selectOption('spectrogram');
+  await expect.poll(() => coloredPixels(page.locator('[data-live-canvas]'))).toBeGreaterThan(80);
+  await page.locator('[data-live-freeze]').tap();
+  const before = await page.evaluate(() => ({ frames: fixture.view.history.total, pixels: fixture.view.canvas.toDataURL() }));
+  expect(before.frames).toBeGreaterThan(0);
+  await page.evaluate(() => { const spacer = document.createElement('div'); spacer.style.height = '2000px'; document.body.prepend(spacer); scrollTo(0, 0); });
+  await expect.poll(() => page.evaluate(() => fixture.view.inView)).toBe(false);
+  await page.locator('#fixture').scrollIntoViewIfNeeded();
+  await expect.poll(() => page.evaluate(() => fixture.view.inView)).toBe(true);
+  await expect(page.locator('#fixture')).toHaveAttribute('data-visual-state', 'paused');
+  expect(await page.evaluate(() => ({ frames: fixture.view.history.total, pixels: fixture.view.canvas.toDataURL() }))).toEqual(before);
+  expect(await page.evaluate(() => fixture.source.connections.length)).toBe(1);
+  await page.evaluate(() => fixture.view.dispose());
+});
+
 test('reduced motion waits for an explicit Resume before reading a live signal', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await syntheticAnalyserPage(page);

@@ -25,9 +25,9 @@ async function setup(input, start = 0) {
   return editor;
 }
 
-test('32 immutable named presets cover seven categories with bounded inspectable steps', () => {
-  assert.equal(AUDIO_PRESETS.length, 32);
-  assert.equal(new Set(AUDIO_PRESETS.map(preset => preset.id)).size, 32);
+test('36 immutable named presets cover seven categories with bounded inspectable steps', () => {
+  assert.equal(AUDIO_PRESETS.length, 36);
+  assert.equal(new Set(AUDIO_PRESETS.map(preset => preset.id)).size, 36);
   assert.deepEqual([...new Set(AUDIO_PRESETS.map(preset => preset.category))], PRESET_CATEGORIES);
   assert.equal(getAudioPreset(DEFAULT_PRESET_ID).id, 'auto-limiter');
   for (const preset of AUDIO_PRESETS) {
@@ -79,6 +79,37 @@ test('non-stereo presets support surround and arbitrary selected channel groups 
       assert.ok(output.channels.every(channel => channel.length === 257 && channel.every(Number.isFinite)), preset.id);
     }
   }
+});
+
+test('normalization presets reach their sample-peak targets with linked gain and preserve silent channels', async () => {
+  const left = Float32Array.from([0, .125, -.25, .0625, 0]);
+  const right = Float32Array.from(left, value => value * .5);
+  const silence = new Float32Array(left.length);
+  const input = audio([left, right, silence]), before = structuredClone(input);
+  for (const [presetId, targetDb] of [['normalize-peak', -1], ['normalize-headroom', -3], ['normalize-mixing', -6]]) {
+    const output = await processPreset(input, { presetId });
+    assert.ok(Math.abs(peak(output.channels[0]) - dbToGain(targetDb)) < 1e-7, presetId);
+    assert.ok(Math.abs(peak(output.channels[1]) / peak(output.channels[0]) - .5) < 1e-7, presetId);
+    assert.deepEqual(output.channels[2], silence);
+    for (let i = 1; i < 4; i++) assert.ok(Math.abs(output.channels[0][i] / output.channels[0][2] - left[i] / left[2]) < 1e-7, presetId);
+    assert.deepEqual(input, before);
+    const lowered = await processPreset(audio([Float32Array.from([1, -1, .5])]), { presetId });
+    assert.ok(Math.abs(peak(lowered.channels[0]) - dbToGain(targetDb)) < 1e-7, presetId);
+  }
+});
+
+test('instrumental-reduction preset removes synthetic side accompaniment while retaining centered voice-band audio', async () => {
+  const voice = tone(1000, .2), accompaniment = tone(3000, .4);
+  const input = audio([voice.map((value, i) => value + accompaniment[i]), voice.map((value, i) => value - accompaniment[i])]);
+  const output = await processPreset(input, { presetId: 'instrumental-reduction' });
+  assert.deepEqual(output.channels[0], output.channels[1]);
+  assert.ok(amplitude(output.channels[0], 1000) > .6);
+  assert.ok(amplitude(output.channels[0], 3000) < .001);
+  assert.ok(Math.abs(peak(output.channels[0]) - dbToGain(-3)) < 1e-7);
+  const description = getAudioPreset('instrumental-reduction');
+  assert.equal(description.stereoOnly, true);
+  assert.match(description.limitations, /not guaranteed instrumental removal/);
+  assert.match(description.limitations, /Centered accompaniment remains/);
 });
 
 test('clipped-peak reconstruction materially improves a clipped sine instead of merely scaling its flat tops', () => {

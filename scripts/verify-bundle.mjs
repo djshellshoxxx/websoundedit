@@ -1,4 +1,25 @@
 import assert from 'node:assert/strict';
+import { readFile, stat } from 'node:fs/promises';
+import { dirname, resolve, sep } from 'node:path';
+// Links in the published user guide must resolve to the current references.
+const guides = ['USER_GUIDE', 'SCRIPTING', 'BROWSER_SUPPORT', 'API', 'VERIFICATION', 'THIRD_PARTY'].map(name => [`docs/${name}.md`, `docs/${name}.md`]);
+guides.push(['docs/audits/BETA_2_QUALIFICATION_20261119.md', 'docs/audits/BETA_2_QUALIFICATION_20261119.md'], ['docs/THIRD_PARTY.md', 'licenses/THIRD_PARTY.md']);
+const outputRoot = resolve('dist');
+for (const [sourcePath, publishedPath] of guides) {
+  const text = await readFile(`dist/${publishedPath}`, 'utf8');
+  assert.equal(text, await readFile(sourcePath, 'utf8'), `Published ${publishedPath} must match its source.`);
+  for (const [, href] of text.matchAll(/\]\(([^\s)]+)\)/g)) {
+    if (/^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(href)) continue;
+    const link = href.split(/[?#]/)[0];
+    if (!link) continue;
+    const target = resolve(dirname(resolve(outputRoot, publishedPath)), decodeURIComponent(link));
+    assert.ok(target.startsWith(outputRoot + sep), `${publishedPath} links outside the built site: ${href}`);
+    assert.ok((await stat(target)).isFile(), `${publishedPath} links to a missing published file: ${href}`);
+  }
+}
+for (const asset of ['docs/audits/evidence/beta2-local-verification.json', 'docs/audits/evidence/beta2-preset-stress.json', 'docs/screenshots/workbench.png']) {
+  assert.deepEqual(await readFile(`dist/${asset}`), await readFile(asset), `Published ${asset} must preserve its source bytes.`);
+}
 // The public API must remain a real DOM-free ES module after bundling.
 const { AudioEditor, COMMANDS, generateAudio, encodeWav, decodeWav, createCoreRuntime, MacroRunner, createBrowserRuntime, importReaper, exportReaper } = await import('../dist/api.js');
 assert.equal(typeof AudioEditor, 'function');

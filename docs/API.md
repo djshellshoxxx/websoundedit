@@ -50,7 +50,7 @@ A single input with no recipe, project or explicit scope is treated as format-on
 
 ## Direct JavaScript engine
 
-In Node, import `./src/engine.js` from the clone. The built site also provides a bundled `api.js` ES module for browser integrations. See [examples/direct-engine.mjs](../examples/direct-engine.mjs) for a complete local-file program.
+In Node, import `./src/engine.js` from the clone. The built site also provides a bundled `api.js` ES module for browser integrations. See [examples/direct-engine.mjs](https://github.com/djshellshoxxx/websoundedit/blob/main/examples/direct-engine.mjs) for a complete local-file program.
 
 ```js
 import { AudioEditor } from './src/engine.js';
@@ -192,12 +192,12 @@ Each accepts its listed parameters and optional `target`. The generic `effect.ap
 
 ### Named cleanup, vocal and mastering presets
 
-`src/presets.js` exports the DOM-free `AUDIO_PRESETS` catalog, `PRESET_CATEGORIES`, `DEFAULT_PRESET_ID` (`auto-limiter`) and `getAudioPreset(id)`. Each frozen entry has `{id,title,category,description,limitations,stereoOnly,steps}`. A step is `{effect,params,wet?}`; these are fixed recipes, not arbitrary command lists or user-supplied processors. There are 32 presets:
+`src/presets.js` exports the DOM-free `AUDIO_PRESETS` catalog, `PRESET_CATEGORIES`, `DEFAULT_PRESET_ID` (`auto-limiter`) and `getAudioPreset(id)`. Each frozen entry has `{id,title,category,description,limitations,stereoOnly,steps}`. A step is `{effect,params,wet?}`; these are fixed recipes, not arbitrary command lists or user-supplied processors. There are 36 presets:
 
 | Category | Preset IDs |
 | --- | --- |
-| Cleanup | `repair-clipped-peaks`, `remove-dc`, `remove-rumble`, `reduce-hiss`, `gentle-noise-gate`, `strong-noise-gate` |
-| Vocals | `vocal-center`, `instrumental-sides`, `vocal-reduction`, `de-esser-gentle`, `de-esser-strong`, `vocal-presence` |
+| Cleanup | `repair-clipped-peaks`, `remove-dc`, `remove-rumble`, `reduce-hiss`, `gentle-noise-gate`, `strong-noise-gate`, `normalize-peak`, `normalize-headroom`, `normalize-mixing` |
+| Vocals | `vocal-center`, `instrumental-sides`, `vocal-reduction`, `instrumental-reduction`, `de-esser-gentle`, `de-esser-strong`, `vocal-presence` |
 | Instruments | `bass-definition`, `drum-punch`, `acoustic-warmth`, `piano-smooth` |
 | Compression | `compression-gentle`, `compression-vocal`, `compression-drums`, `compression-broadcast` |
 | Limiting | `auto-limiter`, `limiter-transparent`, `limiter-punchy`, `limiter-headroom` |
@@ -315,7 +315,7 @@ $env:WEBSOUNDEDIT_TOKEN = 'paste-the-token-here'
 python examples/remote-edit.py input.wav output.wav --recipe examples/cleanup.json --project edited.json
 ```
 
-The program uploads file bytes, runs the recipe, downloads encoded audio and optionally saves a JSON project. This is a complete script-driven edit using the same engine as the GUI. See [remote-edit.py](../examples/remote-edit.py) for the full implementation.
+The program uploads file bytes, runs the recipe, downloads encoded audio and optionally saves a JSON project. This is a complete script-driven edit using the same engine as the GUI. See [remote-edit.py](https://github.com/djshellshoxxx/websoundedit/blob/main/examples/remote-edit.py) for the full implementation.
 
 ## Browser UI commands and shortcuts
 

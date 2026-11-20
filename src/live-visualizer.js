@@ -138,7 +138,7 @@ export class LiveVisualizer {
     this.unsubscribe = subscribe(event => { if (event.type === 'state' || event.type === 'error') this.refresh(); });
     if (globalThis.ResizeObserver) { this.resizeObserver = new ResizeObserver(this.onResize); this.resizeObserver.observe(this.canvas); }
     else globalThis.addEventListener('resize', this.onResize);
-    if (globalThis.IntersectionObserver) { this.observer = new IntersectionObserver(entries => { const visible = entries.some(entry => entry.isIntersecting); if (visible && !this.inView) this._clear(); this.inView = visible; this.refresh(); }, { threshold: .01 }); this.observer.observe(root); }
+    if (globalThis.IntersectionObserver) { this.observer = new IntersectionObserver(entries => { const visible = entries.some(entry => entry.isIntersecting); if (visible && !this.inView && !this.paused) this._clear(); this.inView = visible; this.refresh(); }, { threshold: .01 }); this.observer.observe(root); }
     this.resize(); this._description(); this.draw(); this.refresh();
   }
   _description() {

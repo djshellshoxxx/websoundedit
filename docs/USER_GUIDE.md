@@ -71,7 +71,7 @@ Shortcuts: **Ctrl/⌘ Shift I** inserts silence, **Shift Z** opens zero-crossing
 
 ### Audio presets: cleanup, vocals and mastering
 
-Open **Audio presets** from the workbench. Use **Find a preset** and **Category** to filter the 32 recipes. Select a recipe to read its processing order, source requirements and limitations, then **Audition**, **A/B** and **Apply**. The selected region and channels define its scope; clearing the region processes the whole selected clip. Apply preserves duration and creates one undo entry.
+Open **Audio presets** from the workbench. Use **Find a preset** and **Category** to filter the 36 recipes. Select a recipe to read its processing order, source requirements and limitations, then **Audition**, **A/B** and **Apply**. The selected region and channels define its scope; clearing the region processes the whole selected clip. Apply preserves duration and creates one undo entry.
 
 | Category | Available recipes |
 | --- | --- |
@@ -83,9 +83,11 @@ Open **Audio presets** from the workbench. Use **Find a preset** and **Category*
 | Mastering | Balanced mastering start; Warm mastering start; Clear mastering start; Louder mastering start. |
 | Creative | Telephone voice; Warm tape color; Spacious chorus; Rhythmic pulse. |
 
-The three vocal/instrumental center recipes require an original **stereo clip with both channels selected**. Vocal isolation extracts the shared center into both channels and focuses its frequency range. Instrumental isolation extracts stereo difference information: centered bass and drums can disappear along with vocals, and its opposite-polarity outputs **cancel when summed to mono**. Vocal removal reduces a band-limited center while retaining center bass and out-of-band highs. These operations use stereo center/side math rather than AI source separation. They cannot guarantee isolated vocals or instruments; panned voices and stereo reverberation may remain.
+The four vocal/instrumental center recipes require an original **stereo clip with both channels selected**. Vocal isolation extracts the shared center into both channels and focuses its frequency range. Instrumental isolation extracts stereo difference information: centered bass and drums can disappear along with vocals, and its opposite-polarity outputs **cancel when summed to mono**. Vocal removal reduces a band-limited center while retaining center bass and out-of-band highs. Instrumental removal focuses the 180 Hz–6.5 kHz center and normalizes it to −3 dBFS, reducing side-panned accompaniment while retaining centered instruments. These operations use stereo center/side math rather than AI source separation. They cannot guarantee isolated vocals or instruments; panned voices and stereo reverberation may remain.
 
 **Repair clipped peaks** targets short, flat, near-full-scale plateaus with unclipped shoulders, up to 4 ms. Successful repair reserves −1 dBFS sample-peak headroom. Clean audio stays unchanged when no repair is made; long, edge or heavily distorted clipping cannot be reconstructed reliably. **De-essers** dynamically attenuate a high-frequency band, so audition bright instruments as well as speech.
+
+**Normalize peaks** presets target −1, −3 or −6 dBFS using one gain for all selected channels. This preserves channel balance and dynamics; silence stays silent. Normalization raises quiet wanted material and noise together and measures sample peaks, not LUFS or intersample true peaks.
 
 **Auto limiter** measures selected PCM RMS, adds at most 6 dB toward −18 dBFS RMS and limits sample peaks to −1 dBFS. It leaves silence and material below −60 dBFS RMS unboosted; the gain cap or peak ceiling can prevent reaching the RMS target. Mastering and compression presets provide fixed starting points for listening and adjustment. Their RMS/sample-peak targets do not certify integrated LUFS or intersample true-peak compliance. Use the individual tools or rack when you need editable processor parameters.
 

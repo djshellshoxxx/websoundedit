@@ -42,6 +42,14 @@ The visualizer uses a 2,048-point FFT, 192 frequency bands, 240 history frames a
 
 ## Publication and limits
 
+### Publication follow-up
+
+The final review expanded the catalog to **36 presets** by adding linked sample-peak normalization at −1, −3 and −6 dBFS plus a separately named, explicitly approximate instrumental-removal center preset. Real PCM regressions check target peaks, channel balance, silence, attenuation and center/side behavior. Freeze now also retains its exact picture and spectral history when the panel is scrolled out of view and back.
+
+The follow-up passed **441 unit/integration tests**, all seven deterministic fuzz groups, production compilation and the DOM-free SDK checks. The dependency audit reported zero known advisories. A focused Firefox 159 browser regression passed for frozen-frame scrolling. The local Chromium executable could not start because its process-singleton socket was denied by this execution environment; cached WebKit lacked required shared libraries. These launch restrictions are not counted as successful browser tests. The complete hosted matrix and the live publication smoke remain required on the final checkout.
+
+The published build now includes the scripting and browser-support guides, the current qualification evidence and the linked historical screenshot. Bundle verification compares these files with their sources and resolves local links in the current guides, API reference, qualification record and distributed third-party notices against actual built files. The live smoke additionally applies the new normalization preset and checks that both new guide URLs return Markdown rather than an application-shell fallback.
+
 [Deployment repair](DEPLOYMENT_REPAIR_20261119.md) separates Pages from wiki/prerelease publication. The main checkout must pass verification before deployment and a live-site check afterward. Packaging restores the verified artifact, checks source/version identity and preserves immutable tags/assets. The separate prerelease retains its mandatory wiki gate.
 
 Vocal/instrumental presets use stereo center/side processing rather than an AI stem model. Results depend on the mix; mono is rejected, other centered sounds can remain with vocals and side-only outputs cancel in mono. Clipped-peak interpolation cannot reconstruct lost information. Mastering presets use RMS/sample peaks, not integrated LUFS or oversampled true peak.

@@ -16,9 +16,16 @@ await copyFile('docs/licenses/opus.txt', 'public/licenses/opus.txt');
 await copyFile('docs/THIRD_PARTY.md', 'public/licenses/THIRD_PARTY.md');
 await mkdir('public/docs/specs', { recursive: true });
 for(const name of ['CREATIVE_WORKBENCH_V2','BETA_1_0'])await copyFile(`docs/specs/${name}.md`, `public/docs/specs/${name}.md`);
-for (const name of ['PRODUCT_SPEC','RESEARCH','API','PROJECT_FORMAT','ACCEPTANCE','ENGINE_CONTRACT','THIRD_PARTY','VERIFICATION','AUDACITY','REAPER','MACROS','COMPANION','USER_GUIDE']) {
+for (const name of ['PRODUCT_SPEC','RESEARCH','API','PROJECT_FORMAT','ACCEPTANCE','ENGINE_CONTRACT','THIRD_PARTY','VERIFICATION','AUDACITY','REAPER','MACROS','COMPANION','USER_GUIDE','SCRIPTING','BROWSER_SUPPORT']) {
   try { await mkdir('public/docs',{recursive:true}); await copyFile(`docs/${name}.md`,`public/docs/${name}.md`); } catch { /* Not present during initial development builds. */ }
 }
 await writeFile('public/.nojekyll','');
 await mkdir('public/docs/audits',{recursive:true});
 for(const name of await readdir('docs/audits'))if(/\.(md|json)$/.test(name))await copyFile(`docs/audits/${name}`,`public/docs/audits/${name}`);
+// The published qualification and verification pages link these retained assets.
+await mkdir('public/docs/audits/evidence', { recursive: true });
+for (const name of ['beta2-local-verification.json', 'beta2-preset-stress.json']) {
+  await copyFile(`docs/audits/evidence/${name}`, `public/docs/audits/evidence/${name}`);
+}
+await mkdir('public/docs/screenshots', { recursive: true });
+await copyFile('docs/screenshots/workbench.png', 'public/docs/screenshots/workbench.png');
