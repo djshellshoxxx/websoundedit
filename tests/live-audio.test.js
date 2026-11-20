@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {AudioEditor} from '../src/engine.js';
 import {Playback} from '../src/playback.js';
-import {LiveAudioRuntime,LIVE_COMMANDS} from '../src/live-audio.js';
+import {LiveAudioRuntime,LIVE_COMMANDS,LIVE_LIMITS} from '../src/live-audio.js';
 import {RealtimeRackManager} from '../src/realtime-rack.js';
 import {RealtimeRackDSP} from '../src/realtime-dsp.js';
 import {RecordingStore} from '../src/recording-store.js';
@@ -12,7 +12,7 @@ import {MidiSampler} from '../src/midi.js';
 import {AudioContextMock,AudioNodeMock,MemoryDirectory,mediaTrack,mediaStream} from './audio-test-support.js';
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
 class SyntheticTap {
-  constructor(context,source,options){this.context=context;this.source=source;this.options=options;this.node=new AudioNodeMock();this.chunks=[];this.closed=false;this.kernel=new CaptureKernel({...options,onChunk:packet=>{const data=packet.data;this.chunks.push(Promise.resolve(options.onChunk({...packet,sampleRate:context.sampleRate})).then(buffer=>this.kernel.recycle(buffer||data.buffer)));},onEnd:result=>{this.finished=result;Promise.all(this.chunks).then(()=>{options.onEnd?.(result);this.resolveStop?.(result);});},onError:options.onError});}
+  constructor(context,source,options){this.context=context;this.source=source;this.options=options;this.node=new AudioNodeMock();this.chunks=[];this.closed=false;this.kernel=new CaptureKernel({...options,onChunk:packet=>{const data=packet.data;this.chunks.push(Promise.resolve(options.onChunk({...packet,data:new Float32Array(data.buffer,0,packet.frames*packet.channels),sampleRate:context.sampleRate})).then(buffer=>this.kernel.recycle(buffer||data.buffer)));},onEnd:result=>{this.finished=result;Promise.all(this.chunks).then(()=>{options.onEnd?.(result);this.resolveStop?.(result);});},onError:options.onError});}
   start(settings={}){this.finished=null;this.kernel.start({startFrame:Math.ceil(this.context.currentTime*this.context.sampleRate),endFrame:Number.MAX_SAFE_INTEGER,...settings});}
   stop(){if(this.finished)return Promise.resolve(this.finished);return new Promise(resolve=>{this.resolveStop=resolve;this.kernel.finish();});}
   setLoop(settings){this.loopSettings={...this.loopSettings,...settings};}
@@ -165,6 +165,62 @@ test('long recorder archives bounded chunks; pause omits gaps; every archive act
   await taps.at(-1).feed(0,[new Float32Array(2048).fill(.1),new Float32Array(2048).fill(.2)]);await live.execute('recorder.pause');assert.equal(live.getState().recorder.status,'paused');context.currentTime=5;await live.execute('recorder.resume');await taps.at(-1).feed(40000,[new Float32Array(2048).fill(.3),new Float32Array(2048).fill(.4)]);await live.execute('recorder.stop');const listed=await live.execute('recordings.list');assert.equal(listed.recordings[0].frames,4096);assert.equal(listed.recordings[0].seconds,.512);
   const exported=await live.execute('recordings.export',{recordingId,start:0,end:.1});assert.equal(exported.mime,'audio/wav');assert.ok(exported.bytes.length>0);await live.execute('recordings.importRange',{recordingId,start:0,end:.1,name:'Range'});assert.equal(engine.getState().tracks[0].clips[0].frames,800);
   await live.execute('recordings.auditionRange',{recordingId,start:.256,end:.512});assert.equal(live.playback.playing,true);await live.execute('recordings.recover',{recordingId});await live.execute('recordings.delete',{recordingId});assert.equal((await live.execute('recordings.list')).recordings.length,0);await live.dispose();
+});
+test('long recording preserves half a second of stalled PCM consumption and still bounds prolonged pressure',{timeout:10000},async()=>{
+  for(const [sampleRate,layout] of [[8000,'mono'],[48000,'stereo'],[192000,'7.1']]){
+    const{live,taps,context,archive}=await fixture(layout);context.sampleRate=sampleRate;
+    let release;const gate=new Promise(resolve=>{release=resolve;}),execute=live.storage.execute.bind(live.storage);let writes=Promise.resolve(),tap;
+    live.storage.execute=(method,...args)=>method==='append'?(writes=writes.then(async()=>{await gate;return execute(method,...args);})):execute(method,...args);
+    try{
+      await live.execute('recorder.start',{source:'master',name:'Delayed consumer'});tap=taps.at(-1);
+      const frames=sampleRate/2,channels=Array.from({length:tap.kernel.channels},(_,channel)=>Float32Array.from({length:frames},(_,frame)=>(frame%1024)/2048+channel/32));
+      // Advance the actual capture kernel for 500 ms before allowing any disk
+      // consumer to recycle its buffers. No wall-clock sleep is involved.
+      tap.kernel.process(channels,0,frames);
+      assert.equal(tap.kernel.active,true,`${sampleRate} Hz capture must survive a 500 ms consumer stall`);
+      release();await Promise.all(tap.chunks);const record=await live.execute('recorder.stop');
+      assert.equal(record.status,'complete');assert.equal(record.frames,frames);
+      assert.equal(live.graphs.voiceBytes,0,'stopping releases the recorder pool reservation');
+      const saved=await archive.readRange(record.id,{start:0,end:frames/sampleRate});assert.deepEqual(saved.channels,channels);
+      const errors=[],packets=[],kernel=new CaptureKernel({...tap.options,onChunk:packet=>packets.push(packet),onError:error=>errors.push(error)});
+      const capacity=kernel.poolSize*kernel.framesPerChunk;
+      assert.ok(capacity*kernel.channels*4<=8*1024*1024,'the entire capture pool stays within 8 MiB');
+      kernel.start({startFrame:0});kernel.process(Array.from({length:kernel.channels},()=>new Float32Array(capacity+128)),0,capacity+128);
+      assert.equal(kernel.active,false);assert.equal(errors.length,1);assert.equal(errors[0].code,'BACKPRESSURE');assert.equal(errors[0].frames,capacity);
+      assert.equal(packets.reduce((sum,packet)=>sum+packet.frames,0),capacity,'overflow retains only the bounded captured range');
+    }finally{release();tap?.kernel.finish();await Promise.allSettled(tap?.chunks||[]);tap?.dispose();await live.dispose();}
+  }
+});
+test('recorder pool reservations reject exhaustion and release on pause, failed resume and factory failure',async()=>{
+  const{live,taps}=await fixture();await live._context();const manager=live.graphs,factory=live.captureFactory,execute=live.storage.execute.bind(live.storage);let release;
+  try{
+    release=manager.reserveVoice(LIVE_LIMITS.voiceBytes);
+    await assert.rejects(live.execute('recorder.start',{source:'master'}),error=>error.code==='RESOURCE_LIMIT');
+    assert.equal(taps.length,0,'exhausted PCM budget rejects before a capture pool is allocated');assert.equal(manager.voiceBytes,LIVE_LIMITS.voiceBytes);
+    release();release=null;await live.execute('recorder.start',{source:'master'});assert.ok(manager.voiceBytes>0);
+    await live.execute('recorder.pause');assert.equal(manager.voiceBytes,0);
+    release=manager.reserveVoice(LIVE_LIMITS.voiceBytes);
+    await assert.rejects(live.execute('recorder.resume'),error=>error.code==='RESOURCE_LIMIT');
+    assert.equal(live.getState().recorder.status,'error','failed resume must not leave recording active without a tap');assert.equal(live.recordTap,null);assert.equal(manager.voiceBytes,LIVE_LIMITS.voiceBytes);
+    release();release=null;live.captureFactory=async()=>{throw new Error('Worklet creation fixture failure');};
+    await assert.rejects(live.execute('recorder.start',{source:'master'}),/Worklet creation fixture failure/);assert.equal(manager.voiceBytes,0);
+    live.captureFactory=factory;await live.execute('recorder.start',{source:'master'});
+    live.storage.execute=(method,...args)=>method==='stop'?Promise.reject(new Error('Storage stop fixture failure')):execute(method,...args);
+    await assert.rejects(live.execute('recorder.stop'),/Storage stop fixture failure/);assert.equal(manager.voiceBytes,0,'storage finalization failure still releases capture memory');
+  }finally{release?.();live.storage.execute=execute;await live.dispose();}
+});
+test('a capture error racing user stop or pause cannot mark a truncated recording complete',async()=>{
+  for(const method of ['recorder.stop','recorder.pause']){
+    const{live,taps,archive}=await fixture();
+    try{
+      await live.execute('recorder.start',{source:'master'});const tap=taps.at(-1),channels=[new Float32Array(2048).fill(.1),new Float32Array(2048).fill(.2)];await tap.feed(0,channels);
+      const message='Capture stopped because its bounded storage/consumer queue is full.';
+      tap.stop=async()=>{await Promise.resolve();tap.options.onError(Object.assign(new Error(message),{code:'BACKPRESSURE'}));return{frames:2048,error:message};};
+      if(method==='recorder.pause')await assert.rejects(live.execute(method),error=>error.message===message);else await live.execute(method);
+      const record=(await archive.list()).recordings[0];assert.equal(record.status,'error');assert.equal(live.getState().recorder.error,message);assert.equal(live.graphs.voiceBytes,0);
+      assert.deepEqual((await archive.readRange(record.id,{start:0,end:.256})).channels,channels,'committed PCM remains recoverable after an explicit overflow');
+    }finally{await live.dispose();}
+  }
 });
 test('live settings preflight is pure, reset races cannot reactivate input, and shared MIDI disposal leaves context usable',async()=>{
   const{engine,live,context,track}=await fixture();await engine.execute('audio.generate',{duration:.1});const settings={version:1,racks:{master:{chain:[{id:'t',effect:'tremolo',wet:.5}],automation:[]}}};const normalized=live.validateSettings(settings);assert.equal(live.getSettings().racks.master.chain.length,0);await live.loadSettings(normalized);await live.execute('audio.input.start',{channels:[0]});
